@@ -1,0 +1,12 @@
+name = "j-jiw-rubber"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-03-12"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "j-jiw-rubber-db"
+database_id = "0314c79d-d111-4600-bc16-96a8f1f3d0a4"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "j-jiw-rubber-bucket"

@@ -1,0 +1,377 @@
+import React, { useState } from 'react';
+import { Leaf, RefreshCw, Plus, Phone, MapPin, Database, Edit2, Trash2, UserCircle, Percent } from 'lucide-react';
+
+export const UserManagement = ({ 
+    farmers, 
+    employees, 
+    loading, 
+    saving, 
+    loadData, 
+    showFarmerForm, 
+    setShowFarmerForm, 
+    editingFarmer, 
+    handleCancelFarmerEdit, 
+    farmerForm, 
+    onSubmitFarmer, 
+    handleEditFarmer, 
+    handleDelete, 
+    showEmployeeForm, 
+    setShowEmployeeForm, 
+    employeeForm, 
+    onAddEmployee 
+}) => {
+    const [activeSubTab, setActiveSubTab] = useState('farmers');
+
+    return (
+        <div className="space-y-6">
+            {/* Sub-Tabs */}
+            <div className="flex space-x-1 bg-gray-100 rounded-xl p-1">
+                <button
+                    onClick={() => setActiveSubTab('farmers')}
+                    className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-bold transition-all duration-200 ${
+                        activeSubTab === 'farmers'
+                            ? 'bg-white text-rubber-700 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                >
+                    <Leaf size={16} />
+                    <span>เกษตรกร</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        activeSubTab === 'farmers' ? 'bg-rubber-100 text-rubber-700' : 'bg-gray-200 text-gray-500'
+                    }`}>
+                        {farmers.length}
+                    </span>
+                </button>
+                <button
+                    onClick={() => setActiveSubTab('employees')}
+                    className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-bold transition-all duration-200 ${
+                        activeSubTab === 'employees'
+                            ? 'bg-white text-blue-700 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                >
+                    <UserCircle size={16} />
+                    <span>ลูกจ้าง</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        activeSubTab === 'employees' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-500'
+                    }`}>
+                        {employees.length}
+                    </span>
+                </button>
+            </div>
+
+            {/* ===================== FARMERS TAB ===================== */}
+            {activeSubTab === 'farmers' && (
+                <section className="animate-in fade-in duration-300">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-xl font-bold text-gray-900 flex items-center">
+                            <Leaf className="mr-2 text-rubber-600" size={24} />
+                            จัดการข้อมูลเกษตรกร
+                        </h2>
+                        <div className="flex space-x-2">
+                            <button
+                                onClick={() => loadData()}
+                                className="inline-flex items-center px-3 py-2 text-rubber-600 hover:bg-rubber-50 rounded-lg transition text-sm font-bold"
+                                title="รีเฟรชรายชื่อ"
+                            >
+                                <RefreshCw size={18} className={`mr-1 ${loading ? 'animate-spin' : ''}`} />
+                                รีเฟรช
+                            </button>
+                            <button
+                                onClick={() => setShowFarmerForm(!showFarmerForm)}
+                                className="inline-flex items-center px-4 py-2 bg-rubber-600 text-white rounded-lg hover:bg-rubber-700 transition shadow-sm font-medium"
+                            >
+                                <Plus size={18} className="mr-1" />
+                                เพิ่มเกษตรกร
+                            </button>
+                        </div>
+                    </div>
+
+                    {showFarmerForm && (
+                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 mb-8 animate-in fade-in slide-in-from-top-4 shadow-inner">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="font-bold text-gray-700">
+                                    {editingFarmer ? 'แก้ไขข้อมูลเกษตรกร' : 'เพิ่มข้อมูลเกษตรกรใหม่'}
+                                </h3>
+                                {editingFarmer && (
+                                    <button onClick={handleCancelFarmerEdit} className="text-xs text-red-500 font-bold uppercase tracking-wider hover:underline">
+                                        ยกเลิกการแก้ไข
+                                    </button>
+                                )}
+                            </div>
+                            <form onSubmit={farmerForm.handleSubmit(onSubmitFarmer)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
+                                    <input {...farmerForm.register('name', { required: true })} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="นายสมชาย ใจดี" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">เบอร์โทรศัพท์</label>
+                                    <input {...farmerForm.register('phone')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="08x-xxx-xxxx" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">เลขบัญชีธนาคาร</label>
+                                    <input {...farmerForm.register('bankAccount')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="xxx-x-xxxxx-x" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">ชื่อธนาคาร</label>
+                                    <input {...farmerForm.register('bankName')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="กสิกรไทย / ธกส." />
+                                </div>
+                                <div className="md:col-span-1 space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">ที่อยู่</label>
+                                    <input {...farmerForm.register('address')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="123 ม.1 ต..." />
+                                </div>
+                                <div className="md:col-span-1 space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">หมายเหตุ</label>
+                                    <input {...farmerForm.register('note')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="..." />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">รหัส FSC (FSCID)</label>
+                                    <input {...farmerForm.register('fscId')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="รหัส FSC" />
+                                </div>
+                                <div className="lg:col-span-3 flex justify-end space-x-2 pt-2">
+                                    <button type="button" onClick={handleCancelFarmerEdit} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button>
+                                    <button type="submit" disabled={saving} className="px-6 py-2 bg-rubber-600 text-white rounded-lg hover:bg-rubber-700 disabled:opacity-50">
+                                        {editingFarmer ? 'บันทึกการแก้ไข' : 'บันทึกเกษตรกร'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50 font-medium text-gray-500 text-[11px] uppercase tracking-wider">
+                                <tr>
+                                    <th className="px-6 py-4 text-left">เกษตรกร</th>
+                                    <th className="px-6 py-4 text-left">การเชื่อมต่อ LINE</th>
+                                    <th className="px-6 py-4 text-left">ข้อมูลติดต่อ / ที่อยู่</th>
+                                    <th className="px-6 py-4 text-left">บัญชีธนาคาร</th>
+                                    <th className="px-6 py-4 text-left">รหัส FSC</th>
+                                    <th className="px-6 py-4 text-left">ลูกจ้างในสังกัด</th>
+                                    <th className="px-6 py-4 text-center">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 text-sm">
+                                {farmers.map(f => (
+                                    <tr key={f.id} className="hover:bg-rubber-50/30 transition-colors group">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center space-x-3">
+                                                {f.linePicture ? (
+                                                    <img src={f.linePicture} alt={f.lineName} className="w-10 h-10 rounded-full border-2 border-rubber-100" />
+                                                ) : (
+                                                    <div className="w-10 h-10 rounded-full bg-rubber-100 flex items-center justify-center text-rubber-600 font-bold text-sm">
+                                                        {f.name.charAt(0)}
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <div className="font-bold text-gray-900">{f.name}</div>
+                                                    <div className="text-[10px] text-gray-400 font-mono">ID: {f.id.substring(0, 8)}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {f.lineName ? (
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center text-[11px] text-green-600 font-black uppercase tracking-wider mb-1">
+                                                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                                                        Connected
+                                                    </div>
+                                                    <div className="text-xs font-medium text-gray-600">{f.lineName}</div>
+                                                </div>
+                                            ) : (
+                                                <span className="text-[11px] text-gray-400 uppercase tracking-wider font-bold italic">Manual / No Link</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center text-gray-700 font-medium">
+                                                    <Phone size={12} className="mr-1.5 text-rubber-400" />
+                                                    {f.phone || '-'}
+                                                </div>
+                                                <div className="flex items-center text-[11px] text-gray-500 max-w-[150px] truncate" title={f.address}>
+                                                    <MapPin size={12} className="mr-1.5 text-gray-300" />
+                                                    {f.address || '-'}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="space-y-1">
+                                                <div className="text-xs font-bold text-gray-700 flex items-center">
+                                                    <Database size={12} className="mr-1.5 text-rubber-400" />
+                                                    {f.bankName || '-'}
+                                                </div>
+                                                <div className="text-sm font-mono text-gray-500">{f.bankAccount || '-'}</div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2 py-1 rounded text-[11px] font-bold ${f.fscId ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'text-gray-300 italic'}`}>
+                                                {f.fscId || 'ไม่มีรหัส'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-wrap gap-1 max-w-[150px]">
+                                                {employees.filter(e => e.farmerId === f.id).length > 0 ? (
+                                                    employees.filter(e => e.farmerId === f.id).map(e => (
+                                                        <span key={e.id} className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-100">
+                                                            {e.name}
+                                                        </span>
+                                                    ))
+                                                ) : (
+                                                    <span className="text-[10px] text-gray-400 italic">ไม่มีลูกจ้าง</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="flex justify-center space-x-2">
+                                                <button
+                                                    onClick={() => handleEditFarmer(f)}
+                                                    className="p-2 text-gray-400 hover:text-rubber-600 hover:bg-rubber-50 rounded-lg transition-all"
+                                                    title="แก้ไข"
+                                                >
+                                                    <Edit2 size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete('farmers', f.id)}
+                                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                    title="ลบ"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {farmers.length === 0 && !loading && (
+                                    <tr>
+                                        <td colSpan="6" className="px-6 py-12 text-center text-gray-400">
+                                            <div className="flex flex-col items-center">
+                                                <Leaf size={40} className="mb-2 opacity-20" />
+                                                <p>ยังไม่มีข้อมูลเกษตรกรในระบบ</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            )}
+
+            {/* ===================== EMPLOYEES TAB ===================== */}
+            {activeSubTab === 'employees' && (
+                <section className="animate-in fade-in duration-300">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-xl font-bold text-gray-900 flex items-center">
+                            <UserCircle className="mr-2 text-blue-600" size={24} />
+                            จัดการข้อมูลลูกจ้าง
+                        </h2>
+                        <button
+                            onClick={() => setShowEmployeeForm(!showEmployeeForm)}
+                            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm font-medium"
+                        >
+                            <Plus size={18} className="mr-1" />
+                            เพิ่มลูกจ้าง
+                        </button>
+                    </div>
+
+                    {showEmployeeForm && (
+                        <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 mb-8 animate-in fade-in slide-in-from-top-4 shadow-inner">
+                            <form onSubmit={employeeForm.handleSubmit(onAddEmployee)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-blue-600 uppercase">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
+                                    <input {...employeeForm.register('name', { required: true })} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" placeholder="ชื่อลูกจ้าง" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-blue-600 uppercase">สังกัดเกษตรกร <span className="text-red-500">*</span></label>
+                                    <select {...employeeForm.register('farmerId', { required: true })} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 bg-white">
+                                        <option value="">-- เลือกเกษตรกร --</option>
+                                        {farmers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-blue-600 uppercase flex items-center">
+                                        ส่วนแบ่งกำไร (%) <Percent size={12} className="ml-1" />
+                                    </label>
+                                    <input type="number" step="0.01" {...employeeForm.register('profitSharePct', { required: true })} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" placeholder="เช่น 10" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-blue-600 uppercase">เบอร์โทรศัพท์</label>
+                                    <input {...employeeForm.register('phone')} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" placeholder="08x-xxx-xxxx" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-blue-600 uppercase">เลขบัญชีธนาคาร</label>
+                                    <input {...employeeForm.register('bankAccount')} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" placeholder="xxx-x-xxxxx-x" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-blue-600 uppercase">ชื่อธนาคาร</label>
+                                    <input {...employeeForm.register('bankName')} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" placeholder="กสิกรไทย / ไทยพาณิชย์" />
+                                </div>
+                                <div className="lg:col-span-3 flex justify-end space-x-2 pt-2">
+                                    <button type="button" onClick={() => setShowEmployeeForm(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button>
+                                    <button type="submit" disabled={saving} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">บันทึกลูกจ้าง</button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50 font-medium text-gray-500 text-xs uppercase tracking-wider">
+                                <tr>
+                                    <th className="px-6 py-4 text-left">ลูกจ้าง</th>
+                                    <th className="px-6 py-4 text-left">ในสังกัด</th>
+                                    <th className="px-6 py-4 text-center">ส่วนแบ่ง</th>
+                                    <th className="px-6 py-4 text-left">ติดต่อ/บัญชีธนาคาร</th>
+                                    <th className="px-6 py-4 text-center">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 text-sm">
+                                {employees.map(e => (
+                                    <tr key={e.id} className="hover:bg-blue-50/30 transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="font-bold text-gray-900">{e.name}</div>
+                                            <div className="text-[11px] text-gray-400">ID: {e.id.substring(0, 8)}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-gray-700 text-xs border border-gray-200">
+                                                <Leaf size={12} className="mr-1 text-rubber-500" />
+                                                {farmers.find(f => f.id === e.farmerId)?.name || <span className="text-red-400 italic">ไม่ระบุ</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="inline-block px-2.5 py-1 bg-blue-50 text-blue-700 font-black rounded-lg border border-blue-100">
+                                                {e.profitSharePct}%
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col space-y-0.5">
+                                                <div className="flex items-center text-gray-600"><Phone size={12} className="mr-1" /> {e.phone || '-'}</div>
+                                                <div className="flex items-center text-gray-900 font-mono text-[12px]"><Database size={12} className="mr-1 text-gray-400" /> {e.bankAccount} ({e.bankName})</div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <button
+                                                onClick={() => handleDelete('employees', e.id)}
+                                                className="text-gray-300 hover:text-red-500 transition-colors p-2"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {employees.length === 0 && !loading && (
+                                    <tr>
+                                        <td colSpan="5" className="px-6 py-12 text-center text-gray-400 flex flex-col items-center justify-center">
+                                            <UserCircle size={40} className="mb-2 opacity-20" />
+                                            ยังไม่มีข้อมูลลูกจ้าง
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            )}
+        </div>
+    );
+};
