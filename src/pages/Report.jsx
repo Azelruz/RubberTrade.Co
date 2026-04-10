@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { format, subMonths, isWithinInterval, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
-import { Calendar, Download, Filter, TrendingUp, Droplets, Target, Calculator, Wallet, Users, BarChart3, FlaskConical, Truck, Activity } from 'lucide-react';
-import { fetchBuyRecords, fetchSellRecords, getSettings, fetchExpenses, fetchWages, fetchChemicalUsage, isCached } from '../services/apiService';
+import { Calendar, Download, Filter, TrendingUp, Droplets, Target, Calculator, Wallet, Users, BarChart3, FlaskConical, Truck, Activity, Save } from 'lucide-react';
+import { fetchBuyRecords, fetchSellRecords, getSettings, fetchExpenses, fetchWages, fetchChemicalUsage, isCached, addChemicalUsage } from '../services/apiService';
 import { truncateOneDecimal } from '../utils/calculations';
+import toast from 'react-hot-toast';
 
 export const Report = () => {
     const [loading, setLoading] = useState(true);
@@ -63,6 +64,37 @@ export const Report = () => {
             console.error(error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSaveChemical = async (chemId, value) => {
+        if (!value || isNaN(value)) {
+            toast.error('กรุณาระบุตัวเลขที่ถูกต้อง');
+            return;
+        }
+        const toastId = toast.loading('กำลังบันทึก...');
+        try {
+            const res = await addChemicalUsage({
+                chemicalId: chemId,
+                amount: Number(value),
+                date: format(new Date(), 'yyyy-MM-dd'),
+                unit: 'กิโลกรัม'
+            });
+            if (res.status === 'success') {
+                toast.success('บันทึกสำเร็จ', { id: toastId });
+                // Clear manual input for this chemical to show actual usage
+                setManualChemicals(prev => {
+                    const next = { ...prev };
+                    delete next[chemId];
+                    return next;
+                });
+                // Refresh data
+                loadData();
+            } else {
+                toast.error(res.message || 'บันทึกล้มเหลว', { id: toastId });
+            }
+        } catch (err) {
+            toast.error('บันทึกล้มเหลว: ' + err.message, { id: toastId });
         }
     };
 
@@ -134,8 +166,7 @@ export const Report = () => {
         const fSellLoss = truncateOneDecimal(periodForecastSells.reduce((sum, s) => sum + Number(s.lossWeight || 0), 0));
         const fDryWeight = truncateOneDecimal(periodForecastBuys.reduce((sum, b) => sum + Number(b.dryRubber || 0), 0));
         
-        const totalWeightedDrc = periodForecastBuys.reduce((sum, b) => sum + (Number(b.weight || 0) * Number(b.drc || 0)), 0);
-        const fAvgDrc = fBuyWeight > 0 ? truncateOneDecimal(totalWeightedDrc / fBuyWeight) : 0;
+        const fAvgDrc = fBuyWeight > 0 ? truncateOneDecimal((fDryWeight / fBuyWeight) * 100) : 0;
         
         const dailyPrice = Number(settings.daily_price || 0);
         const projectedSellPrice = dailyPrice + Number(profitMargin || 0);
@@ -145,6 +176,27 @@ export const Report = () => {
         const fExpenses = truncateOneDecimal(expenses.filter(e => e.date >= fStart && e.date <= fEnd).reduce((sum, e) => sum + Number(e.amount || 0), 0));
         const fWages = truncateOneDecimal(wages.filter(w => w.date >= fStart && w.date <= fEnd).reduce((sum, w) => sum + Number(w.total || 0), 0));
         const fNetOutcome = truncateOneDecimal(projectedProfit - (fExpenses + fWages));
+
+        // Parse chemical settings for recommendations
+        let chemSettings = [];
+        try {
+            if (settings.chemicalSettings) {
+                chemSettings = JSON.parse(settings.chemicalSettings);
+            }
+        } catch (e) {
+            console.error('Failed to parse chemical settings', e);
+        }
+
+        const getRecommended = (id, defaultAmount, defaultPer) => {
+            const config = chemSettings.find(s => s.id === id) || { amount: defaultAmount, perLatex: defaultPer };
+            const amount = Number(config.amount) || 0;
+            const per = Number(config.perLatex) || 1000;
+            return truncateOneDecimal((amount / per) * fBuyWeight);
+        };
+
+        const recAmmonia = getRecommended('ammonia', 20, 1000);
+        const recWater = getRecommended('water', 30, 800);
+        const recWhiteMed = getRecommended('whiteMedicine', 1, 1000);
 
         return {
             buyTotal,
@@ -175,6 +227,11 @@ export const Report = () => {
                     ammonia: truncateOneDecimal(chemicalUsage.filter(c => c.chemicalId === 'ammonia' && c.date >= fStart && c.date <= fEnd).reduce((sum, c) => sum + Number(c.amount || 0), 0)),
                     water: truncateOneDecimal(chemicalUsage.filter(c => c.chemicalId === 'water' && c.date >= fStart && c.date <= fEnd).reduce((sum, c) => sum + Number(c.amount || 0), 0)),
                     whiteMedicine: truncateOneDecimal(chemicalUsage.filter(c => c.chemicalId === 'whiteMedicine' && c.date >= fStart && c.date <= fEnd).reduce((sum, c) => sum + Number(c.amount || 0), 0))
+                },
+                recommendedChemicals: {
+                    ammonia: recAmmonia,
+                    water: recWater,
+                    whiteMedicine: recWhiteMed
                 }
             }
         };
@@ -300,50 +357,95 @@ export const Report = () => {
 
                         {/* Chemicals summary row (Interactive Calculator) */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-gray-100 border-t border-gray-100 bg-white">
-                            <div className="p-6 hover:bg-gray-50/50 transition-colors">
+                            <div className="p-6 hover:bg-gray-50/50 transition-colors group/chem text-left">
                                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center">
                                     <FlaskConical size={12} className="mr-1.5 text-amber-500" />แอมโมเนีย
                                 </p>
-                                <div className="flex items-center">
-                                    <input 
-                                        type="number" 
-                                        step="0.1"
-                                        value={manualChemicals.ammonia !== undefined ? manualChemicals.ammonia : filteredData.todaySummary.chemicals.ammonia}
-                                        onChange={(e) => setManualChemicals(prev => ({ ...prev, ammonia: e.target.value }))}
-                                        className="text-2xl font-black text-gray-900 bg-transparent border-none p-0 focus:ring-0 w-24"
-                                    />
-                                    <span className="text-sm font-normal text-gray-400 ml-1">กก.</span>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center">
+                                        <input 
+                                            type="number" 
+                                            step="0.1"
+                                            value={manualChemicals.ammonia !== undefined ? manualChemicals.ammonia : filteredData.todaySummary.chemicals.ammonia}
+                                            onChange={(e) => setManualChemicals(prev => ({ ...prev, ammonia: e.target.value }))}
+                                            className="text-2xl font-black text-gray-900 bg-transparent border-none p-0 focus:ring-0 w-24"
+                                        />
+                                        <span className="text-sm font-normal text-gray-400 ml-1">กก.</span>
+                                    </div>
+                                    <button 
+                                        onClick={() => handleSaveChemical('ammonia', manualChemicals.ammonia !== undefined ? manualChemicals.ammonia : filteredData.todaySummary.chemicals.ammonia)}
+                                        className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all opacity-0 group-hover/chem:opacity-100"
+                                        title="บันทึกลงระบบ"
+                                    >
+                                        <Save size={18} />
+                                    </button>
                                 </div>
+                                <button 
+                                    onClick={() => setManualChemicals(prev => ({ ...prev, ammonia: filteredData.todaySummary.recommendedChemicals.ammonia }))}
+                                    className="text-[14px] font-bold text-amber-600 mt-1 opacity-60 group-hover/chem:opacity-100 transition-opacity hover:underline"
+                                >
+                                    แนะนำ: {filteredData.todaySummary.recommendedChemicals.ammonia} กก.
+                                </button>
                             </div>
-                            <div className="p-6 hover:bg-gray-50/50 transition-colors">
+                            <div className="p-6 hover:bg-gray-50/50 transition-colors group/chem text-left">
                                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center">
                                     <Droplets size={12} className="mr-1.5 text-blue-500" />น้ำ
                                 </p>
-                                <div className="flex items-center">
-                                    <input 
-                                        type="number" 
-                                        step="0.1"
-                                        value={manualChemicals.water !== undefined ? manualChemicals.water : filteredData.todaySummary.chemicals.water}
-                                        onChange={(e) => setManualChemicals(prev => ({ ...prev, water: e.target.value }))}
-                                        className="text-2xl font-black text-gray-900 bg-transparent border-none p-0 focus:ring-0 w-24"
-                                    />
-                                    <span className="text-sm font-normal text-gray-400 ml-1">กก.</span>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center">
+                                        <input 
+                                            type="number" 
+                                            step="0.1"
+                                            value={manualChemicals.water !== undefined ? manualChemicals.water : filteredData.todaySummary.chemicals.water}
+                                            onChange={(e) => setManualChemicals(prev => ({ ...prev, water: e.target.value }))}
+                                            className="text-2xl font-black text-gray-900 bg-transparent border-none p-0 focus:ring-0 w-24"
+                                        />
+                                        <span className="text-sm font-normal text-gray-400 ml-1">กก.</span>
+                                    </div>
+                                    <button 
+                                        onClick={() => handleSaveChemical('water', manualChemicals.water !== undefined ? manualChemicals.water : filteredData.todaySummary.chemicals.water)}
+                                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all opacity-0 group-hover/chem:opacity-100"
+                                        title="บันทึกลงระบบ"
+                                    >
+                                        <Save size={18} />
+                                    </button>
                                 </div>
+                                <button 
+                                    onClick={() => setManualChemicals(prev => ({ ...prev, water: filteredData.todaySummary.recommendedChemicals.water }))}
+                                    className="text-[14px] font-bold text-blue-600 mt-1 opacity-60 group-hover/chem:opacity-100 transition-opacity hover:underline"
+                                >
+                                    แนะนำ: {filteredData.todaySummary.recommendedChemicals.water} กก.
+                                </button>
                             </div>
-                            <div className="p-6 hover:bg-gray-50/50 transition-colors">
+                            <div className="p-6 hover:bg-gray-50/50 transition-colors group/chem text-left">
                                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center">
                                     <Activity size={12} className="mr-1.5 text-purple-500" />ยาขาว
                                 </p>
-                                <div className="flex items-center">
-                                    <input 
-                                        type="number" 
-                                        step="0.1"
-                                        value={manualChemicals.whiteMedicine !== undefined ? manualChemicals.whiteMedicine : filteredData.todaySummary.chemicals.whiteMedicine}
-                                        onChange={(e) => setManualChemicals(prev => ({ ...prev, whiteMedicine: e.target.value }))}
-                                        className="text-2xl font-black text-gray-900 bg-transparent border-none p-0 focus:ring-0 w-24"
-                                    />
-                                    <span className="text-sm font-normal text-gray-400 ml-1">กก.</span>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center">
+                                        <input 
+                                            type="number" 
+                                            step="0.1"
+                                            value={manualChemicals.whiteMedicine !== undefined ? manualChemicals.whiteMedicine : filteredData.todaySummary.chemicals.whiteMedicine}
+                                            onChange={(e) => setManualChemicals(prev => ({ ...prev, whiteMedicine: e.target.value }))}
+                                            className="text-2xl font-black text-gray-900 bg-transparent border-none p-0 focus:ring-0 w-24"
+                                        />
+                                        <span className="text-sm font-normal text-gray-400 ml-1">กก.</span>
+                                    </div>
+                                    <button 
+                                        onClick={() => handleSaveChemical('whiteMedicine', manualChemicals.whiteMedicine !== undefined ? manualChemicals.whiteMedicine : filteredData.todaySummary.chemicals.whiteMedicine)}
+                                        className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all opacity-0 group-hover/chem:opacity-100"
+                                        title="บันทึกลงระบบ"
+                                    >
+                                        <Save size={18} />
+                                    </button>
                                 </div>
+                                <button 
+                                    onClick={() => setManualChemicals(prev => ({ ...prev, whiteMedicine: filteredData.todaySummary.recommendedChemicals.whiteMedicine }))}
+                                    className="text-[14px] font-bold text-purple-600 mt-1 opacity-60 group-hover/chem:opacity-100 transition-opacity hover:underline"
+                                >
+                                    แนะนำ: {filteredData.todaySummary.recommendedChemicals.whiteMedicine} กก.
+                                </button>
                             </div>
                             <div className="p-6 bg-blue-50/50 transition-colors border-l border-gray-100">
                                 <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1 flex items-center">

@@ -9,9 +9,11 @@ CREATE TABLE farmers (
     bankName TEXT,
     address TEXT,
     note TEXT,
+    fscId TEXT,
     lineId TEXT UNIQUE,
     lineName TEXT,
     linePicture TEXT,
+    userId TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -24,6 +26,7 @@ CREATE TABLE staff (
     salary REAL,
     bonus REAL,
     note TEXT,
+    userId TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -36,6 +39,7 @@ CREATE TABLE employees (
     phone TEXT,
     bankAccount TEXT,
     bankName TEXT,
+    userId TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (farmerId) REFERENCES farmers(id) ON DELETE SET NULL
 );
@@ -63,6 +67,7 @@ CREATE TABLE buys (
     basePrice REAL DEFAULT 0,
     bonusDrc REAL DEFAULT 0,
     actualPrice REAL DEFAULT 0,
+    userId TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (farmerId) REFERENCES farmers(id) ON DELETE SET NULL
 );
@@ -85,6 +90,7 @@ CREATE TABLE sells (
     receiptUrl TEXT,
     note TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    userId TEXT,
     FOREIGN KEY (employeeId) REFERENCES staff(id) ON DELETE SET NULL,
     FOREIGN KEY (factoryId) REFERENCES factories(id) ON DELETE SET NULL,
     FOREIGN KEY (truckId) REFERENCES trucks(id) ON DELETE SET NULL
@@ -98,6 +104,7 @@ CREATE TABLE expenses (
     description TEXT,
     amount REAL,
     note TEXT,
+    userId TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -114,6 +121,7 @@ CREATE TABLE wages (
     description TEXT,
     note TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    userId TEXT,
     FOREIGN KEY (staffId) REFERENCES staff(id) ON DELETE CASCADE
 );
 
@@ -126,14 +134,28 @@ CREATE TABLE promotions (
     pointsUsed REAL,
     rewardName TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    userId TEXT,
     FOREIGN KEY (farmerId) REFERENCES farmers(id) ON DELETE CASCADE
+);
+
+DROP TABLE IF EXISTS chemical_usage;
+CREATE TABLE chemical_usage (
+    id TEXT PRIMARY KEY,
+    date TEXT NOT NULL,
+    chemicalId TEXT NOT NULL,
+    amount REAL NOT NULL,
+    unit TEXT,
+    userId TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 DROP TABLE IF EXISTS settings;
 CREATE TABLE settings (
-    key TEXT PRIMARY KEY,
+    key TEXT,
     value TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    userId TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (key, userId)
 );
 
 -- Default settings
@@ -146,14 +168,33 @@ DROP TABLE IF EXISTS users;
 CREATE TABLE users (
     id TEXT PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
+    email TEXT,
     password TEXT NOT NULL,
-    role TEXT NOT NULL, -- 'owner' or 'admin'
+    role TEXT NOT NULL, -- 'owner', 'admin', 'super_admin'
+    store_name TEXT,
+    subscription_status TEXT DEFAULT 'trial',
+    subscription_expiry DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Default users (Passwords are plaintext for now as per simple requirement, or simple hash)
-INSERT OR IGNORE INTO users (id, username, password, role) VALUES ('u1', 'owner', 'owner123', 'owner');
-INSERT OR IGNORE INTO users (id, username, password, role) VALUES ('u2', 'admin', 'admin123', 'admin');
+INSERT OR IGNORE INTO users (id, username, password, role, subscription_status, subscription_expiry) VALUES ('u1', 'owner', 'owner123', 'owner', 'trial', datetime('now', '+7 days'));
+INSERT OR IGNORE INTO users (id, username, password, role, subscription_status, subscription_expiry) VALUES ('u2', 'admin', 'admin123', 'admin', 'active', datetime('now', '+100 years'));
+INSERT OR IGNORE INTO users (id, username, password, role, subscription_status, subscription_expiry) VALUES ('u3', 'super_admin', 'super123', 'super_admin', 'active', datetime('now', '+100 years'));
+
+DROP TABLE IF EXISTS subscription_requests;
+CREATE TABLE subscription_requests (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    slipUrl TEXT NOT NULL,
+    amount REAL,
+    status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+    requestedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    approvedAt DATETIME,
+    package_name TEXT,
+    requested_days INTEGER,
+    FOREIGN KEY (userId) REFERENCES users(id)
+);
 
 CREATE TABLE IF NOT EXISTS factories (
     id TEXT PRIMARY KEY,
@@ -162,6 +203,7 @@ CREATE TABLE IF NOT EXISTS factories (
     shortName TEXT,
     taxId TEXT,
     address TEXT,
+    userId TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -173,6 +215,7 @@ CREATE TABLE IF NOT EXISTS trucks (
     brand TEXT,
     model TEXT,
     prbExpiry TEXT,
+    userId TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

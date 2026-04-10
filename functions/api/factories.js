@@ -1,37 +1,62 @@
-import { jsonResponse, errorResponse } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth } from './_utils.js';
 
-export async function onRequestGet(context) {
+async function handleGet(context) {
     try {
         const { results } = await context.env.DB.prepare(`
-            SELECT * FROM factories ORDER BY name ASC
-        `).all();
+            SELECT * FROM factories WHERE userId = ? OR userId IS NULL ORDER BY name ASC
+        `).bind(context.user.id).all();
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);
     }
 }
 
-export async function onRequestPost(context) {
+export const onRequestGet = withAuth(handleGet);
+
+async function handlePost(context) {
     try {
         const body = await context.request.json();
+        const userId = context.user.id;
+
+        // Bulk Insert Support
+        if (body.action === 'bulk' && Array.isArray(body.payloads)) {
+            const stmts = body.payloads.map(p => {
+                const id = p.id || crypto.randomUUID();
+                const { name, code, shortName, taxId, address } = p;
+                return context.env.DB.prepare(`
+                    INSERT INTO factories (id, name, code, shortName, taxId, address, userId)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name = excluded.name,
+                        code = excluded.code,
+                        shortName = excluded.shortName,
+                        taxId = excluded.taxId,
+                        address = excluded.address
+                `).bind(id, name, code, shortName, taxId || null, address || null, userId);
+            });
+            await context.env.DB.batch(stmts);
+            return jsonResponse({ status: 'success', count: stmts.length });
+        }
+
         const payload = body.payload;
         const id = payload.id || crypto.randomUUID();
-        
         const { name, code, shortName, taxId, address } = payload;
         
         await context.env.DB.prepare(`
-            INSERT INTO factories (id, name, code, shortName, taxId, address)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO factories (id, name, code, shortName, taxId, address, userId)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 code = excluded.code,
                 shortName = excluded.shortName,
                 taxId = excluded.taxId,
                 address = excluded.address
-        `).bind(id, name, code, shortName, taxId || null, address || null).run();
+        `).bind(id, name, code, shortName, taxId || null, address || null, userId).run();
         
         return jsonResponse({ status: 'success', id });
     } catch (e) {
         return errorResponse(e.message);
     }
 }
+
+export const onRequestPost = withAuth(handlePost);

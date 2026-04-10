@@ -1,12 +1,12 @@
-name = "j-jiw-rubber"
+name = "rubertrade-co-ltd"
 pages_build_output_dir = "dist"
 compatibility_date = "2024-03-12"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "j-jiw-rubber-db"
-database_id = "0314c79d-d111-4600-bc16-96a8f1f3d0a4"
+database_name = "Rubertrade-Co-Ltd-db"
+database_id = "5212b4bc-ec93-4fce-8949-fcaf98280c8c"
 
 [[r2_buckets]]
 binding = "BUCKET"
-bucket_name = "j-jiw-rubber-bucket"
+bucket_name = "rubertrade-co-ltd-bucket"

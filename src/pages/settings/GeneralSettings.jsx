@@ -1,5 +1,5 @@
-import React from 'react';
-import { Building2, Save } from 'lucide-react';
+import { Building2, Save, CreditCard, Copy } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export const GeneralSettings = ({ register, handleSubmit, onSubmit, saving, logoUrl, setLogoUrl, handleLogoUpload }) => {
     return (
@@ -48,7 +48,7 @@ export const GeneralSettings = ({ register, handleSubmit, onSubmit, saving, logo
                         type="text"
                         {...register('factoryName', { required: true })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500 shadow-sm"
-                        placeholder="บจก. รับซื้อยางพาราไทย"
+                        placeholder="... รับซื้อยางพาราไทย"
                     />
                 </div>
 
@@ -197,6 +197,32 @@ export const GeneralSettings = ({ register, handleSubmit, onSubmit, saving, logo
                             <div className="flex flex-col">
                                 <span className="text-sm font-bold text-gray-700 group-hover:text-amber-800">พิมพ์ Paper-slip อัตโนมัติ (Thermal Receipt)</span>
                                 <span className="text-[10px] text-gray-400">ระบบจะดึงหน้าต่างสั่งพิมพ์ (Thermal Printer) ขึ้นมาให้อัตโนมัติหลังบันทึก</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div className="bg-purple-50/50 p-6 rounded-2xl border border-purple-100 space-y-4">
+                    <h3 className="text-sm font-bold text-purple-800 flex items-center mb-2">
+                        ตั้งค่าหน้าแดชบอร์ด (Dashboard Settings)
+                    </h3>
+                    <div className="space-y-4">
+                        <label className="flex items-center space-x-3 cursor-pointer group">
+                            <div className="relative flex items-center justify-center">
+                                <input
+                                    type="checkbox"
+                                    {...register('showPrizeDraw')}
+                                    className="peer h-6 w-6 cursor-pointer appearance-none rounded-md border border-purple-300 bg-white checked:bg-purple-500 checked:border-purple-500 transition-all"
+                                />
+                                <div className="pointer-events-none absolute text-white opacity-0 peer-checked:opacity-100 transition-all">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-sm font-bold text-gray-700 group-hover:text-purple-800">แสดงปุ่มสุ่มจับรางวัล (Lucky Draw)</span>
+                                <span className="text-[10px] text-gray-400">แสดงปุ่มสำหรับสุ่มจับรางวัลเกษตรกรผู้โชคดีที่หน้า Dashboard</span>
                             </div>
                         </label>
                     </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard,
@@ -13,16 +13,46 @@ import {
     Wallet,
     Gift,
     FileText,
+    Database,
     ChevronDown,
-    ChevronRight
+    ChevronRight,
+    Wifi,
+    WifiOff,
+    RefreshCw,
+    ShieldAlert,
+    CreditCard
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { format } from 'date-fns';
+import { th } from 'date-fns/locale';
+import toast from 'react-hot-toast';
 
 export const Layout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [openMenus, setOpenMenus] = useState([]); // Default collapsed menus
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+
+    useEffect(() => {
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+        const handleSyncComplete = (e) => {
+            if (e.detail && e.detail.count > 0) {
+                toast.success(`อัปโหลดล่วงล้ำเข้าระบบสำเร็จ ${e.detail.count} รายการ 🚀`, { duration: 4000 });
+            }
+        };
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        window.addEventListener('sync-complete', handleSyncComplete);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+            window.removeEventListener('sync-complete', handleSyncComplete);
+        };
+    }, []);
 
     const handleLogout = () => {
         logout();
@@ -45,16 +75,52 @@ export const Layout = () => {
                 { name: 'รายงานสรุปยอดรายวัน', path: '/report/daily-summary' },
                 { name: 'รายงานคาดการณ์ประจำวัน', path: '/report/daily-forecast' },
                 { name: 'รายงานยอดขายประจำเดือน', path: '/report/monthly' },
-                { name: 'รายงานประวัติการซื้อ-ขาย', path: '/report/transaction-history' }
+                { name: 'รายงานประวัติการซื้อ-ขาย', path: '/report/transaction-history' },
+                { name: 'บัญชีสำหรับสรรพากร', path: '/tax-report' }
             ]
         },
-        { name: 'บัญชีสำหรับสรรพากร', path: '/tax-report', icon: <FileText size={20} />, roles: ['owner'] },
-        { name: 'ตั้งค่า', path: '/settings', icon: <Settings size={20} />, roles: ['owner'] },
+        { 
+            name: 'ระบบสมาชิก', 
+            path: '/subscription', 
+            icon: <CreditCard size={20} />, 
+            roles: ['owner', 'admin', 'super_admin'],
+            subItems: [
+                { name: 'ภาพรวมระบบสมาชิก', path: '/admin/subscription-dashboard', roles: ['super_admin'] },
+                { name: 'สถานะและการสมัคร', path: '/subscription', roles: ['owner', 'admin', 'super_admin'] },
+                { name: 'อนุมัติสมาชิก', path: '/admin/subscriptions', roles: ['super_admin'] }
+            ]
+        },
+        { 
+            name: 'ตั้งค่า', 
+            path: '/settings', 
+            icon: <Settings size={20} />, 
+            roles: ['owner'],
+            subItems: [
+                { name: 'ตั้งค่าร้านค้า', path: '/settings' },
+                { name: 'จัดการข้อมูล (Import/Export)', path: '/import' }
+            ]
+        },
     ];
 
-    const filteredNavItems = navItems.filter(item => 
-        !item.roles || item.roles.includes(user?.role?.toLowerCase())
-    );
+    const filteredNavItems = navItems.filter(item => {
+        if (!item.roles) return true;
+        const isSuperAdminFallback = user?.email === 'narapong.an@gmail.com' || user?.username === 'narapong.an';
+        if (isSuperAdminFallback && item.roles.includes('super_admin')) return true;
+        return item.roles.includes(user?.role?.toLowerCase());
+    }).map(item => {
+        if (item.subItems) {
+            return {
+                ...item,
+                subItems: item.subItems.filter(sub => {
+                    if (!sub.roles) return true;
+                    const isSuperAdminFallback = user?.email === 'narapong.an@gmail.com' || user?.username === 'narapong.an';
+                    if (isSuperAdminFallback && sub.roles.includes('super_admin')) return true;
+                    return sub.roles.includes(user?.role?.toLowerCase());
+                })
+            };
+        }
+        return item;
+    });
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
@@ -141,14 +207,38 @@ export const Layout = () => {
 
                 <div className="p-4 border-t border-gray-200">
                     <div className="flex items-center mb-4 px-4">
-                        <div className="w-8 h-8 rounded-full bg-rubber-200 flex items-center justify-center text-rubber-700 font-bold">
-                            {user?.username?.charAt(0).toUpperCase() || 'U'}
+                        <div className="w-8 h-8 rounded-full bg-rubber-200 flex items-center justify-center text-rubber-700 font-bold shadow-sm">
+                            {(user?.username || user?.email || 'U').charAt(0).toUpperCase()}
                         </div>
                         <div className="ml-3 truncate">
-                            <p className="text-sm font-medium text-gray-900">{user?.username}</p>
-                            <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+                            <p className="text-sm font-semibold text-gray-900 truncate">
+                                {user?.username || user?.email?.split('@')[0] || 'ผู้ใช้งาน'}
+                            </p>
+                            <p className="text-xs text-rubber-600 font-medium capitalize">
+                                {user?.role || 'owner'}
+                            </p>
                         </div>
                     </div>
+                    <button 
+                        onClick={async () => {
+                            // Dynamic import to clear caches and trigger refresh
+                            const { clearAllCache } = await import('../services/apiService');
+                            const { hydrateLocalDB, syncQueueToServer } = await import('../services/syncService');
+                            clearAllCache();
+                            if (navigator.onLine) {
+                                toast.loading('กำลังอัปโหลดข้อมูลออฟไลน์...', { id: 'manual-refresh' });
+                                await syncQueueToServer();
+                                toast.loading('กำลังดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์...', { id: 'manual-refresh' });
+                                await hydrateLocalDB();
+                                toast.success('อัปเดตข้อมูลล่าสุดเรียบร้อย', { id: 'manual-refresh' });
+                            }
+                            window.dispatchEvent(new Event('dashboard-refresh'));
+                        }}
+                        className="flex items-center w-full px-4 py-2 text-sm font-medium text-white bg-rubber-600 rounded-lg hover:bg-rubber-700 transition-colors mb-2 shadow-sm"
+                    >
+                        <RefreshCw size={20} className="mr-3" />
+                        ดึงข้อมูลล่าสุด (Sync)
+                    </button>
                     <button
                         onClick={handleLogout}
                         className="flex items-center w-full px-4 py-2 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors"
@@ -161,6 +251,37 @@ export const Layout = () => {
 
             {/* Main content */}
             <div className="flex flex-col flex-1 overflow-hidden">
+                {/* Subscription Warning Banner */}
+                {user?.subscriptionExpiry && (
+                    (() => {
+                        const expiry = new Date(user.subscriptionExpiry);
+                        const isExpired = expiry < new Date();
+                        const isCloseToExpiry = !isExpired && (expiry - new Date()) < (3 * 24 * 60 * 60 * 1000); // 3 days
+                        
+                        if (isExpired || isCloseToExpiry) {
+                            return (
+                                <div className={`px-8 py-3 flex items-center justify-between text-sm font-bold ${isExpired ? 'bg-red-600 text-white' : 'bg-amber-400 text-amber-950'}`}>
+                                    <div className="flex items-center">
+                                        <ShieldAlert size={18} className="mr-3" />
+                                        <span>
+                                            {isExpired 
+                                                ? `อายุการใช้งานของคุณสิ้นสุดแล้วเมื่อ ${format(expiry, 'd MMM yyyy', { locale: th })} (ขณะนี้คุณดูข้อมูลได้อย่างเดียว)` 
+                                                : `อายุการใช้งานของคุณจะหมดภายในวัน ${format(expiry, 'd MMM yyyy', { locale: th })}`}
+                                        </span>
+                                    </div>
+                                    <button 
+                                        onClick={() => navigate('/subscription')}
+                                        className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider shadow-sm transition-all hover:scale-105 ${isExpired ? 'bg-white text-red-600' : 'bg-amber-950 text-white'}`}
+                                    >
+                                        ชำระเงินต่ออายุ
+                                    </button>
+                                </div>
+                            );
+                        }
+                        return null;
+                    })()
+                )}
+
                 {/* Top Header */}
                 <header className="flex items-center justify-between h-16 px-4 bg-white border-b border-gray-200 lg:px-8 print:hidden">
                     <button
@@ -174,7 +295,37 @@ export const Layout = () => {
                         <span className="text-lg font-bold text-rubber-600">RubberTrade</span>
                     </div>
 
-                    <div className="flex items-center ml-auto">
+                    <div className="flex items-center ml-auto space-x-4">
+                        <button 
+                            onClick={async () => {
+                                // Dynamic import to clear caches and trigger refresh
+                                const { clearAllCache } = await import('../services/apiService');
+                                const { hydrateLocalDB } = await import('../services/syncService');
+                                clearAllCache();
+                                if (navigator.onLine) {
+                                    toast.loading('กำลังดึงข้อมูลล่าสุด...', { id: 'manual-refresh' });
+                                    await hydrateLocalDB();
+                                    toast.success('อัปเดตข้อมูลล่าสุดเรียบร้อย', { id: 'manual-refresh' });
+                                }
+                                window.dispatchEvent(new Event('dashboard-refresh'));
+                            }}
+                            className="flex items-center text-gray-500 hover:text-rubber-600 bg-gray-50 hover:bg-rubber-50 px-3 py-1 rounded-full text-xs font-medium border border-gray-200 transition-colors"
+                        >
+                            <RefreshCw size={14} className="mr-1.5" />
+                            <span>รีเฟรชข้อมูล</span>
+                        </button>
+                    
+                        {isOnline ? (
+                            <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full text-xs font-medium border border-green-200">
+                                <Wifi size={14} className="mr-1.5" />
+                                <span>ออนไลน์</span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center text-amber-600 bg-amber-50 px-3 py-1 rounded-full text-xs font-medium border border-amber-200 animate-pulse">
+                                <WifiOff size={14} className="mr-1.5" />
+                                <span>ออฟไลน์</span>
+                            </div>
+                        )}
                         {/* Can add notifications/profile here later */}
                     </div>
                 </header>

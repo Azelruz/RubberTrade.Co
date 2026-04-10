@@ -1,17 +1,18 @@
-import { jsonResponse, errorResponse } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth } from './_utils.js';
 
-export async function onRequestGet(context) {
+async function handleGet(context) {
     try {
         const db = context.env.DB;
+        const userId = context.user.id;
         
         const [farmers, staff, buys, sells, wages, expenses, settings] = await Promise.all([
-            db.prepare("SELECT * FROM farmers").all(),
-            db.prepare("SELECT * FROM staff").all(),
-            db.prepare("SELECT b.*, f.name as farmerName FROM buys b LEFT JOIN farmers f ON b.farmerId = f.id ORDER BY b.date DESC, b.created_at DESC").all(),
-            db.prepare("SELECT * FROM sells ORDER BY date DESC, created_at DESC").all(),
-            db.prepare("SELECT w.*, s.name as staffName FROM wages w LEFT JOIN staff s ON w.staffId = s.id ORDER BY w.date DESC, w.created_at DESC").all(),
-            db.prepare("SELECT * FROM expenses ORDER BY date DESC, created_at DESC").all(),
-            db.prepare("SELECT * FROM settings").all()
+            db.prepare("SELECT * FROM farmers WHERE userId = ?").bind(userId).all(),
+            db.prepare("SELECT * FROM staff WHERE userId = ?").bind(userId).all(),
+            db.prepare("SELECT b.*, f.name as farmerName FROM buys b LEFT JOIN farmers f ON b.farmerId = f.id WHERE b.userId = ? ORDER BY b.date DESC, b.created_at DESC").bind(userId).all(),
+            db.prepare("SELECT * FROM sells WHERE userId = ? ORDER BY date DESC, created_at DESC").bind(userId).all(),
+            db.prepare("SELECT w.*, s.name as staffName FROM wages w LEFT JOIN staff s ON w.staffId = s.id WHERE w.userId = ? ORDER BY w.date DESC, w.created_at DESC").bind(userId).all(),
+            db.prepare("SELECT * FROM expenses WHERE userId = ? ORDER BY date DESC, created_at DESC").bind(userId).all(),
+            db.prepare("SELECT * FROM settings WHERE userId = ?").bind(userId).all()
         ]);
 
         const settingsList = settings?.results || [];
@@ -41,3 +42,5 @@ export async function onRequestGet(context) {
         return errorResponse(e.message);
     }
 }
+
+export const onRequestGet = withAuth(handleGet);

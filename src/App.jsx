@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
+import { startBackgroundSync, hydrateLocalDB } from './services/syncService';
 
 // Components
 import Layout from './components/Layout';
@@ -24,8 +25,22 @@ import LIFFProfile from './pages/LIFFProfile';
 import LIFFAddEmployee from './pages/LIFFAddEmployee';
 import TaxReport from './pages/TaxReport';
 import DailySummaryReport from './pages/DailySummaryReport';
+import DataImport from './pages/DataImport';
+import Subscription from './pages/Subscription';
+import AdminSubscriptions from './pages/AdminSubscriptions';
+import AdminSubscriptionDashboard from './pages/AdminSubscriptionDashboard';
 
 function App() {
+  useEffect(() => {
+    // Start background sync listener
+    startBackgroundSync();
+    
+    // Optionally trigger a hydrate on first load if online
+    if (navigator.onLine && localStorage.getItem('token')) {
+        hydrateLocalDB();
+    }
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>
@@ -76,8 +91,24 @@ function App() {
               </RoleRoute>
             } />
             <Route path="settings" element={
-              <RoleRoute allowedRoles={['owner']}>
+              <RoleRoute allowedRoles={['owner', 'super_admin']}>
                 <Settings />
+              </RoleRoute>
+            } />
+            <Route path="subscription" element={<Subscription />} />
+            <Route path="admin/subscriptions" element={
+              <RoleRoute allowedRoles={['super_admin']}>
+                <AdminSubscriptions />
+              </RoleRoute>
+            } />
+            <Route path="admin/subscription-dashboard" element={
+              <RoleRoute allowedRoles={['super_admin']}>
+                <AdminSubscriptionDashboard />
+              </RoleRoute>
+            } />
+            <Route path="import" element={
+              <RoleRoute allowedRoles={['owner', 'super_admin']}>
+                <DataImport />
               </RoleRoute>
             } />
           </Route>

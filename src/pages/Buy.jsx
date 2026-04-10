@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useForm } from 'react-hook-form';
-import { PlusCircle, Printer, Download, Search, Trash2, FileText, Factory, User, Image as ImageIcon, Leaf, Coins, Wallet, Calculator, X } from 'lucide-react';
+import { PlusCircle, Printer, Download, Search, Trash2, FileText, Factory, User, Image as ImageIcon, Leaf, Coins, Wallet, Calculator, X, Eye, ChevronDown, Percent } from 'lucide-react';
 import { format, addYears } from 'date-fns';
 import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
-import { addBuyRecord, fetchBuyRecords, deleteRecord, updateRecord, fetchFarmers, fetchDailyPrice, getSettings, fetchEmployees, saveReceiptImageToDrive, deleteReceiptFileToDrive, sendLineReceipt, isCached } from '../services/apiService';
+import { addBuyRecord, fetchBuyRecords, deleteRecord, updateRecord, fetchFarmers, fetchDailyPrice, getSettings, fetchEmployees, saveReceiptImageToDrive, deleteReceiptFileToDrive, sendLineReceipt, fetchMemberTypes, isCached } from '../services/apiService';
 import { truncateOneDecimal, calculateBuyTotal, calculateDrcBonus } from '../utils/calculations';
 
 export const Buy = () => {
@@ -22,6 +22,9 @@ export const Buy = () => {
     const [settings, setLocalSettings] = useState({ factoryName: 'ร้านรับซื้อน้ำยางพารา', address: '', phone: '' });
     const [drcBonuses, setDrcBonuses] = useState([]);
     const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+    const [viewingEslip, setViewingEslip] = useState(null);
+    const [memberTypes, setMemberTypes] = useState([]);
+    const activeTab = 'buy';
     const isDemo = false;
     const eslipRef = useRef(null);
 
@@ -59,8 +62,9 @@ export const Buy = () => {
     const watchDrc = watch('drc');
     const watchFarmerId = watch('farmerId');
     const watchFarmerName = watch('farmerName');
+    const selectedFarmer = farmers.find(f => f.id === watchFarmerId);
 
-    // Bonus Logic: Update PricePerKg when DRC or Farmer changes
+    // Bonus Logic: Update PricePerKg when DRC, Farmer or Member Type changes
     useEffect(() => {
         const base = Number(dailyPriceObj.price) || 0;
         const drc = Number(watchDrc) || 0;
@@ -70,11 +74,18 @@ export const Buy = () => {
         const selectedFarmer = farmers.find(f => f.id === watchFarmerId);
         const fscBonus = selectedFarmer?.fscId ? (Number(settings.fsc_bonus) || 1) : 0;
 
+        // Calculate Member Type Bonus
+        let memberBonus = 0;
+        if (selectedFarmer?.memberTypeId) {
+            const mType = memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId);
+            if (mType) memberBonus = Number(mType.bonus) || 0;
+        }
+
         if (!dirtyFields.basePrice) setValue('basePrice', base.toString());
         if (!dirtyFields.bonusDrc) setValue('bonusDrc', bonusDrc.toString());
-        // Price per kg displayed to user (base + drc_bonus + fsc_bonus)
-        setValue('pricePerKg', (base + bonusDrc + fscBonus).toString());
-    }, [watchDrc, watchFarmerId, farmers, dailyPriceObj.price, setValue, drcBonuses]);
+        // Price per kg displayed to user (base + drc_bonus + fsc_bonus + memberBonus)
+        setValue('pricePerKg', (base + bonusDrc + fscBonus + memberBonus).toString());
+    }, [watchDrc, watchFarmerId, farmers, memberTypes, dailyPriceObj.price, setValue, drcBonuses]);
 
     // Load data
     useEffect(() => {
@@ -88,7 +99,16 @@ export const Buy = () => {
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        
+        const handleRefresh = () => {
+            loadData();
+        };
+        window.addEventListener('dashboard-refresh', handleRefresh);
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('dashboard-refresh', handleRefresh);
+        };
     }, []);
 
     const loadLocalSettings = async () => {
@@ -123,16 +143,18 @@ export const Buy = () => {
                 setValue('pricePerKg', '50');
                 return;
             }
-            const [buyData, farmersData, priceData, settingsRes, employeesData] = await Promise.all([
+            const [buyData, farmersData, priceData, settingsRes, employeesData, mtData] = await Promise.all([
                 fetchBuyRecords(),
                 fetchFarmers(),
                 fetchDailyPrice(),
                 getSettings(),
-                fetchEmployees()
+                fetchEmployees(),
+                fetchMemberTypes()
             ]);
             setRecords(Array.isArray(buyData) ? buyData : []);
             setFarmers(Array.isArray(farmersData) ? farmersData : []);
             setEmployees(Array.isArray(employeesData) ? employeesData : []);
+            setMemberTypes(Array.isArray(mtData) ? mtData : []);
 
             if (priceData && priceData.status === 'success') {
                 setDailyPriceObj(priceData.data);
@@ -184,7 +206,15 @@ export const Buy = () => {
             
             // Check FSC Bonus again during submission
             const fscBonus = selectedFarmer?.fscId ? (Number(settings.fsc_bonus) || 1) : 0;
-            const p = bp + bDrc + fscBonus; // Actual price per kg including all bonuses
+            
+            // Member Type Bonus calculation
+            let bonusMemberType = 0;
+            if (selectedFarmer?.memberTypeId) {
+                const mType = memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId);
+                if (mType) bonusMemberType = Number(mType.bonus) || 0;
+            }
+
+            const p = bp + bDrc + fscBonus + bonusMemberType; // Actual price per kg including all bonuses
 
             // Find employee share
             const farmerEmps = employees.filter(e => e.farmerId === farmerId);
@@ -256,6 +286,7 @@ export const Buy = () => {
                 farmerTotal,
                 bonusDrc: bDrc,
                 fscBonus,
+                bonusMemberType,
                 actualPrice,
                 basePrice: bp,
                 receiptUrl,
@@ -293,12 +324,7 @@ export const Buy = () => {
                             .catch(e => console.error('LINE Error:', e));
                     }
 
-                    // --- Auto Print Paper Receipt ---
-                    const shouldPrintPaper = settings.printPaperSlip === undefined ? true : (settings.printPaperSlip === 'true' || settings.printPaperSlip === true);
-                    if (shouldPrintPaper) {
-                        handlePrintReceipt(newRecord);
-                    }
-
+                    // Reset form first
                     reset({
                         date: format(new Date(), 'yyyy-MM-dd'),
                         farmerId: '',
@@ -310,14 +336,25 @@ export const Buy = () => {
                         note: ''
                     });
                     setFarmerSearch('');
+                    setSubmitting(false); // Clear submitting state early here
+
+                    // --- Auto Print Paper Receipt ---
+                    // Wait a bit for the UI to settle after reset/setSubmitting(false)
+                    const shouldPrintPaper = settings.printPaperSlip === undefined ? true : (settings.printPaperSlip === 'true' || settings.printPaperSlip === true);
+                    if (shouldPrintPaper) {
+                        setTimeout(() => {
+                            toast.dismiss(); // Clear "Success" notification before printing
+                            handlePrintReceipt(newRecord);
+                        }, 500); 
+                    }
                 } else {
+                    setSubmitting(false);
                     toast.error(res.message, { id: toastId });
                 }
             }
         } catch (error) {
-            toast.error('บันทึกล้มเหลว: ' + error.message, { id: toastId });
-        } finally {
             setSubmitting(false);
+            toast.error('บันทึกล้มเหลว: ' + error.message, { id: toastId });
         }
     };
 
@@ -376,7 +413,13 @@ export const Buy = () => {
         const selectedFarmer = farmers.find(f => f.id === watchFarmerId);
         const fscBonus = selectedFarmer?.fscId ? (Number(settings.fsc_bonus) || 1) : 0;
         
-        const actualPrice = truncateOneDecimal(Number(watchBasePrice || 0) + Number(watchBonusDrc || 0) + fscBonus);
+        let memberBonus = 0;
+        if (selectedFarmer?.memberTypeId) {
+            const mType = memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId);
+            if (mType) memberBonus = Number(mType.bonus) || 0;
+        }
+
+        const actualPrice = truncateOneDecimal(Number(watchBasePrice || 0) + Number(watchBonusDrc || 0) + fscBonus + memberBonus);
         return Math.floor(dry * actualPrice);
     };
 
@@ -496,7 +539,7 @@ export const Buy = () => {
                             )}
                             <h1 className="text-lg font-bold leading-tight">{settings.factoryName || 'ร้านรับซื้อน้ำยางพารา'}</h1>
                             <p className="text-[10px] font-medium">{settings.address || '-'}</p>
-                            <p className="text-[10px]">โทร: {settings.phone || '-'}</p>
+                            <p className="text-sm font-bold">โทร: {settings.phone || '-'}</p>
                             <div className="mt-2 font-bold border border-black inline-block px-4 py-0.5 text-[11px]">
                                 ใบรับซื้อน้ำยางพารา
                             </div>
@@ -505,38 +548,38 @@ export const Buy = () => {
                         {/* Invoice Info */}
                         <div className="flex justify-between text-[10px] mb-3 border-b border-black pb-1 font-mono">
                             <span>เลขที่: <span className="font-bold">{printingReceipt.id?.substring(0, 14)}</span></span>
-                            <span>{format(addYears(new Date(printingReceipt.timestamp || printingReceipt.date || new Date()), 543), 'dd/MM/yyyy HH:mm', { locale: th })}</span>
+                            <span className="font-bold">{format(addYears(new Date(printingReceipt.timestamp || printingReceipt.date || new Date()), 543), 'dd/MM/yyyy HH:mm', { locale: th })}</span>
                         </div>
 
                         {/* Farmer Info */}
                         <div className="mb-3">
-                            <p className="text-[10px] font-bold underline">ข้อมูลเกษตรกร</p>
+                            {/*<p className="text-[10px] font-bold underline">ข้อมูลเกษตรกร</p>*/}
                             <h2 className="text-sm font-bold">{printingReceipt.farmerName}</h2>
-                            <p className="text-[10px]">รหัส: {printingReceipt.farmerId || '-'}</p>
+                            {/*<p className="text-[10px]">รหัส: {printingReceipt.farmerId || '-'}</p>*/}
                         </div>
 
                         {/* Details */}
                         <div className="py-2 border-t border-black space-y-1">
-                            <p className="text-[10px] font-bold mb-1">[ รายละเอียดการรับซื้อ ]</p>
+                            {/*<p className="text-[10px] font-bold mb-1">[ รายละเอียดการรับซื้อ ]</p>*/}
                             <div className="flex justify-between items-center">
                                 <span>น้ำหนักยางดิบ</span>
-                                <span className="font-bold">{Number(printingReceipt.weight).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                                <span className="text-sm font-bold">{Number(printingReceipt.weight).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
                             </div>
                             <div className="flex justify-between items-center text-[10px] text-black italic mb-1">
                                 <span>น้ำหนักถัง</span>
                                 <span>-{Number(printingReceipt.bucketWeight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
                             </div>
-                            <div className="flex justify-between items-center bg-white border border-black px-1 py-0.5 rounded text-[10px] mb-2 font-bold text-black">
+                            <div className="flex justify-between items-center">
                                 <span>น้ำหนักสุทธิ</span>
-                                <span>{(Number(printingReceipt.weight) - Number(printingReceipt.bucketWeight || 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                                <span className="text-sm font-bold border-b border-black">{(Number(printingReceipt.weight) - Number(printingReceipt.bucketWeight || 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span>% DRC</span>
-                                <span className="font-bold">{Number(printingReceipt.drc).toLocaleString(undefined, { minimumFractionDigits: 1 })}%</span>
+                                <span className="text-sm font-bold border-b border-black">{Number(printingReceipt.drc).toLocaleString(undefined, { minimumFractionDigits: 1 })}%</span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span>ยางแห้ง</span>
-                                <span className="font-bold border-b border-black">{Number(printingReceipt.dryWeight || printingReceipt.dryRubber || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                                <span className="text-sm font-bold border-b border-black">{Number(printingReceipt.dryWeight || printingReceipt.dryRubber || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
                             </div>
 
                             <div className="my-2 border-t border-dashed border-black"></div>
@@ -549,28 +592,34 @@ export const Buy = () => {
                                 <span>โบนัส DRC</span>
                                 <span>+{Number(printingReceipt.bonusDrc !== undefined ? printingReceipt.bonusDrc : calculateDrcBonus(printingReceipt.drc, drcBonuses)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
                             </div>
-                            {Number(printingReceipt.fscBonus || (farmers.find(f => f.id === printingReceipt.farmerId)?.fscId ? 1 : 0)) > 0 && (
+                            {Number(printingReceipt.fscBonus || (farmers.find(f => f.id === printingReceipt.farmerId)?.fscId ? (settings.fsc_bonus || 1) : 0)) > 0 && (
                                 <div className="flex justify-between items-center text-[10px] font-medium text-black">
                                     <span>โบนัส FSC</span>
                                     <span>+{Number(printingReceipt.fscBonus || (farmers.find(f => f.id === printingReceipt.farmerId)?.fscId ? (settings.fsc_bonus || 1) : 0)).toLocaleString(undefined, { minimumFractionDigits: 0 })}/กก.</span>
                                 </div>
                             )}
+                            {Number(printingReceipt.bonusMemberType || (farmers.find(f => f.id === printingReceipt.farmerId)?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === printingReceipt.farmerId).memberTypeId)?.bonus : 0)) > 0 && (
+                                <div className="flex justify-between items-center text-[10px] font-black text-rubber-700 bg-rubber-50 px-1 rounded">
+                                    <span>{memberTypes.find(mt => mt.id === (printingReceipt.memberTypeId || farmers.find(f => f.id === printingReceipt.farmerId)?.memberTypeId))?.name || 'โบนัสสมาชิก'}</span>
+                                    <span>+{Number(printingReceipt.bonusMemberType || (farmers.find(f => f.id === printingReceipt.farmerId)?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === printingReceipt.farmerId).memberTypeId)?.bonus : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                </div>
+                            )}
                             <div className="flex justify-between items-center font-bold border-t border-black pt-1 mt-1">
                                 <span>ราคาจริง (สุทธิ)</span>
-                                <span>{truncateOneDecimal(Number(printingReceipt.actualPrice || (Number(printingReceipt.pricePerKg) || (Number(printingReceipt.basePrice || 0) + Number(printingReceipt.bonusDrc || 0) + (Number(printingReceipt.fscBonus) || (farmers.find(f => f.id === printingReceipt.farmerId)?.fscId ? 1 : 0)))))).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                <span className="text-sm font-bold border-b border-black">{truncateOneDecimal(Number(printingReceipt.actualPrice || (Number(printingReceipt.pricePerKg) || (Number(printingReceipt.basePrice || 0) + Number(printingReceipt.bonusDrc || 0) + (Number(printingReceipt.fscBonus) || (farmers.find(f => f.id === printingReceipt.farmerId)?.fscId ? 1 : 0)))))).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
                             </div>
                         </div>
 
                         {/* Splits */}
                         <div className="py-2 border-t-2 border-black my-2 space-y-1">
                             <div className="flex justify-between items-center font-bold">
-                                <span>ยอดจ่ายเกษตรกร ({100 - (Number(printingReceipt.empPct) || 0)}%)</span>
-                                <span>฿{Math.floor(Number(printingReceipt.farmerTotal || printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                <span>เกษตรกร ({100 - (Number(printingReceipt.empPct) || 0)}%)</span>
+                                <span className="font-bold text-xl">฿{Math.floor(Number(printingReceipt.farmerTotal || printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
                             </div>
                             {Number(printingReceipt.empPct) > 0 && (
                                 <div className="flex justify-between items-center">
-                                    <span>ยอดจ่ายลูกจ้าง ({Number(printingReceipt.empPct)}%)</span>
-                                    <span>฿{Math.floor(Number(printingReceipt.employeeTotal || 0)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                    <span>ลูกจ้าง ({Number(printingReceipt.empPct)}%)</span>
+                                    <span className="font-bold text-xl">฿{Math.floor(Number(printingReceipt.employeeTotal || 0)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
                                 </div>
                             )}
                         </div>
@@ -579,7 +628,7 @@ export const Buy = () => {
                         <div className="border-t-4 border-double border-black py-2 mt-2">
                             <div className="flex justify-between items-center">
                                 <span className="font-bold text-xs uppercase">ยอดรวมสุทธิ</span>
-                                <span className="font-bold text-xl">฿{Math.floor(Number(printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
+                                <span className="font-bold text-xl">฿{Math.floor(Number(printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
                             </div>
                         </div>
 
@@ -754,11 +803,21 @@ export const Buy = () => {
                                     </div>
                                 )}
 
+                                {selectedFarmer?.memberTypeId && memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId) && (
+                                    <div className="mb-2 p-2 bg-rubber-50 border border-rubber-200 rounded-lg flex items-center justify-between text-rubber-800">
+                                        <div className="flex items-center text-xs font-black uppercase">
+                                            <Percent size={14} className="mr-1.5 text-rubber-600" />
+                                            กลุ่ม: {memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId).name}
+                                        </div>
+                                        <span className="text-xs font-black">+{Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId).bonus).toLocaleString(undefined, { minimumFractionDigits: 1 })} บาท/กก.</span>
+                                    </div>
+                                )}
+
                                 <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
                                     <div className="flex justify-between items-center">
                                         <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">ราคาจริงรวมโบนัส:</span>
                                         <span className="text-sm font-black text-gray-700 font-mono">
-                                            ฿{(Number(watchBasePrice || 0) + Number(watchBonusDrc || 0) + (farmers.find(f => f.id === watchFarmerId)?.fscId ? (Number(settings.fsc_bonus) || 1) : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.
+                                            ฿{(Number(watchBasePrice || 0) + Number(watchBonusDrc || 0) + (selectedFarmer?.fscId ? (Number(settings.fsc_bonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.
                                         </span>
                                     </div>
                                 </div>
@@ -936,13 +995,20 @@ export const Buy = () => {
                                                                     <Trash2 size={18} />
                                                                 </button>
                                                             )}
-                                                            {record.receiptUrl && (
+                                                            <button
+                                                                onClick={() => setViewingEslip(record)}
+                                                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                                title="ดู E-Slip"
+                                                            >
+                                                                <Eye size={18} />
+                                                            </button>
+                                                            {(record.receiptUrl || record.receipt_url) && !String(record.receiptUrl || record.receipt_url).startsWith('offline_queue') && (
                                                                 <a
-                                                                    href={record.receiptUrl}
+                                                                    href={record.receiptUrl || record.receipt_url}
                                                                     target="_blank"
                                                                     rel="noreferrer"
-                                                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                                    title="ดูรูปใบเสร็จ"
+                                                                    className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all"
+                                                                    title="ดูรูปที่บันทึกไว้ใน Cloud"
                                                                 >
                                                                     <ImageIcon size={18} />
                                                                 </a>
@@ -958,6 +1024,196 @@ export const Buy = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* Premium E-Slip Modal */}
+                {viewingEslip && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-2 no-print sm:p-4">
+                        <div className="bg-white rounded-[1.2rem] shadow-2xl max-w-[280px] w-full max-h-[95vh] overflow-y-auto relative animate-in fade-in zoom-in duration-300">
+                            <button 
+                                onClick={() => setViewingEslip(null)}
+                                className="absolute right-3 top-3 z-20 bg-black/10 hover:bg-black/20 text-white p-1 rounded-full transition-all hover:scale-110 active:scale-95"
+                            >
+                                <X size={14} />
+                            </button>
+
+                            <div className="flex flex-col font-sans">
+                                {/* Header */}
+                                <div className="bg-[#2d5a3f] py-4 px-3 text-center text-white relative overflow-hidden">
+                                    <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16"></div>
+                                    <div className="absolute left-0 bottom-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12"></div>
+                                    
+                                    <div className="flex justify-center mb-2">
+                                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/10 shadow-xl overflow-hidden">
+                                            {settings.logoUrl || settings.logo_url ? (
+                                                <img src={settings.logoUrl || settings.logo_url} alt="Logo" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <Leaf size={24} className="text-white opacity-80" />
+                                            )}
+                                        </div>
+                                    </div>
+                                    <h1 className="text-lg font-black tracking-tight mb-0.5 leading-tight">
+                                        {settings.factoryName || settings.factory_name || 'ร้านรับซื้อน้ำยางพารา'}
+                                    </h1>
+                                    <p className="text-[9px] opacity-70 font-medium mb-2 max-w-[280px] mx-auto">
+                                        {settings.address || '-'} โทร: {settings.phone || '-'}
+                                    </p>
+                                    
+                                    <div className="inline-block px-3 py-1 bg-white/20 rounded-full border border-white/10 backdrop-blur-sm text-[9px] font-black tracking-[0.2em] leading-none uppercase">
+                                        ใบรับซื้อน้ำยางพารา
+                                    </div>
+                                </div>
+
+                                <div className="px-3 pt-3 pb-4 bg-white">
+                                    <div className="flex justify-between items-center mb-3 text-[9px] font-black text-gray-400 bg-gray-50/80 px-2 py-1.5 rounded-lg border border-gray-100">
+                                        <span className="flex items-center"><span className="opacity-40 mr-1 font-bold small-caps">ID:</span> <span className="text-gray-900 mono">{viewingEslip.id?.substring(0, 14)}</span></span>
+                                        <span>{format(new Date(viewingEslip.date || viewingEslip.timestamp || new Date()), 'dd MMM yy HH:mm', { locale: th })}</span>
+                                    </div>
+
+                                    <div className="mb-3">
+                                        <p className="text-[8px] font-black text-gray-400 mb-1 uppercase tracking-widest flex items-center">
+                                            <User size={8} className="mr-1 opacity-40" />
+                                            ข้อมูลเกษตรกร
+                                        </p>
+                                        <div className="flex items-center justify-between border-b border-dotted border-gray-100 pb-2.5">
+                                            <div>
+                                                <h2 className="text-[18px] font-black text-gray-800 leading-none mb-0.5">
+                                                    {viewingEslip.farmerName || viewingEslip.buyerName || 'ลูกค้าทั่วไป'}
+                                                </h2>
+                                                <div className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[9px] font-bold text-gray-500">
+                                                    รหัส: {viewingEslip.farmerId || '-'}
+                                                </div>
+                                            </div>
+                                            <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-100">
+                                                <User size={20} className="text-gray-200" />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1 mb-3">
+                                        <p className="text-[8px] font-black text-gray-400 mb-1 uppercase tracking-widest">รายละเอียดการรับซื้อ</p>
+                                        
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="font-bold text-gray-400">น้ำหนักยางดิบ</span>
+                                            <span className="font-black text-gray-900 decoration-rubber-100">{Number(viewingEslip.weight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] font-bold text-gray-400">กก.</span></span>
+                                        </div>
+
+                                        {(Number(viewingEslip.bucket_weight ?? viewingEslip.bucketWeight ?? 0)) > 0 && (
+                                            <div className="flex justify-between items-center text-[10px]">
+                                                <span className="font-bold text-red-300 ml-2 flex items-center"><ChevronDown size={10} className="mr-1" /> น้ำหนักถังยาง</span>
+                                                <span className="font-bold text-red-500">-{Number(viewingEslip.bucket_weight ?? viewingEslip.bucketWeight ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                                            </div>
+                                        )}
+
+                                        {(Number(viewingEslip.bucket_weight ?? viewingEslip.bucketWeight ?? 0)) > 0 && (
+                                            <div className="flex justify-between items-center text-xs border-t border-dotted border-gray-100 pt-0.5 mt-0.5">
+                                                <span className="font-bold text-gray-600">น้ำหนักสุทธิ</span>
+                                                <span className="font-black text-gray-900">{(Number(viewingEslip.weight || 0) - Number(viewingEslip.bucket_weight ?? viewingEslip.bucketWeight ?? 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] font-bold text-gray-400">กก.</span></span>
+                                            </div>
+                                        )}
+
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="font-bold text-gray-400">% DRC</span>
+                                            <span className="font-black text-gray-900">{Number(viewingEslip.drc || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}%</span>
+                                        </div>
+
+                                        <div className="flex justify-between items-center text-sm py-1 border-y border-gray-100 font-black bg-gray-50/50 px-2 rounded-lg my-0.5">
+                                            <span className="text-gray-700">เนื้อยางแห้ง</span>
+                                            <span className="text-rubber-600">
+                                                {Number(viewingEslip.dry_weight ?? viewingEslip.dry_rubber ?? viewingEslip.dryRubber ?? ((Number(viewingEslip.weight || 0) * Number(viewingEslip.drc || 0)) / 100)).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px]">กก.</span>
+                                            </span>
+                                        </div>
+
+                                        <div className="flex justify-between items-center text-xs pt-0.5">
+                                            <span className="font-bold text-gray-400">ราคากลาง</span>
+                                            <span className="font-black text-gray-900 mono">
+                                                ฿{Number(viewingEslip.base_price ?? viewingEslip.basePrice ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] text-gray-400 font-bold">/กก.</span>
+                                            </span>
+                                        </div>
+
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="font-bold text-gray-400">โบนัส DRC</span>
+                                            <span className="font-bold text-green-600 mono">
+                                                +฿{Number(viewingEslip.bonus_drc ?? viewingEslip.bonusDrc ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] text-gray-400 font-bold">/กก.</span>
+                                            </span>
+                                        </div>
+
+                                        {(Number(viewingEslip.fsc_bonus ?? viewingEslip.fscBonus ?? 0)) > 0 && (
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="font-bold text-gray-400">โบนัส FSC</span>
+                                                <span className="font-bold text-amber-600 mono">
+                                                    +฿{Number(viewingEslip.fsc_bonus ?? viewingEslip.fscBonus ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] text-gray-400 font-bold">/กก.</span>
+                                                </span>
+                                            </div>
+                                        )}
+                                        
+                                        {(Number(viewingEslip.bonusMemberType ?? viewingEslip.bonus_member_type ?? 0)) > 0 && (
+                                            <div className="flex justify-between items-center text-xs px-1 py-0.5 bg-rubber-50 rounded">
+                                                <span className="font-black text-rubber-700">{memberTypes.find(mt => mt.id === viewingEslip.memberTypeId)?.name || 'โบนัสสมาชิก'}</span>
+                                                <span className="font-black text-rubber-700 mono">
+                                                    +฿{Number(viewingEslip.bonusMemberType ?? viewingEslip.bonus_member_type ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] font-black italic">/กก.</span>
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        <div className="flex justify-between items-center text-sm pt-1 border-t border-dotted border-gray-200 mt-0.5 font-black">
+                                            <span className="text-gray-800">ราคาจริง</span>
+                                            <span className="font-black text-gray-900 mono">
+                                                ฿{Number(
+                                                    viewingEslip.actual_price ?? viewingEslip.actualPrice ?? viewingEslip.price_per_kg ?? viewingEslip.pricePerKg ?? 0
+                                                ).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] text-gray-400 font-bold">/กก.</span>
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-gray-50 rounded-[1.2rem] p-3 border border-gray-100 space-y-2 mb-3">
+                                        <div className="flex items-center space-x-2">
+                                            <div className="p-1 bg-rubber-100 rounded-md"><Coins size={12} className="text-rubber-600" /></div>
+                                            <p className="text-[9px] font-black text-rubber-700 uppercase tracking-widest">การจัดสรรเงิน</p>
+                                        </div>
+                                        
+                                        <div className="space-y-1 pt-1 border-t border-dotted border-gray-200">
+                                            <div className="flex justify-between items-center text-[10px]">
+                                                <span className="font-bold text-orange-400 flex items-center"><Coins size={12} className="mr-1.5" /> เกษตรกร ({(100 - Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0))}%)</span>
+                                                <span className="font-black text-[#5ba2d7] mono">฿{Math.floor(Number(viewingEslip.total || 0) * (100 - Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0)) / 100).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                            </div>
+                                            
+                                            {Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0) > 0 && (
+                                                <div className="flex justify-between items-center text-[10px]">
+                                                    <span className="font-bold text-[#a855f7] flex items-center"><User size={12} className="mr-1.5" /> ลูกจ้าง ({Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0)}%)</span>
+                                                    <span className="font-black text-[#a855f7] mono">฿{Math.floor(Number(viewingEslip.total || 0) * Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-[#2d5a3f] rounded-xl p-3 flex justify-between items-center text-white shadow-xl shadow-green-900/30 relative overflow-hidden group/total mb-1.5">
+                                        <div className="absolute right-0 top-0 w-24 h-24 bg-white/5 rounded-full -mr-8 -mt-8 transition-transform group-hover/total:scale-150 duration-700"></div>
+                                        <span className="text-[10px] font-black uppercase tracking-widest">ยอดรวมจ่าย</span>
+                                        <div className="text-right relative z-10">
+                                            <span className="text-[22px] font-black leading-none tracking-tighter tabular-nums drop-shadow-md">
+                                                ฿{Number(viewingEslip.total || 0).toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {(viewingEslip.receipt_url || viewingEslip.receiptUrl) && !String(viewingEslip.receipt_url || viewingEslip.receiptUrl).startsWith('offline_queue') && (
+                                        <div className="mt-8 text-center">
+                                            <a 
+                                                href={viewingEslip.receipt_url || viewingEslip.receiptUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center px-4 py-2 bg-gray-50 rounded-xl text-xs font-black text-gray-400 hover:text-rubber-600 hover:bg-rubber-50 transition-all border border-gray-100"
+                                            >
+                                                <Eye size={14} className="mr-2" />
+                                                OPEN ORIGINAL CLOUD IMAGE
+                                            </a>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Weight Calculator Modal */}
                 {showCalculator && (
@@ -1141,9 +1397,16 @@ export const Buy = () => {
                                 </div>
                             )}
 
+                            {(Number(printingReceipt?.bonusMemberType ?? (farmers.find(f => f.id === watch('farmerId'))?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === watch('farmerId')).memberTypeId)?.bonus : 0))) > 0 && (
+                                <div className="flex justify-between items-center text-[20px] text-rubber-700 bg-rubber-50 px-2 rounded-lg">
+                                    <span className="font-black">{memberTypes.find(mt => mt.id === (printingReceipt?.memberTypeId || farmers.find(f => f.id === watch('farmerId'))?.memberTypeId))?.name || 'โบนัสสมาชิก'}</span>
+                                    <span className="font-black font-mono">+฿{Number(printingReceipt?.bonusMemberType ?? (farmers.find(f => f.id === watch('farmerId'))?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === watch('farmerId')).memberTypeId)?.bonus : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                </div>
+                            )}
+
                             <div className="flex justify-between items-center text-[24px] pt-2 border-t border-dotted border-gray-100 mt-2 font-black">
                                 <span className="text-gray-800">ราคาจริง (สุทธิ)</span>
-                                <span className="text-gray-900 font-mono">฿{Math.floor(Number(printingReceipt?.actualPrice ?? (Number(watch('basePrice') || 0) + Number(watch('bonusDrc') || 0) + (farmers.find(f => f.id === watch('farmerId'))?.fscId ? (Number(settings.fsc_bonus) || 1) : 0))) || 0).toLocaleString(undefined, { minimumFractionDigits: 0 })}/กก.</span>
+                                <span className="text-gray-900 font-mono">฿{Math.floor(Number(printingReceipt?.actualPrice ?? (Number(watch('basePrice') || 0) + Number(watch('bonusDrc') || 0) + (selectedFarmer?.fscId ? (Number(settings.fsc_bonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0))) || 0).toLocaleString(undefined, { minimumFractionDigits: 0 })}/กก.</span>
                             </div>
                         </div>
 

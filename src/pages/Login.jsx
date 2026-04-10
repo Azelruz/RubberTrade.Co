@@ -8,35 +8,30 @@ import toast from 'react-hot-toast';
 
 export const Login = () => {
     const [loading, setLoading] = useState(false);
-    const { login, user } = useAuth();
+    const { loginWithGoogle, user, isLoading } = useAuth();
     const navigate = useNavigate();
 
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
+    // Show loading while checking initial session
+    if (isLoading) {
+        return (
+            <div className="min-h-screen bg-rubber-50 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-rubber-600"></div>
+            </div>
+        )
+    }
 
     // Redirect if already logged in
     if (user) {
         return <Navigate to="/" replace />;
     }
 
-    const handleLogin = async (e) => {
-        e.preventDefault();
+    const handleGoogleLogin = async () => {
         setLoading(true);
         try {
-            if (!getScriptUrl() && username !== 'admin') {
-                toast.error('รหัสผ่านไม่ถูกต้อง');
-                return;
-            }
-
-            const result = await login(username, password);
-            if (result.success) {
-                toast.success('เข้าสู่ระบบสำเร็จ');
-                navigate('/');
-            } else {
-                toast.error(result.message || 'รหัสผ่านไม่ถูกต้อง');
-            }
+            await loginWithGoogle();
         } catch (err) {
-            toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+            toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อกับ Google');
+            console.error(err);
         } finally {
             setLoading(false);
         }
@@ -56,41 +51,29 @@ export const Login = () => {
                     <p className="text-rubber-100">น้ำยางพารา (Rubber Trade)</p>
                 </div>
 
-                <div className="p-8">
-                    <form onSubmit={handleLogin} className="space-y-6">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อผู้ใช้งาน (Username)</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500 transition-shadow"
-                                    placeholder="กรอกชื่อผู้ใช้งาน"
-                                />
-                            </div>
+                <div className="p-8 space-y-6">
+                    <p className="text-gray-600 text-center">
+                        กรุณาเข้าสู่ระบบด้วยบัญชี Google เพื่อใช้งานระบบ
+                    </p>
 
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">รหัสผ่าน (Password)</label>
-                                <input
-                                    type="password"
-                                    required
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500 transition-shadow"
-                                    placeholder="••••••••"
-                                />
-                            </div>
+                    <button
+                        onClick={handleGoogleLogin}
+                        disabled={loading}
+                        className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-gray-300 rounded-lg shadow-sm text-base font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rubber-500 disabled:opacity-50 transition-all duration-200"
+                    >
+                        {loading ? (
+                            <span>กำลังเชื่อมต่อ...</span>
+                        ) : (
+                            <>
+                                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-6 h-6" />
+                                <span>เข้าสู่ระบบด้วย Google</span>
+                            </>
+                        )}
+                    </button>
 
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-rubber-600 hover:bg-rubber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rubber-500 disabled:opacity-50 transition-colors"
-                            >
-                                {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
-                            </button>
-
-                        </form>
+                    <div className="text-center text-xs text-gray-400 mt-8">
+                        &copy; {new Date().getFullYear()} Rubber Trade .co
+                    </div>
                 </div>
             </div>
         </div>

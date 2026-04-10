@@ -1,11 +1,11 @@
-import { jsonResponse, errorResponse } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth } from './_utils.js';
 
-export async function onRequestPost(context) {
+async function handleUpdate(context) {
     try {
         const body = await context.request.json();
         const { sheetName, id, updates } = body;
         
-        const validTables = ['farmers', 'staff', 'employees', 'buys', 'sells', 'expenses', 'wages', 'promotions', 'trucks', 'factories'];
+        const validTables = ['farmers', 'staff', 'employees', 'buys', 'sells', 'expenses', 'wages', 'promotions', 'trucks', 'factories', 'chemicals'];
         const tableName = sheetName.toLowerCase();
         
         if (!validTables.includes(tableName)) {
@@ -18,13 +18,20 @@ export async function onRequestPost(context) {
         const setClause = keys.map(k => `${k} = ?`).join(', ');
         const values = Object.values(updates);
         values.push(id);
+        values.push(context.user.id);
 
-        await context.env.DB.prepare(
-            `UPDATE ${tableName} SET ${setClause} WHERE id = ?`
+        const res = await context.env.DB.prepare(
+            `UPDATE ${tableName} SET ${setClause} WHERE id = ? AND userId = ?`
         ).bind(...values).run();
+
+        if (res.meta.rows_written === 0) {
+            return errorResponse('Record not found or unauthorized', 404);
+        }
 
         return jsonResponse({ status: 'success' });
     } catch (e) {
         return errorResponse(e.message);
     }
 }
+
+export const onRequestPost = withAuth(handleUpdate);

@@ -27,7 +27,10 @@ import {
     fetchFactories,
     addFactory,
     fetchTrucks,
-    addTruck
+    addTruck,
+    fetchMemberTypes,
+    addMemberType,
+    deleteMemberType
 } from '../services/apiService';
 
 // Sub-components
@@ -76,6 +79,11 @@ export const Settings = () => {
     const [showTruckForm, setShowTruckForm] = useState(false);
     const [editingTruck, setEditingTruck] = useState(null);
 
+    // Member Type State
+    const [memberTypes, setMemberTypes] = useState([]);
+    const [showMemberTypeForm, setShowMemberTypeForm] = useState(false);
+    const [editingMemberType, setEditingMemberType] = useState(null);
+
     const { register, handleSubmit, reset, setValue, watch } = useForm({
         defaultValues: {
             factoryName: '',
@@ -85,7 +93,8 @@ export const Settings = () => {
             lineChannelSecret: '',
             scriptUrl: getScriptUrl() || '',
             printESlip: true,
-            printPaperSlip: true
+            printPaperSlip: true,
+            showPrizeDraw: true
         }
     });
 
@@ -118,7 +127,8 @@ export const Settings = () => {
                         format_farmer_id: res.data.format_farmer_id || 'F-{SEQ4}',
                         format_employee_id: res.data.format_employee_id || 'E-{SEQ3}',
                         printESlip: res.data.printESlip === undefined ? true : (res.data.printESlip === 'true' || res.data.printESlip === true),
-                        printPaperSlip: res.data.printPaperSlip === undefined ? true : (res.data.printPaperSlip === 'true' || res.data.printPaperSlip === true)
+                        printPaperSlip: res.data.printPaperSlip === undefined ? true : (res.data.printPaperSlip === 'true' || res.data.printPaperSlip === true),
+                        showPrizeDraw: res.data.showPrizeDraw === undefined ? true : (res.data.showPrizeDraw === 'true' || res.data.showPrizeDraw === true)
                     });
 
                     setLogoUrl(res.data.logoUrl || '');
@@ -145,13 +155,15 @@ export const Settings = () => {
                     setFscBonus(settingsRes.data.fsc_bonus || '1');
                 }
             } else if (activeTab === 'farmers_employees') {
-                clearCache('farmers', 'employees');
-                const [fData, eData] = await Promise.all([
+                clearCache('farmers', 'employees', 'farmer_types');
+                const [fData, eData, mtData] = await Promise.all([
                     fetchFarmers(),
-                    fetchEmployees()
+                    fetchEmployees(),
+                    fetchMemberTypes()
                 ]);
                 setFarmers(fData || []);
                 setEmployees(eData || []);
+                setMemberTypes(mtData || []);
             } else if (activeTab === 'line_integration') {
                 const res = await getSettings();
                 if (res.status === 'success' && res.data) {
@@ -206,6 +218,7 @@ export const Settings = () => {
                 format_employee_id: data.format_employee_id,
                 printESlip: data.printESlip,
                 printPaperSlip: data.printPaperSlip,
+                showPrizeDraw: data.showPrizeDraw,
                 logoUrl: logoUrl
 
             };
@@ -479,7 +492,8 @@ export const Settings = () => {
             bankName: farmer.bankName,
             address: farmer.address,
             note: farmer.note,
-            fscId: farmer.fscId || ''
+            fscId: farmer.fscId || '',
+            memberTypeId: farmer.memberTypeId || ''
         });
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -696,6 +710,9 @@ export const Settings = () => {
                             setShowEmployeeForm={setShowEmployeeForm}
                             employeeForm={employeeForm}
                             onAddEmployee={onAddEmployee}
+                            memberTypes={memberTypes}
+                            addMemberType={addMemberType}
+                            deleteMemberType={deleteMemberType}
                         />
                     )}
 

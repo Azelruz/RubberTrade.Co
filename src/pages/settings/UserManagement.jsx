@@ -18,9 +18,15 @@ export const UserManagement = ({
     showEmployeeForm, 
     setShowEmployeeForm, 
     employeeForm, 
-    onAddEmployee 
+    onAddEmployee,
+    memberTypes,
+    addMemberType,
+    deleteMemberType
 }) => {
     const [activeSubTab, setActiveSubTab] = useState('farmers');
+    const [showMemberTypeForm, setShowMemberTypeForm] = useState(false);
+    const [editingMemberType, setEditingMemberType] = useState(null);
+    const [mtFormData, setMtFormData] = useState({ name: '', bonus: '0' });
 
     return (
         <div className="space-y-6">
@@ -56,6 +62,22 @@ export const UserManagement = ({
                         activeSubTab === 'employees' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-500'
                     }`}>
                         {employees.length}
+                    </span>
+                </button>
+                <button
+                    onClick={() => setActiveSubTab('member_types')}
+                    className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-bold transition-all duration-200 ${
+                        activeSubTab === 'member_types'
+                            ? 'bg-white text-amber-700 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                >
+                    <Percent size={16} />
+                    <span>ประเภทสมาชิกและโบนัส</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        activeSubTab === 'member_types' ? 'bg-amber-100 text-amber-700' : 'bg-gray-200 text-gray-500'
+                    }`}>
+                        {memberTypes?.length || 0}
                     </span>
                 </button>
             </div>
@@ -128,6 +150,15 @@ export const UserManagement = ({
                                     <label className="text-xs font-bold text-gray-500 uppercase">รหัส FSC (FSCID)</label>
                                     <input {...farmerForm.register('fscId')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="รหัส FSC" />
                                 </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">ประเภทสมาชิก (โบนัส)</label>
+                                    <select {...farmerForm.register('memberTypeId')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500 bg-white">
+                                        <option value="">-- บุคคลทั่วไป (ไม่มีโบนัส) --</option>
+                                        {memberTypes.map(mt => (
+                                            <option key={mt.id} value={mt.id}>{mt.name} (โบนัส +{mt.bonus} บาท)</option>
+                                        ))}
+                                    </select>
+                                </div>
                                 <div className="lg:col-span-3 flex justify-end space-x-2 pt-2">
                                     <button type="button" onClick={handleCancelFarmerEdit} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button>
                                     <button type="submit" disabled={saving} className="px-6 py-2 bg-rubber-600 text-white rounded-lg hover:bg-rubber-700 disabled:opacity-50">
@@ -146,7 +177,7 @@ export const UserManagement = ({
                                     <th className="px-6 py-4 text-left">การเชื่อมต่อ LINE</th>
                                     <th className="px-6 py-4 text-left">ข้อมูลติดต่อ / ที่อยู่</th>
                                     <th className="px-6 py-4 text-left">บัญชีธนาคาร</th>
-                                    <th className="px-6 py-4 text-left">รหัส FSC</th>
+                                    <th className="px-6 py-4 text-left">รหัส FSC / ประเภท</th>
                                     <th className="px-6 py-4 text-left">ลูกจ้างในสังกัด</th>
                                     <th className="px-6 py-4 text-center">จัดการ</th>
                                 </tr>
@@ -204,9 +235,18 @@ export const UserManagement = ({
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded text-[11px] font-bold ${f.fscId ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'text-gray-300 italic'}`}>
-                                                {f.fscId || 'ไม่มีรหัส'}
-                                            </span>
+                                            <div className="flex flex-col space-y-1">
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold text-center ${f.fscId ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'text-gray-300 italic'}`}>
+                                                    FSC: {f.fscId || '-'}
+                                                </span>
+                                                {f.memberTypeId && memberTypes.find(mt => mt.id === f.memberTypeId) ? (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rubber-100 text-rubber-700 border border-rubber-200 text-center">
+                                                        {memberTypes.find(mt => mt.id === f.memberTypeId)?.name} (+{memberTypes.find(mt => mt.id === f.memberTypeId)?.bonus})
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium text-gray-400 border border-gray-100 text-center">ทั่วไป</span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-1 max-w-[150px]">
@@ -364,6 +404,163 @@ export const UserManagement = ({
                                         <td colSpan="5" className="px-6 py-12 text-center text-gray-400 flex flex-col items-center justify-center">
                                             <UserCircle size={40} className="mb-2 opacity-20" />
                                             ยังไม่มีข้อมูลลูกจ้าง
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            )}
+
+            {/* ===================== MEMBER TYPES TAB ===================== */}
+            {activeSubTab === 'member_types' && (
+                <section className="animate-in fade-in duration-300">
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="flex flex-col">
+                            <h2 className="text-xl font-bold text-gray-900 flex items-center">
+                                <Percent className="mr-2 text-amber-600" size={24} />
+                                จัดการประเภทสมาชิกและโบนัส
+                            </h2>
+                            <p className="text-xs text-gray-500 mt-1">กำหนดกลุ่มลูกค้าที่ได้รับโบนัสพิเศษบวกเพิ่มจากราคากลาง (หน่วย: บาท/กก.)</p>
+                        </div>
+                        <button
+                            onClick={() => {
+                                setEditingMemberType(null);
+                                setMtFormData({ name: '', bonus: '0' });
+                                setShowMemberTypeForm(!showMemberTypeForm);
+                            }}
+                            className="inline-flex items-center px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition shadow-sm font-medium"
+                        >
+                            <Plus size={18} className="mr-1" />
+                            เพิ่มประเภทสมาชิก
+                        </button>
+                    </div>
+
+                    {showMemberTypeForm && (
+                        <div className="bg-amber-50 border border-amber-100 rounded-xl p-6 mb-8 animate-in fade-in slide-in-from-top-4 shadow-inner">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-black text-amber-700 uppercase tracking-widest">ชื่อประเภทสมาชิก <span className="text-red-500">*</span></label>
+                                    <input 
+                                        value={mtFormData.name}
+                                        onChange={e => setMtFormData({...mtFormData, name: e.target.value})}
+                                        className="w-full px-4 py-2.5 border-2 border-amber-200 rounded-xl focus:ring-0 focus:border-amber-500 transition-all font-bold" 
+                                        placeholder="เช่น VIP / สมาชิกประจำ / โควต้าพิเศษ" 
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-black text-amber-700 uppercase tracking-widest">โบนัสบวกเพิ่ม (บาท/กก.)</label>
+                                    <div className="relative">
+                                        <input 
+                                            type="number" 
+                                            step="0.01"
+                                            value={mtFormData.bonus}
+                                            onChange={e => setMtFormData({...mtFormData, bonus: e.target.value})}
+                                            className="w-full pl-10 pr-4 py-2.5 border-2 border-amber-200 rounded-xl focus:ring-0 focus:border-amber-500 transition-all font-mono font-bold text-lg" 
+                                            placeholder="0.00" 
+                                        />
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-600 font-bold">฿</div>
+                                    </div>
+                                    <p className="text-[10px] text-amber-600 mt-1 italic">* โบนัสนี้จะถูกนำไปบวกเพิ่มจากราคากลางทันทีที่คำนวณ</p>
+                                </div>
+                                <div className="flex items-end space-x-2">
+                                    <button 
+                                        onClick={async () => {
+                                            if (!mtFormData.name) return alert('กรุณาระบุชื่อประเภทสมาชิก');
+                                            try {
+                                                const res = await addMemberType({
+                                                    id: editingMemberType?.id,
+                                                    name: mtFormData.name,
+                                                    bonus: mtFormData.bonus
+                                                });
+                                                if (res.status === 'success') {
+                                                    setShowMemberTypeForm(false);
+                                                    loadData();
+                                                }
+                                            } catch (e) { alert('เกิดข้อผิดพลาด'); }
+                                        }}
+                                        disabled={saving}
+                                        className="flex-1 bg-amber-600 text-white font-black py-2.5 rounded-xl hover:bg-amber-700 transition shadow-lg shadow-amber-200"
+                                    >
+                                        {editingMemberType ? 'บันทึกการแก้ไข' : 'ยืนยันเพิ่มประเภท'}
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowMemberTypeForm(false)}
+                                        className="px-4 py-2.5 text-amber-600 font-bold hover:bg-amber-100 rounded-xl transition"
+                                    >
+                                        ยกเลิก
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50 font-black text-gray-400 text-[10px] uppercase tracking-[0.2em]">
+                                <tr>
+                                    <th className="px-8 py-5 text-left">ประเภทสมาชิก</th>
+                                    <th className="px-8 py-5 text-center">โบนัสบวกเพิ่ม (บาท/กก.)</th>
+                                    <th className="px-8 py-5 text-center">จำนวนสมาชิก</th>
+                                    <th className="px-8 py-5 text-right">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {memberTypes.map(mt => (
+                                    <tr key={mt.id} className="hover:bg-amber-50/20 transition-all group">
+                                        <td className="px-8 py-5">
+                                            <div className="flex items-center space-x-3">
+                                                <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-600">
+                                                    <Percent size={20} />
+                                                </div>
+                                                <div className="font-black text-gray-900 text-lg tracking-tight">{mt.name}</div>
+                                            </div>
+                                        </td>
+                                        <td className="px-8 py-5 text-center">
+                                            <div className="inline-flex items-center px-4 py-2 rounded-2xl bg-amber-50 text-amber-700 border-2 border-amber-100">
+                                                <span className="text-xs font-bold mr-1">฿</span>
+                                                <span className="text-xl font-black font-mono">+{Number(mt.bonus).toFixed(2)}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-8 py-5 text-center">
+                                            <span className="px-3 py-1 bg-gray-100 rounded-full text-xs font-black text-gray-500">
+                                                {farmers.filter(f => f.memberTypeId === mt.id).length} คน
+                                            </span>
+                                        </td>
+                                        <td className="px-8 py-5 text-right">
+                                            <div className="flex justify-end space-x-2">
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingMemberType(mt);
+                                                        setMtFormData({ name: mt.name, bonus: mt.bonus });
+                                                        setShowMemberTypeForm(true);
+                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                    }}
+                                                    className="p-3 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-2xl transition-all"
+                                                >
+                                                    <Edit2 size={18} />
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!window.confirm(`ยืนยันการลบประเภท "${mt.name}"?`)) return;
+                                                        const res = await deleteMemberType(mt.id);
+                                                        if (res.status === 'success') loadData();
+                                                    }}
+                                                    className="p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {memberTypes.length === 0 && (
+                                    <tr>
+                                        <td colSpan="4" className="px-8 py-20 text-center text-gray-400 flex flex-col items-center">
+                                            <Percent size={48} className="mb-4 opacity-10" />
+                                            <p className="font-black text-lg">ยังไม่มีข้อมูลประเภทสมาชิก</p>
+                                            <p className="text-sm">กดปุ่ม "เพิ่มประเภทสมาชิก" เพื่อเริ่มกำหนดโบนัส</p>
                                         </td>
                                     </tr>
                                 )}

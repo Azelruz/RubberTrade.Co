@@ -3,13 +3,15 @@ import {
     Search, FileText, Printer, Eye, Calendar, 
     RefreshCw, User, Package, ChevronDown, Leaf, Coins, X
 } from 'lucide-react';
-import { format, subDays, parseISO } from 'date-fns';
+import { format, subDays, parseISO, addYears } from 'date-fns';
 import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { 
     fetchBuyRecords, 
     fetchSellRecords, 
-    getSettings
+    getSettings,
+    fetchFarmers,
+    fetchMemberTypes
 } from '../services/apiService';
 import { calculateDrcBonus } from '../utils/calculations';
 
@@ -29,26 +31,47 @@ export const TransactionHistory = () => {
     const [printingReceipt, setPrintingReceipt] = useState(null);
     const [printingSellRecord, setPrintingSellRecord] = useState(null);
     const [viewingEslip, setViewingEslip] = useState(null);
+    const [farmers, setFarmers] = useState([]);
+    const [memberTypes, setMemberTypes] = useState([]);
+
+    const truncateOneDecimal = (num) => {
+        return Math.trunc(num * 10) / 10;
+    };
 
     useEffect(() => {
-        loadSettings();
+        loadInitialData();
     }, []);
 
     useEffect(() => {
         loadRecords();
     }, [activeTab, filters.startDate, filters.endDate]);
 
-    const loadSettings = async () => {
+    const loadInitialData = async () => {
         try {
-            const res = await getSettings();
-            if (res.status === 'success') {
-                setSettings(res.data);
-                if (res.data.drc_bonuses) {
-                    try { setDrcBonuses(JSON.parse(res.data.drc_bonuses)); } catch(e) {}
+            const [settingsRes, farmersRes, mtRes] = await Promise.all([
+                getSettings(),
+                fetchFarmers(),
+                fetchMemberTypes()
+            ]);
+
+            if (settingsRes.status === 'success') {
+                setSettings(settingsRes.data);
+                if (settingsRes.data.drc_bonuses) {
+                    try { setDrcBonuses(JSON.parse(settingsRes.data.drc_bonuses)); } catch(e) {}
+                } else if (settingsRes.data.drcBonuses) {
+                    try { setDrcBonuses(JSON.parse(settingsRes.data.drcBonuses)); } catch(e) {}
                 }
             }
+
+            if (farmersRes) {
+                setFarmers(farmersRes);
+            }
+
+            if (mtRes) {
+                setMemberTypes(mtRes);
+            }
         } catch (error) {
-            console.error('Error loading settings:', error);
+            console.error('Error loading initial data:', error);
         }
     };
 
@@ -126,9 +149,24 @@ export const TransactionHistory = () => {
         <div className="space-y-6 max-w-7xl mx-auto pb-10">
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
-                    @page { margin: 0; }
-                    .no-print { display: none !important; }
-                    body { -webkit-print-color-adjust: exact; }
+                    @page {
+                        size: 48mm 210mm;
+                        margin: 0;
+                    }
+                    body {
+                        margin: 0;
+                        padding: 0;
+                        -webkit-print-color-adjust: exact;
+                    }
+                    .receipt-content {
+                        width: 48mm;
+                        padding: 2mm;
+                        margin: 0 auto;
+                        font-family: 'Noto Sans Thai', sans-serif;
+                    }
+                    .no-print {
+                        display: none !important;
+                    }
                 }
             ` }} />
 
@@ -299,15 +337,13 @@ export const TransactionHistory = () => {
                                                         <Printer size={20} />
                                                     </button>
                                                     
-                                                    {(r.receipt_url || r.receiptUrl) && (
-                                                        <button 
-                                                            onClick={() => setViewingEslip(r)}
-                                                            className="p-2.5 bg-blue-50 text-blue-500 hover:bg-blue-100 rounded-xl transition-all shadow-sm"
-                                                            title="ดูรูป E-Slip"
-                                                        >
-                                                            <Eye size={20} />
-                                                        </button>
-                                                    )}
+                                                    <button 
+                                                        onClick={() => setViewingEslip(r)}
+                                                        className="p-2.5 bg-blue-50 text-blue-500 hover:bg-blue-100 rounded-xl transition-all shadow-sm"
+                                                        title="ดู E-Slip"
+                                                    >
+                                                        <Eye size={20} />
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -319,45 +355,110 @@ export const TransactionHistory = () => {
                 </div>
             </div>
 
-            {/* Reprint Logic remains same as previous version but hidden in UI */}
+            {/* Print-optimized Receipt Template for 48mm (Thermal) - Source of truth shared with Buy.jsx */}
             {printingReceipt && (
                 <div className="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-start print:relative print:z-auto">
-                    <style dangerouslySetInnerHTML={{ __html: `
-                        @media print {
-                            @page { size: 48mm 210mm; margin: 0; }
-                            .receipt-content { width: 48mm; padding: 2mm; font-family: 'Noto Sans Thai', sans-serif; font-size: 11px; }
-                        }
-                    ` }} />
-                    <div className="receipt-content text-black leading-snug">
+                    <div className="receipt-content text-black text-[12px] leading-snug">
+                        {/* Header - High Contrast for Thermal */}
                         <div className="text-center mb-3 border-b-2 border-black pb-2">
-                            {settings.logo_url && <img src={settings.logo_url} className="h-10 mx-auto mb-1 grayscale contrast-125" />}
-                            <h1 className="text-sm font-bold">{settings.factory_name || 'ร้านรับซื้อน้ำยาง'}</h1>
-                            <p className="text-[9px]">{settings.address || '-'}</p>
-                            <p className="text-[9px]">โทร: {settings.phone || '-'}</p>
-                            <div className="mt-1 border border-black inline-block px-2 text-[10px] font-bold">สำเนาใบซื้อน้ำยาง</div>
+                            {(settings.logoUrl || settings.logo_url) && (
+                                <img src={settings.logoUrl || settings.logo_url} alt="Logo" className="h-12 mx-auto mb-2 object-contain" style={{ filter: 'grayscale(1) contrast(2)' }} />
+                            )}
+                            <h1 className="text-lg font-bold leading-tight">{settings.factoryName || settings.factory_name || 'ร้านรับซื้อน้ำยางพารา'}</h1>
+                            <p className="text-[10px] font-medium">{settings.address || '-'}</p>
+                            <p className="text-sm font-bold">โทร: {settings.phone || '-'}</p>
+                            <div className="mt-2 font-bold border border-black inline-block px-4 py-0.5 text-[11px]">
+                                ใบรับซื้อน้ำยางพารา
+                            </div>
                         </div>
-                        <div className="flex justify-between text-[9px] mb-2 font-mono">
-                            <span># {printingReceipt.id}</span>
-                            <span>{format(new Date(printingReceipt.timestamp || printingReceipt.date), 'dd/MM/yy HH:mm', { locale: th })}</span>
+
+                        {/* Invoice Info */}
+                        <div className="flex justify-between text-[10px] mb-3 border-b border-black pb-1 font-mono">
+                            <span>เลขที่: <span className="font-bold">{printingReceipt.id?.substring(0, 14)}</span></span>
+                            <span className="font-bold">{format(addYears(new Date(printingReceipt.timestamp || printingReceipt.date || new Date()), 543), 'dd/MM/yyyy HH:mm', { locale: th })}</span>
                         </div>
-                        <div className="mb-2">
-                            <p className="text-[10px] font-bold">{printingReceipt.farmerName}</p>
-                            <p className="text-[9px] opacity-60">ID: {printingReceipt.farmerId || '-'}</p>
+
+                        {/* Farmer Info */}
+                        <div className="mb-3">
+                            <h2 className="text-sm font-bold">{printingReceipt.farmerName || 'ลูกค้าทั่วไป'}</h2>
                         </div>
-                        <div className="border-t border-black py-2 space-y-1 text-[10px]">
-                            <div className="flex justify-between"><span>น้ำหนักสุทธิ</span><span className="font-bold">{(Number(printingReceipt.weight || 0) - Number(printingReceipt.bucket_weight ?? printingReceipt.bucketWeight ?? 0)).toFixed(1)} กก.</span></div>
-                            <div className="flex justify-between"><span>% DRC</span><span className="font-bold">{Number(printingReceipt.drc || 0).toFixed(1)}%</span></div>
-                            <div className="flex justify-between"><span>เนื้อยางแห้ง</span><span className="font-bold underline">{(Number(printingReceipt.dry_weight ?? printingReceipt.dry_rubber ?? printingReceipt.dryRubber ?? 0)).toFixed(1)} กก.</span></div>
-                            <div className="flex justify-between mt-1 text-[9px]"><span>ราคากลาง</span><span>{Number(printingReceipt.base_price ?? printingReceipt.basePrice ?? ((printingReceipt.actual_price ?? printingReceipt.actualPrice ?? printingReceipt.price_per_kg ?? printingReceipt.pricePerKg ?? 0) - calculateDrcBonus(printingReceipt.drc, drcBonuses))).toFixed(2)} /กก.</span></div>
-                            <div className="flex justify-between text-[9px]"><span>โบนัส DRC</span><span>+{Number(printingReceipt.bonus_drc ?? printingReceipt.bonusDrc ?? calculateDrcBonus(printingReceipt.drc, drcBonuses)).toFixed(2)} /กก.</span></div>
-                            <div className="flex justify-between font-bold border-t border-black pt-1"><span>ราคาจริง</span><span>{Number(printingReceipt.actual_price ?? printingReceipt.actualPrice ?? printingReceipt.price_per_kg ?? printingReceipt.pricePerKg ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} /กก.</span></div>
+
+                        {/* Details */}
+                        <div className="py-2 border-t border-black space-y-1">
+                            <div className="flex justify-between items-center">
+                                <span>น้ำหนักยางดิบ</span>
+                                <span className="text-sm font-bold">{Number(printingReceipt.weight).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                            </div>
+                            <div className="flex justify-between items-center text-[10px] text-black italic mb-1">
+                                <span>น้ำหนักถัง</span>
+                                <span>-{Number(printingReceipt.bucketWeight ?? printingReceipt.bucket_weight ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span>น้ำหนักสุทธิ</span>
+                                <span className="text-sm font-bold border-b border-black">{(Number(printingReceipt.weight) - Number(printingReceipt.bucketWeight ?? printingReceipt.bucket_weight ?? 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span>% DRC</span>
+                                <span className="text-sm font-bold border-b border-black">{Number(printingReceipt.drc).toLocaleString(undefined, { minimumFractionDigits: 1 })}%</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span>ยางแห้ง</span>
+                                <span className="text-sm font-bold border-b border-black">{Number(printingReceipt.dryWeight ?? printingReceipt.dry_weight ?? printingReceipt.dryRubber ?? printingReceipt.dry_rubber ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                            </div>
+
+                            <div className="my-2 border-t border-dashed border-black"></div>
+
+                            <div className="flex justify-between items-center text-[10px]">
+                                <span>ราคากลาง</span>
+                                <span>{Number(printingReceipt.basePrice ?? printingReceipt.base_price ?? ((printingReceipt.actualPrice ?? printingReceipt.actual_price ?? printingReceipt.pricePerKg ?? printingReceipt.price_per_kg ?? 0) - (printingReceipt.bonusDrc ?? printingReceipt.bonus_drc ?? calculateDrcBonus(printingReceipt.drc, drcBonuses)))).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                            </div>
+                            <div className="flex justify-between items-center text-[10px] font-medium">
+                                <span>โบนัส DRC</span>
+                                <span>+{Number(printingReceipt.bonusDrc ?? printingReceipt.bonus_drc ?? calculateDrcBonus(printingReceipt.drc, drcBonuses)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                            </div>
+                            {Number(printingReceipt.fscBonus ?? printingReceipt.fsc_bonus ?? (farmers.find(f => f.id === (printingReceipt.farmerId || printingReceipt.farmer_id))?.fscId ? (settings.fsc_bonus || 1) : 0)) > 0 && (
+                                <div className="flex justify-between items-center text-[10px] font-medium text-black">
+                                    <span>โบนัส FSC</span>
+                                    <span>+{Number(printingReceipt.fscBonus ?? printingReceipt.fsc_bonus ?? (farmers.find(f => f.id === (printingReceipt.farmerId || printingReceipt.farmer_id))?.fscId ? (settings.fsc_bonus || 1) : 0)).toLocaleString(undefined, { minimumFractionDigits: 0 })}/กก.</span>
+                                </div>
+                            )}
+                            {Number(printingReceipt.bonusMemberType ?? printingReceipt.bonus_member_type ?? (farmers.find(f => f.id === (printingReceipt.farmerId || printingReceipt.farmer_id))?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === (printingReceipt.farmerId || printingReceipt.farmer_id)).memberTypeId)?.bonus : 0)) > 0 && (
+                                <div className="flex justify-between items-center text-[10px] font-black text-rubber-700 bg-rubber-50 px-1 rounded">
+                                    <span>{memberTypes.find(mt => mt.id === (printingReceipt.memberTypeId || printingReceipt.member_type_id || farmers.find(f => f.id === (printingReceipt.farmerId || printingReceipt.farmer_id))?.memberTypeId))?.name || 'โบนัสสมาชิก'}</span>
+                                    <span>+{Number(printingReceipt.bonusMemberType ?? printingReceipt.bonus_member_type ?? (farmers.find(f => f.id === (printingReceipt.farmerId || printingReceipt.farmer_id))?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === (printingReceipt.farmerId || printingReceipt.farmer_id)).memberTypeId)?.bonus : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between items-center font-bold border-t border-black pt-1 mt-1">
+                                <span>ราคาจริง (สุทธิ)</span>
+                                <span className="text-sm font-bold border-b border-black">{truncateOneDecimal(Number(printingReceipt.actualPrice ?? printingReceipt.actual_price ?? printingReceipt.pricePerKg ?? printingReceipt.price_per_kg ?? (Number(printingReceipt.basePrice ?? printingReceipt.base_price ?? 0) + Number(printingReceipt.bonusDrc ?? printingReceipt.bonus_drc ?? 0) + Number(printingReceipt.fscBonus ?? printingReceipt.fsc_bonus ?? (farmers.find(f => f.id === (printingReceipt.farmerId || printingReceipt.farmer_id))?.fscId ? 1 : 0)) + Number(printingReceipt.bonusMemberType ?? printingReceipt.bonus_member_type ?? (farmers.find(f => f.id === (printingReceipt.farmerId || printingReceipt.farmer_id))?.memberTypeId ? 1 : 0))))).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                            </div>
                         </div>
-                        <div className="border-t-2 border-black py-2 mt-1">
-                            <div className="flex justify-between text-base font-black"><span>รวมสุทธิ</span><span>฿{Math.floor(printingReceipt.total).toLocaleString()}</span></div>
+
+                        {/* Splits */}
+                        <div className="py-2 border-t-2 border-black my-2 space-y-1">
+                            <div className="flex justify-between items-center font-bold">
+                                <span>เกษตรกร ({100 - (Number(printingReceipt.empPct ?? printingReceipt.emp_pct ?? printingReceipt.employee_percent ?? 0))}%)</span>
+                                <span className="font-bold text-xl">฿{Math.floor(Number(printingReceipt.farmerTotal ?? printingReceipt.farmer_total ?? (Number(printingReceipt.total) * (100 - (Number(printingReceipt.empPct ?? printingReceipt.emp_pct ?? printingReceipt.employee_percent ?? 0))) / 100))).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                            </div>
+                            {Number(printingReceipt.empPct ?? printingReceipt.emp_pct ?? printingReceipt.employee_percent ?? 0) > 0 && (
+                                <div className="flex justify-between items-center">
+                                    <span>ลูกจ้าง ({Number(printingReceipt.empPct ?? printingReceipt.emp_pct ?? printingReceipt.employee_percent ?? 0)}%)</span>
+                                    <span className="font-bold text-xl">฿{Math.floor(Number(printingReceipt.employeeTotal ?? printingReceipt.employee_total ?? (Number(printingReceipt.total) * (Number(printingReceipt.empPct ?? printingReceipt.emp_pct ?? printingReceipt.employee_percent ?? 0)) / 100))).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                </div>
+                            )}
                         </div>
-                        <div className="text-center mt-3 pt-1 border-t border-dashed border-black">
-                            <p className="text-[9px] font-bold">=== ขอบคุณที่ใช้บริการ ===</p>
-                            <p className="text-[7px] opacity-40 italic">พิมพ์ซ้ำเมื่อ {format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
+
+                        {/* Total Footer */}
+                        <div className="border-t-4 border-double border-black py-2 mt-2">
+                            <div className="flex justify-between items-center">
+                                <span className="font-bold text-xs uppercase">ยอดรวมสุทธิ</span>
+                                <span className="font-bold text-xl">฿{Math.floor(Number(printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                            </div>
+                        </div>
+
+                        {/* Footer Message */}
+                        <div className="text-center mt-4 border-t border-black pt-2">
+                            <p className="text-[10px] font-bold">=== ขอบคุณที่ใช้บริการ ===</p>
                         </div>
                     </div>
                 </div>
@@ -434,125 +535,190 @@ export const TransactionHistory = () => {
             )}
             {/* Premium E-Slip Modal */}
             {viewingEslip && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 no-print sm:p-6">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto relative animate-in fade-in zoom-in duration-300">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-2 no-print sm:p-4">
+                    <div className="bg-white rounded-[1.2rem] shadow-2xl max-w-[280px] w-full max-h-[95vh] overflow-y-auto relative animate-in fade-in zoom-in duration-300">
                         {/* Close Button */}
                         <button 
                             onClick={handleCloseEslip}
-                            className="absolute right-6 top-6 z-20 bg-black/10 hover:bg-black/20 text-white p-2.5 rounded-full transition-all hover:scale-110 active:scale-95"
+                            className="absolute right-3 top-3 z-20 bg-black/10 hover:bg-black/20 text-white p-1 rounded-full transition-all hover:scale-110 active:scale-95"
                         >
-                            <X size={20} />
+                            <X size={14} />
                         </button>
 
                         <div className="flex flex-col font-sans">
                             {/* Header: Dark Green (Branded) */}
-                            <div className="bg-[#2d5a3f] py-10 px-8 text-center text-white relative overflow-hidden">
+                            <div className="bg-[#2d5a3f] py-4 px-3 text-center text-white relative overflow-hidden">
                                 <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16"></div>
                                 <div className="absolute left-0 bottom-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12"></div>
                                 
-                                <div className="flex justify-center mb-5">
-                                    <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center backdrop-blur-md border border-white/10 shadow-xl overflow-hidden">
+                                <div className="flex justify-center mb-2">
+                                    <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/10 shadow-xl overflow-hidden">
                                         {settings.logo_url ? (
                                             <img src={settings.logo_url} alt="Logo" className="w-full h-full object-cover" />
                                         ) : (
-                                            <Leaf size={40} className="text-white opacity-80" />
+                                            <Leaf size={24} className="text-white opacity-80" />
                                         )}
                                     </div>
                                 </div>
-                                <h1 className="text-3xl font-black tracking-tight mb-1 leading-tight">
+                                <h1 className="text-lg font-black tracking-tight mb-0.5 leading-tight">
                                     {settings.factory_name || 'ณราพงศ์ (จิ๋วยางพารา)'}
                                 </h1>
-                                <p className="text-[13px] opacity-70 font-medium mb-5 max-w-[280px] mx-auto">
+                                <p className="text-[9px] opacity-70 font-medium mb-2 max-w-[280px] mx-auto">
                                     {settings.address || '-'} โทร: {settings.phone || '-'}
                                 </p>
                                 
-                                <div className="inline-block px-7 py-2 bg-white/20 rounded-full border border-white/10 backdrop-blur-sm text-[13px] font-black tracking-[0.2em] leading-none uppercase">
+                                <div className="inline-block px-3 py-1 bg-white/20 rounded-full border border-white/10 backdrop-blur-sm text-[9px] font-black tracking-[0.2em] leading-none uppercase">
                                     {activeTab === 'buy' ? 'ใบรับซื้อน้ำยางพารา' : 'ใบส่งสินค้า / ใบกำกับสี'}
                                 </div>
                             </div>
 
-                            <div className="px-8 pt-8 pb-10 bg-white">
+                            <div className="px-3 pt-3 pb-4 bg-white">
                                 {/* Transaction ID & Date Bar */}
-                                <div className="flex justify-between items-center mb-8 text-[13px] font-black text-gray-400 bg-gray-50/80 px-5 py-3 rounded-2xl border border-gray-100">
-                                    <span className="flex items-center"><span className="opacity-40 mr-1.5 font-bold small-caps">ID:</span> <span className="text-gray-900 mono">{viewingEslip.id?.substring(0, 14)}</span></span>
-                                    <span>{format(parseISO(viewingEslip.date || viewingEslip.timestamp), 'dd MMMM yyyy HH:mm', { locale: th })}</span>
+                                <div className="flex justify-between items-center mb-3 text-[9px] font-black text-gray-400 bg-gray-50/80 px-2 py-1.5 rounded-lg border border-gray-100">
+                                    <span className="flex items-center"><span className="opacity-40 mr-1 font-bold small-caps">ID:</span> <span className="text-gray-900 mono">{viewingEslip.id?.substring(0, 14)}</span></span>
+                                    <span>{format(parseISO(viewingEslip.date || viewingEslip.timestamp), 'dd MMM yy HH:mm', { locale: th })}</span>
                                 </div>
 
                                 {/* Customer/Factory Info Card */}
-                                <div className="mb-8">
-                                    <p className="text-[11px] font-black text-gray-400 mb-2 uppercase tracking-widest flex items-center">
-                                        <User size={12} className="mr-1.5 opacity-40" />
+                                <div className="mb-3">
+                                    <p className="text-[8px] font-black text-gray-400 mb-1 uppercase tracking-widest flex items-center">
+                                        <User size={8} className="mr-1 opacity-40" />
                                         {activeTab === 'buy' ? 'ข้อมูลเกษตรกร' : 'ข้อมูลลูกค้า (โรงงาน)'}
                                     </p>
-                                    <div className="flex items-center justify-between border-b-2 border-dotted border-gray-100 pb-6">
+                                    <div className="flex items-center justify-between border-b border-dotted border-gray-100 pb-2.5">
                                         <div>
-                                            <h2 className="text-[32px] font-black text-gray-800 leading-none mb-2">
+                                            <h2 className="text-[18px] font-black text-gray-800 leading-none mb-0.5">
                                                 {activeTab === 'buy' ? (viewingEslip.farmerName || 'ลูกค้าทั่วไป') : (viewingEslip.buyerName || '-')}
                                             </h2>
-                                            <div className="inline-flex items-center px-2.5 py-1 bg-gray-100 rounded-lg text-xs font-bold text-gray-500">
+                                            <div className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[9px] font-bold text-gray-500">
                                                 รหัส: {activeTab === 'buy' ? (viewingEslip.farmerId || '-') : (viewingEslip.factoryId || '-')}
                                             </div>
                                         </div>
-                                        <div className="w-16 h-16 bg-gray-50 rounded-[1.5rem] flex items-center justify-center border border-gray-100">
-                                            {activeTab === 'buy' ? <User size={32} className="text-gray-200" /> : <Package size={32} className="text-gray-200" />}
+                                        <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-100">
+                                            {activeTab === 'buy' ? <User size={20} className="text-gray-200" /> : <Package size={20} className="text-gray-200" />}
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Details Table */}
-                                <div className="space-y-4 mb-10">
-                                    <p className="text-[11px] font-black text-gray-400 mb-3 uppercase tracking-widest">รายละเอียดพารามิเตอร์</p>
+                                <div className="space-y-1 mb-3">
+                                    <p className="text-[8px] font-black text-gray-400 mb-1 uppercase tracking-widest">รายละเอียดพารามิเตอร์</p>
                                     
-                                    <div className="flex justify-between items-center text-xl">
+                                    <div className="flex justify-between items-center text-xs">
                                         <span className="font-bold text-gray-400">น้ำหนักยางดิบ</span>
-                                        <span className="font-black text-gray-900 decoration-rubber-100">{Number(viewingEslip.weight || 0).toLocaleString()} <span className="text-sm font-bold text-gray-400">กก.</span></span>
+                                        <span className="font-black text-gray-900 decoration-rubber-100">{Number(viewingEslip.weight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] font-bold text-gray-400">กก.</span></span>
                                     </div>
 
                                     {(Number(viewingEslip.bucket_weight ?? viewingEslip.bucketWeight ?? 0)) > 0 && (
-                                        <div className="flex justify-between items-center text-lg">
-                                            <span className="font-bold text-red-300 ml-4 flex items-center"><ChevronDown size={14} className="mr-1" /> หักถัง</span>
+                                        <div className="flex justify-between items-center text-[10px]">
+                                            <span className="font-bold text-red-300 ml-2 flex items-center"><ChevronDown size={10} className="mr-1" /> น้ำหนักถังยาง</span>
                                             <span className="font-bold text-red-500">-{Number(viewingEslip.bucket_weight ?? viewingEslip.bucketWeight ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
                                         </div>
                                     )}
 
-                                    <div className="flex justify-between items-center text-xl">
+                                    {(Number(viewingEslip.bucket_weight ?? viewingEslip.bucketWeight ?? 0)) > 0 && (
+                                        <div className="flex justify-between items-center text-xs border-t border-dotted border-gray-100 pt-0.5 mt-0.5">
+                                            <span className="font-bold text-gray-600">น้ำหนักสุทธิ</span>
+                                            <span className="font-black text-gray-900">{(Number(viewingEslip.weight || 0) - Number(viewingEslip.bucket_weight ?? viewingEslip.bucketWeight ?? 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] font-bold text-gray-400">กก.</span></span>
+                                        </div>
+                                    )}
+
+                                    <div className="flex justify-between items-center text-xs">
                                         <span className="font-bold text-gray-400">% DRC</span>
-                                        <span className="font-black text-gray-900">{Number(viewingEslip.drc || 0).toFixed(1)}%</span>
+                                        <span className="font-black text-gray-900">{Number(viewingEslip.drc || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}%</span>
                                     </div>
 
-                                    <div className="flex justify-between items-center text-2xl py-4 border-y-2 border-gray-100 font-black bg-gray-50/50 px-4 rounded-[1.5rem] my-2">
+                                    <div className="flex justify-between items-center text-sm py-1 border-y border-gray-100 font-black bg-gray-50/50 px-2 rounded-lg my-0.5">
                                         <span className="text-gray-700">เนื้อยางแห้ง</span>
                                         <span className="text-rubber-600">
-                                            {Number(viewingEslip.dry_weight ?? viewingEslip.dry_rubber ?? viewingEslip.dryRubber ?? ((Number(viewingEslip.weight || 0) * Number(viewingEslip.drc || 0)) / 100)).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-sm">กก.</span>
+                                            {Number(viewingEslip.dry_weight ?? viewingEslip.dry_rubber ?? viewingEslip.dryRubber ?? ((Number(viewingEslip.weight || 0) * Number(viewingEslip.drc || 0)) / 100)).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px]">กก.</span>
                                         </span>
                                     </div>
 
-                                    <div className="flex justify-between items-center text-xl pt-2">
-                                        <span className="font-bold text-gray-400">ราคาต่อหน่วย</span>
+                                    {activeTab === 'buy' && (
+                                        <>
+                                            <div className="flex justify-between items-center text-xs pt-0.5">
+                                                <span className="font-bold text-gray-400">ราคากลาง</span>
+                                                <span className="font-black text-gray-900 mono">
+                                                    ฿{Number(viewingEslip.base_price ?? viewingEslip.basePrice ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] text-gray-400 font-bold">/กก.</span>
+                                                </span>
+                                            </div>
+
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="font-bold text-gray-400">โบนัส DRC</span>
+                                                <span className="font-bold text-green-600 mono">
+                                                    +฿{Number(viewingEslip.bonus_drc ?? viewingEslip.bonusDrc ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] text-gray-400 font-bold">/กก.</span>
+                                                </span>
+                                            </div>
+
+                                            {(Number(viewingEslip.fsc_bonus ?? viewingEslip.fscBonus ?? 0)) > 0 && (
+                                                <div className="flex justify-between items-center text-xs">
+                                                    <span className="font-bold text-gray-400">โบนัส FSC</span>
+                                                    <span className="font-bold text-amber-600 mono">
+                                                        +฿{Number(viewingEslip.fsc_bonus ?? viewingEslip.fscBonus ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] text-gray-400 font-bold">/กก.</span>
+                                                    </span>
+                                                </div>
+                                            )}
+                                        {Number(viewingEslip.bonusMemberType ?? viewingEslip.bonus_member_type ?? (farmers.find(f => f.id === (viewingEslip.farmerId || viewingEslip.farmer_id))?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === (viewingEslip.farmerId || viewingEslip.farmer_id)).memberTypeId)?.bonus : 0)) > 0 && (
+                                            <div className="flex justify-between items-center text-xs px-1 py-0.5 bg-rubber-50 rounded">
+                                                <span className="font-black text-rubber-700">{memberTypes.find(mt => mt.id === (viewingEslip.memberTypeId || viewingEslip.member_type_id || farmers.find(f => f.id === (viewingEslip.farmerId || viewingEslip.farmer_id))?.memberTypeId))?.name || 'โบนัสสมาชิก'}</span>
+                                                <span className="font-black text-rubber-700 mono">
+                                                    +฿{Number(viewingEslip.bonusMemberType ?? viewingEslip.bonus_member_type ?? (farmers.find(f => f.id === (viewingEslip.farmerId || viewingEslip.farmer_id))?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === (viewingEslip.farmerId || viewingEslip.farmer_id)).memberTypeId)?.bonus : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] font-black italic">/กก.</span>
+                                                </span>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+
+                                    <div className="flex justify-between items-center text-sm pt-1 border-t border-dotted border-gray-200 mt-0.5 font-black">
+                                        <span className="text-gray-800">ราคาจริง (สุทธิ)</span>
                                         <span className="font-black text-gray-900 mono">
                                             ฿{Number(activeTab === 'buy' 
                                                 ? (viewingEslip.actual_price ?? viewingEslip.actualPrice ?? viewingEslip.price_per_kg ?? viewingEslip.pricePerKg ?? 0)
                                                 : (viewingEslip.price_per_kg ?? viewingEslip.pricePerKg ?? 0)
-                                            ).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-sm text-gray-400 font-bold">/กก.</span>
+                                            ).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-[9px] text-gray-400 font-bold">/กก.</span>
                                         </span>
                                     </div>
                                 </div>
 
                                 {/* Footer Final Total */}
-                                <div className="bg-[#2d5a3f] rounded-[2rem] p-8 flex justify-between items-center text-white shadow-2xl shadow-green-900/40 relative overflow-hidden group/total">
+                                {activeTab === 'buy' && (
+                                    <div className="bg-gray-50 rounded-[1.2rem] p-3 border border-gray-100 space-y-2 mb-3">
+                                        <div className="flex items-center space-x-2">
+                                            <div className="p-1 bg-rubber-100 rounded-md"><Coins size={12} className="text-rubber-600" /></div>
+                                            <p className="text-[9px] font-black text-rubber-700 uppercase tracking-widest">การจัดสรรเงิน</p>
+                                        </div>
+                                        
+                                        <div className="space-y-1 pt-1 border-t border-dotted border-gray-200">
+                                            <div className="flex justify-between items-center text-[10px]">
+                                                <span className="font-bold text-orange-400 flex items-center"><Coins size={12} className="mr-1.5" /> เกษตรกร ({(100 - Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0))}%)</span>
+                                                <span className="font-black text-[#5ba2d7] mono">฿{Math.floor(Number(viewingEslip.total || 0) * (100 - Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0)) / 100).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                            </div>
+                                            
+                                            {Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0) > 0 && (
+                                                <div className="flex justify-between items-center text-[10px]">
+                                                    <span className="font-bold text-[#a855f7] flex items-center"><User size={12} className="mr-1.5" /> ลูกจ้าง ({Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0)}%)</span>
+                                                    <span className="font-black text-[#a855f7] mono">฿{Math.floor(Number(viewingEslip.total || 0) * Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="bg-[#2d5a3f] rounded-xl p-3 flex justify-between items-center text-white shadow-xl shadow-green-900/30 relative overflow-hidden group/total mb-1.5">
                                     <div className="absolute right-0 top-0 w-24 h-24 bg-white/5 rounded-full -mr-8 -mt-8 transition-transform group-hover/total:scale-150 duration-700"></div>
-                                    <span className="text-xl font-black uppercase tracking-[0.2em]">ยอดรวมจ่าย</span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest">ยอดรวมจ่าย</span>
                                     <div className="text-right relative z-10">
-                                        <span className="text-[56px] font-black leading-none tracking-tighter tabular-nums drop-shadow-md">
-                                            ฿{Number(viewingEslip.total || 0).toLocaleString()}
+                                        <span className="text-[22px] font-black leading-none tracking-tighter tabular-nums drop-shadow-md">
+                                            ฿{Number(viewingEslip.total || 0).toLocaleString(undefined, { minimumFractionDigits: 0 })}
                                         </span>
                                     </div>
                                 </div>
 
-                                {viewingEslip.receipt_url && (
+                                {(viewingEslip.receipt_url || viewingEslip.receiptUrl) && (
                                     <div className="mt-8 text-center">
                                         <a 
-                                            href={viewingEslip.receipt_url}
+                                            href={viewingEslip.receipt_url || viewingEslip.receiptUrl}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="inline-flex items-center px-4 py-2 bg-gray-50 rounded-xl text-xs font-black text-gray-400 hover:text-rubber-600 hover:bg-rubber-50 transition-all border border-gray-100"
@@ -567,38 +733,7 @@ export const TransactionHistory = () => {
                     </div>
                 </div>
             )}
-            {/* Premium E-Slip Modal */}
-            {viewingEslip && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 print:hidden">
-                    <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto relative animate-in fade-in zoom-in duration-300">
-                        {/* Close Button */}
-                        <button 
-                            onClick={() => setViewingEslip(null)}
-                            className="absolute right-4 top-4 p-2 bg-black/10 hover:bg-black/20 text-white rounded-full transition-colors z-20"
-                        >
-                            <X size={20} />
-                        </button>
 
-                        <div className="flex flex-col font-sans">
-                            {/* Proactive Image Display from Database */}
-                            {(viewingEslip.receipt_url || viewingEslip.receiptUrl) && (
-                                <div className="bg-gray-100 rounded-3xl overflow-hidden flex justify-center">
-                                    <img 
-                                        src={viewingEslip.receipt_url || viewingEslip.receiptUrl} 
-                                        alt="E-Slip จากฐานข้อมูล" 
-                                        className="max-w-full rounded-2xl shadow-lg object-contain max-h-[85vh]"
-                                        onError={(e) => {
-                                            e.target.style.display = 'none';
-                                            e.target.parentElement.style.display = 'none';
-                                            setViewingEslip(null);
-                                        }}
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

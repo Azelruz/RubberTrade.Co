@@ -17,7 +17,8 @@ import { truncateOneDecimal } from '../utils/calculations';
 
 const DailySummaryReport = () => {
     const [loading, setLoading] = useState(true);
-    const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [activeTab, setActiveTab] = useState('buys'); // buys, sells, expenses
     
     const [buys, setBuys] = useState([]);
@@ -56,7 +57,7 @@ const DailySummaryReport = () => {
     };
 
     const dailyData = useMemo(() => {
-        const filterFn = item => item.date === selectedDate;
+        const filterFn = item => item.date >= startDate && item.date <= endDate;
         
         // Sort buys by Farmer ID
         const filteredBuys = buys.filter(filterFn).sort((a, b) => {
@@ -75,11 +76,11 @@ const DailySummaryReport = () => {
             expenses: filteredExpenses,
             wages: filteredWages
         };
-    }, [buys, sells, expenses, wages, selectedDate]);
+    }, [buys, sells, expenses, wages, startDate, endDate]);
 
     const handleExportCSV = () => {
         let data = [];
-        let filename = `Daily_Report_${selectedDate}_${activeTab}.csv`;
+        let filename = `Report_${startDate}_to_${endDate}_${activeTab}.csv`;
         let headers = [];
 
         if (activeTab === 'buys') {
@@ -127,6 +128,7 @@ const DailySummaryReport = () => {
                 totalEmp
             ];
             data.push(totalRow);
+        } else if (activeTab === 'sells') {
             headers = ['ผู้ซื้อ', 'รถขนส่ง', 'น้ำหนักรวม', 'DRC', 'น้ำยางแห้ง', 'ราคาขาย', 'ยอดขายสุทธิ'];
             data = dailyData.sells.map(s => [
                 s.buyerName,
@@ -136,6 +138,21 @@ const DailySummaryReport = () => {
                 (Number(s.weight || 0) * Number(s.drc || 0) / 100),
                 s.pricePerKg,
                 s.total
+            ]);
+            
+            // Add totals for Sells
+            const totalWeight = dailyData.sells.reduce((sum, s) => sum + Number(s.weight || 0), 0);
+            const totalDry = dailyData.sells.reduce((sum, s) => sum + (Number(s.weight || 0) * Number(s.drc || 0) / 100), 0);
+            const totalValue = dailyData.sells.reduce((sum, s) => sum + Number(s.total || 0), 0);
+            
+            data.push([
+                'รวม',
+                '-',
+                totalWeight,
+                '-',
+                totalDry,
+                '-',
+                totalValue
             ]);
         } else {
             headers = ['รายการ', 'หมวดหมู่', 'จำนวนเงิน'];
@@ -178,27 +195,38 @@ const DailySummaryReport = () => {
                         <PieChart className="text-white" size={28} />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-black text-gray-900 tracking-tight">รายงานสรุปยอดรายวัน</h1>
-                        <p className="text-sm font-medium text-gray-400">สรุปรายละเอียดการซื้อขายและรายจ่ายประจำวัน</p>
+                        <h1 className="text-2xl font-black text-gray-900 tracking-tight">รายงานสรุปข้อมูล</h1>
+                        <p className="text-sm font-medium text-gray-400">สรุปรายละเอียดการซื้อขายและรายจ่ายตามช่วงเวลา</p>
                     </div>
                 </div>
 
-                <div className="flex items-center space-x-3">
-                    <div className="flex items-center space-x-3 bg-white p-2.5 rounded-2xl border border-gray-200 shadow-sm focus-within:ring-2 focus-within:ring-rubber-500/20 transition-all">
-                        <Calendar className="text-rubber-600" size={20} />
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <div className="flex items-center space-x-2 bg-white p-2.5 rounded-2xl border border-gray-200 shadow-sm focus-within:ring-2 focus-within:ring-rubber-500/20 transition-all">
+                        <Calendar className="text-rubber-600" size={18} />
+                        <span className="text-[10px] font-black text-gray-400 uppercase">เริ่ม</span>
                         <input 
                             type="date" 
-                            value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="border-none focus:ring-0 text-sm font-black text-gray-700 p-0 cursor-pointer"
+                        />
+                    </div>
+                    <div className="flex items-center space-x-2 bg-white p-2.5 rounded-2xl border border-gray-200 shadow-sm focus-within:ring-2 focus-within:ring-rubber-500/20 transition-all">
+                        <Calendar className="text-rubber-600" size={18} />
+                        <span className="text-[10px] font-black text-gray-400 uppercase">สิ้นสุด</span>
+                        <input 
+                            type="date" 
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
                             className="border-none focus:ring-0 text-sm font-black text-gray-700 p-0 cursor-pointer"
                         />
                     </div>
                     <button 
                         onClick={handleExportCSV}
-                        className="flex items-center space-x-2 bg-gray-900 text-white px-5 py-2.5 rounded-2xl font-bold text-sm hover:bg-gray-800 transition-all shadow-lg shadow-gray-200 active:scale-95"
+                        className="flex items-center space-x-2 bg-gray-900 text-white px-5 py-2.5 rounded-2xl font-bold text-sm hover:bg-gray-800 transition-all shadow-lg shadow-gray-200 active:scale-95 w-full sm:w-auto justify-center"
                     >
                         <Download size={18} />
-                        <span className="hidden sm:inline">ออกรายงาน (CSV)</span>
+                        <span className="hidden lg:inline">ออกรายงาน (CSV)</span>
                     </button>
                 </div>
             </div>

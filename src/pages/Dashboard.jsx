@@ -61,9 +61,17 @@ export const Dashboard = () => {
     const [winner, setWinner] = useState(null);
     const [rewardName, setRewardName] = useState('');
     const [savingReward, setSavingReward] = useState(false);
+    const [showPrizeDrawBtn, setShowPrizeDrawBtn] = useState(true);
 
     useEffect(() => {
         loadDashboardData();
+
+        const handleRefresh = () => {
+            loadDashboardData(true);
+        };
+        window.addEventListener('dashboard-refresh', handleRefresh);
+
+        return () => window.removeEventListener('dashboard-refresh', handleRefresh);
     }, []);
 
     const loadDashboardData = async (silent = false) => {
@@ -95,6 +103,11 @@ export const Dashboard = () => {
             setAllStaff(staff);
             setAllFarmers(farmerArr);
             setChemicalUsage(Array.isArray(chemUsage) ? chemUsage : []);
+            
+            // Handle Settings
+            const settings = dashData?.settings || {};
+            const showPrize = settings.showPrizeDraw === undefined ? true : (settings.showPrizeDraw === 'true' || settings.showPrizeDraw === true);
+            setShowPrizeDrawBtn(showPrize);
 
             calculateStats(buys, sells, expenses, wages, dashData, farmerArr);
             generateChartData(buys, sells);
@@ -459,15 +472,17 @@ export const Dashboard = () => {
                     <p className="text-gray-500">ข้อมูลสรุปการรับซื้อ-ขายน้ำยางการาประจำวัน</p>
                 </div>
                 <div className="flex items-center space-x-3 flex-wrap gap-2">
-                    <button
-                        onClick={() => {
-                            setShowLuckyDraw(true);
-                            setWinner(null);
-                        }}
-                        className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-xl shadow-sm transition-colors flex items-center"
-                    >
-                        <Gift size={20} className="mr-2" /> จับฉลากสุ่มแจกรางวัล
-                    </button>
+                    {showPrizeDrawBtn && (
+                        <button
+                            onClick={() => {
+                                setShowLuckyDraw(true);
+                                setWinner(null);
+                            }}
+                            className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-xl shadow-sm transition-colors flex items-center"
+                        >
+                            <Gift size={20} className="mr-2" /> จับฉลากสุ่มแจกรางวัล
+                        </button>
+                    )}
                     <button onClick={handleAutoWages} disabled={isAutoRecording}
                         className={`font-bold py-2 px-4 rounded-xl shadow-sm transition-all flex items-center space-x-2
                             ${isAutoRecording ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-md hover:scale-[1.02]'}`}>

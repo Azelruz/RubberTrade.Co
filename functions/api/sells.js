@@ -1,22 +1,77 @@
-import { jsonResponse, errorResponse } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth, isUUID } from './_utils.js';
 import { generateNextId, getSetting } from './_id_utils.js';
 
-export async function onRequestGet(context) {
+async function handleGet(context) {
     try {
-        const { results } = await context.env.DB.prepare("SELECT * FROM sells ORDER BY date DESC, created_at DESC").all();
+        const { results } = await context.env.DB.prepare("SELECT * FROM sells WHERE userId = ? ORDER BY date DESC, created_at DESC").bind(context.user.id).all();
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);
     }
 }
 
-export async function onRequestPost(context) {
+export const onRequestGet = withAuth(handleGet);
+
+async function handlePost(context) {
     try {
         const body = await context.request.json();
+        const userId = context.user.id;
+
+        // Bulk Insert Support
+        if (body.action === 'bulk' && Array.isArray(body.payloads)) {
+            const stationCode = await getSetting(context.env.DB, 'station_code', '0335');
+            const format = await getSetting(context.env.DB, 'format_sell_bill', 'S-{STATION}{YYYY}-{SEQ4}');
+            const stmts = [];
+            
+            for (const p of body.payloads) {
+                let id = p.id;
+                if (!id || isUUID(id)) {
+                    id = await generateNextId(context.env.DB, 'sells', format, stationCode);
+                }
+
+                const { 
+                    date, buyerName, factoryId, employeeId, truckId, truckInfo,
+                    weight, drc, pricePerKg, lossWeight, total, 
+                    profitShareAmount, receiptUrl, note 
+                } = p;
+
+                stmts.push(context.env.DB.prepare(`
+                    INSERT INTO sells (
+                        id, date, buyerName, factoryId, employeeId, truckId, truckInfo,
+                        weight, drc, pricePerKg, lossWeight, total, 
+                        profitShareAmount, receiptUrl, note, userId
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        date = excluded.date,
+                        buyerName = excluded.buyerName,
+                        factoryId = excluded.factoryId,
+                        employeeId = excluded.employeeId,
+                        truckId = excluded.truckId,
+                        truckInfo = excluded.truckInfo,
+                        weight = excluded.weight,
+                        drc = excluded.drc,
+                        pricePerKg = excluded.pricePerKg,
+                        lossWeight = excluded.lossWeight,
+                        total = excluded.total,
+                        profitShareAmount = excluded.profitShareAmount,
+                        receiptUrl = excluded.receiptUrl,
+                        note = excluded.note,
+                        userId = excluded.userId
+                `).bind(
+                    id, date || null, buyerName || null, factoryId || null, employeeId || null, 
+                    truckId || null, truckInfo || null,
+                    weight || 0, drc || 0, pricePerKg || 0, lossWeight || 0, total || 0, 
+                    profitShareAmount || 0, receiptUrl || null, note || null, userId
+                ));
+            }
+            
+            await context.env.DB.batch(stmts);
+            return jsonResponse({ status: 'success', count: stmts.length });
+        }
+
         const payload = body.payload;
-        
         let id = payload.id;
-        if (!id) {
+        if (!id || isUUID(id)) {
             const stationCode = await getSetting(context.env.DB, 'station_code', '0335');
             const format = await getSetting(context.env.DB, 'format_sell_bill', 'S-{STATION}{YYYY}-{SEQ4}');
             id = await generateNextId(context.env.DB, 'sells', format, stationCode);
@@ -32,8 +87,8 @@ export async function onRequestPost(context) {
             INSERT INTO sells (
                 id, date, buyerName, factoryId, employeeId, truckId, truckInfo,
                 weight, drc, pricePerKg, lossWeight, total, 
-                profitShareAmount, receiptUrl, note
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                profitShareAmount, receiptUrl, note, userId
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 date = excluded.date,
                 buyerName = excluded.buyerName,
@@ -48,12 +103,13 @@ export async function onRequestPost(context) {
                 total = excluded.total,
                 profitShareAmount = excluded.profitShareAmount,
                 receiptUrl = excluded.receiptUrl,
-                note = excluded.note
+                note = excluded.note,
+                userId = excluded.userId
         `).bind(
             id, date || null, buyerName || null, factoryId || null, employeeId || null, 
             truckId || null, truckInfo || null,
             weight || 0, drc || 0, pricePerKg || 0, lossWeight || 0, total || 0, 
-            profitShareAmount || 0, receiptUrl || null, note || null
+            profitShareAmount || 0, receiptUrl || null, note || null, userId
         ).run();
         
         return jsonResponse({ status: 'success', id });
@@ -62,3 +118,7 @@ export async function onRequestPost(context) {
         return errorResponse(e.message);
     }
 }
+
+export const onRequestPost = withAuth(handlePost);
+export const onRequestPut = withAuth(handlePost);
+export const onRequestPatch = withAuth(handlePost);
