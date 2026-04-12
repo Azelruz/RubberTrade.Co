@@ -1,0 +1,19 @@
+# Skill: Obsidian Documentation Sync
+
+## 🎯 Goal
+อัปเดตความคืบหน้าของงานลงใน Obsidian Vault ของโปรเจกต์ RubberTrade โดยอัตโนมัติ
+
+## 📋 Context & Paths
+- **Vault Path**: `d:\PonD_Azelruz\AzelRuz\Antigravity\Rubbertrade.Co.LTD\`
+- **Target File**: `06-Task History & Status.md`
+
+## 🚶 Steps
+1. วิเคราะห์งานที่ทำสำเร็จในเซสชันนี้ (เทียบกับงานที่แก้บัคและฟีเจอร์ใหม่)
+2. เปิดไฟล์ `06-Task History & Status.md` ใน Vault Path
+3. เพิ่มรายการที่ทำสำเร็จลงในหัวข้อ `## ✅ Completed Tasks` ตามหมวดหมู่ที่เหมาะสม
+4. หากมี Task ใหม่ที่ค้างอยู่ ให้เพิ่มลงในหัวข้อ `## 🛠️ In Progress`
+5. จัดรูปแบบให้สวยงาม (ใช้ Emoji เหมือนเดิม) และใส่ลิงก์ไปยังไฟล์ที่เกี่ยวข้อง
+
+## ✅ Verification
+- ตรวจสอบว่าไฟล์ถูกบันทึกสำเร็จและ Format ไม่เพี้ยน
+- แจ้งสรุปสิ่งที่บันทึกลงไปให้ผู้ใช้ทราบ

@@ -46,18 +46,15 @@ export const hydrateLocalDB = async () => {
                 const data = await directFetch(ep.path);
                 let itemsToStore = Array.isArray(data) ? data : (data.results || data.data || []);
                 
-                // Special handling for settings object vs array
                 if (ep.table === 'settings' && !Array.isArray(data) && typeof data === 'object' && !data.results) {
                    itemsToStore = Object.keys(data).filter(k => k !== 'status').map(k => ({ key: k, value: data[k] }));
                 }
 
                 if (itemsToStore && itemsToStore.length > 0) {
-                    await db[ep.table].clear();
                     await db[ep.table].bulkPut(itemsToStore);
                 }
             } catch (tableErr) {
                 console.warn(`[SyncService] Failed to hydrate table ${ep.table}:`, tableErr.message);
-                // Continue with other tables even if one fails
             }
         }
 
@@ -67,13 +64,11 @@ export const hydrateLocalDB = async () => {
             for (const item of pendingQueue) {
                 if (item.type !== 'settings' && db[item.type]) {
                     if (item.action === 'POST' || item.action === 'PUT') {
-                        // Extract actual record data from nested payload if needed
                         const recordData = item.payload?.payload || item.payload;
                         if (recordData && Object.keys(recordData).length > 0) {
                             await db[item.type].put(recordData);
                         }
                     } else if (item.action === 'DELETE') {
-                        // If there is an offline delete queued, remove it from local UI
                         const recordId = item.payload?.id || item.payload?.payload?.id;
                         if (recordId) {
                             await db[item.type].delete(recordId);
@@ -85,10 +80,8 @@ export const hydrateLocalDB = async () => {
             console.warn('[SyncService] Failed to re-apply offline queue:', queueErr);
         }
 
-        // Clear ALL session caches so UI reads from fresh IndexedDB
         clearAllCache();
-
-        console.log('[SyncService] Local Database fully hydrated & caches cleared.');
+        console.log('[SyncService] Local Database fully hydrated & merged.');
         return { status: 'success' };
     } catch (e) {
         console.error('[SyncService] Failed to hydrate:', e);
@@ -96,72 +89,85 @@ export const hydrateLocalDB = async () => {
     }
 };
 
+let isSyncing = false;
+
 export const syncQueueToServer = async () => {
-    if (!navigator.onLine) return;
+    if (!navigator.onLine || isSyncing) return;
+    isSyncing = true;
 
-    const queue = await db.sync_queue.orderBy('createdAt').toArray();
-    if (queue.length === 0) return;
+    try {
+        const queue = await db.sync_queue.orderBy('createdAt').toArray();
+        if (queue.length === 0) {
+            isSyncing = false;
+            return;
+        }
 
-    console.log(`[SyncService] Starting sync of ${queue.length} items`);
-    let syncedCount = 0;
+        console.log(`[SyncService] Starting sync of ${queue.length} items`);
+        let syncedCount = 0;
 
-    for (const item of queue) {
-        try {
-            const endpointTemplate = `/${item.type}`; 
-            
-            const res = await directFetch(endpointTemplate, {
-                method: item.action,
-                body: JSON.stringify(item.payload)
-            });
-
-            if (!res.ok) {
-                throw new Error(`API Error ${res.status}`);
-            }
-
-            const data = await res.json();
-            
-            // Handle ID mapping if the server replaced a temporary UUID
-            if (data.status === 'success' && data.id && data.id !== item.payload.id) {
-                const oldId = item.payload.id;
-                const newId = data.id;
-                const table = item.table;
+        for (const item of queue) {
+            try {
+                let endpointTemplate = `/${item.type}`; 
                 
-                try {
-                    // Update the local record with the new ID
-                    const record = await db[table].get(oldId);
-                    if (record) {
-                        await db[table].delete(oldId);
-                        await db[table].put({ ...record, id: newId });
-                    }
+                if (item.type === 'member_types' || item.type === 'farmer_types') {
+                    endpointTemplate = '/member-types';
+                }
+                
+                const data = await directFetch(endpointTemplate, {
+                    method: item.action,
+                    body: JSON.stringify(item.payload)
+                });
+
+                // data is decoded JSON from directFetch
+                // CRITICAL FIX: Only delete from local queue if SERVER confirmed success.
+                // If status is 'error', keep it in the queue for a retry later.
+                if (data && data.status === 'success') {
+                    // Handle ID mapping if the server replaced a temporary UUID
+                    const payloadId = item.payload?.payload?.id || item.payload?.id;
                     
-                    // Update remaining sync queue to replace any foreign key references to the old UUID
-                    const remainingQueue = await db.sync_queue.toArray();
-                    for (const qEntry of remainingQueue) {
-                        let payloadStr = JSON.stringify(qEntry.payload);
-                        if (payloadStr.includes(oldId)) {
-                            const updatedPayload = JSON.parse(payloadStr.split(oldId).join(newId));
-                            await db.sync_queue.update(qEntry.uuid, { payload: updatedPayload });
+                    if (data.id && data.id !== payloadId) {
+                        const oldId = payloadId;
+                        const newId = data.id;
+                        const table = item.type;
+                        
+                        try {
+                            const record = await db[table].get(oldId);
+                            if (record) {
+                                await db[table].delete(oldId);
+                                await db[table].put({ ...record, id: newId });
+                            }
+                            
+                            const remainingQueue = await db.sync_queue.toArray();
+                            for (const qEntry of remainingQueue) {
+                                let payloadStr = JSON.stringify(qEntry.payload);
+                                if (payloadStr.includes(oldId)) {
+                                    const updatedPayload = JSON.parse(payloadStr.split(oldId).join(newId));
+                                    await db.sync_queue.update(qEntry.uuid, { payload: updatedPayload });
+                                }
+                            }
+                        } catch (mapErr) {
+                            console.error("[SyncService] ID mapping failed:", mapErr);
                         }
                     }
-                } catch (mapErr) {
-                    console.error("[SyncService] ID mapping failed:", mapErr);
+
+                    await db.sync_queue.delete(item.uuid);
+                    syncedCount++;
+                } else {
+                    console.error(`[SyncService] Server reported failure for item ${item.uuid}:`, data);
+                    break; // Stop sync loop if we hit a server error
                 }
+            } catch (e) {
+                console.error(`[SyncService] Network or API error for item ${item.uuid}:`, e);
+                break; 
             }
-
-            await db.sync_queue.delete(item.uuid);
-            syncedCount++;
-            console.log(`[SyncService] Synced item ${item.uuid}`);
-
-        } catch (e) {
-            console.error(`[SyncService] Failed to sync item ${item.uuid}:`, e);
-            break; 
         }
-    }
 
-    if (syncedCount > 0) {
-        // Clear caches after sync so UI picks up server-side changes (e.g. generated IDs)
-        clearAllCache();
-        window.dispatchEvent(new CustomEvent('sync-complete', { detail: { count: syncedCount } }));
+        if (syncedCount > 0) {
+            clearAllCache();
+            window.dispatchEvent(new CustomEvent('sync-complete', { detail: { count: syncedCount } }));
+        }
+    } finally {
+        isSyncing = false;
     }
 };
 

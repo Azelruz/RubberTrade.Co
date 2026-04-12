@@ -14,7 +14,10 @@ export default defineConfig({
         name: 'Rubertrade Co., Ltd',
         short_name: 'Rubertrade',
         description: 'Offline-First Rubber Trading App',
-        theme_color: '#ffffff',
+        theme_color: '#111827',
+        background_color: '#ffffff',
+        display: 'standalone',
+        start_url: '/',
         icons: [
           {
             src: 'pwa-192x192.png',
@@ -24,12 +27,13 @@ export default defineConfig({
           {
             src: 'pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           }
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,ttf}'],
         maximumFileSizeToCacheInBytes: 5000000, // 5MB
         navigateFallbackDenylist: [/^\/api/]
       }

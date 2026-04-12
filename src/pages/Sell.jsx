@@ -303,7 +303,7 @@ const Sell = () => {
     const filteredRecords = records.filter(r => {
         const matchesSearch = (r.buyerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                               (r.id || '').toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesDate = r.date === selectedDate;
+        const matchesDate = (r.date || '').split('T')[0] === selectedDate;
         return matchesSearch && matchesDate;
     });
 

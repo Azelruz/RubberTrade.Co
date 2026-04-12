@@ -64,7 +64,7 @@ const fetchAPI = async (endpoint, options = {}) => {
         }
 
         if (options.body) {
-            fetchOptions.body = JSON.stringify(options.body);
+            fetchOptions.body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
         }
 
         const response = await fetch(`${API_BASE}${endpoint}`, fetchOptions);
@@ -457,3 +457,37 @@ export const adminUpdateBankSettings = async (payload) => {
 export const adminFetchSubscriptionDashboard = async () => {
     return await fetchAPI('/admin/subscription-dashboard');
 };
+
+// --- Super Admin Reports API ---
+export const adminFetchReportUsers = async () => {
+    return await fetchAPI('/admin/reports?action=getUsers');
+};
+
+export const adminFetchReportData = async (action, params) => {
+    const queryParams = new URLSearchParams(params).toString();
+    return await fetchAPI(`/admin/reports?action=${action}&${queryParams}`);
+};
+
+export const adminFetchUsageStats = async (userId) => {
+    return await fetchAPI(`/admin/usage?action=getStats&userId=${userId}`);
+};
+
+export const adminTriggerBackfill = async () => {
+    return await fetchAPI('/admin/usage?action=backfill');
+};
+
+// --- Database Management API ---
+export const adminExportTable = async (userId, table) => {
+    return await fetchAPI(`/admin/database?action=export&userId=${userId}&table=${table}`);
+};
+
+export const adminImportTable = async (userId, table, data, purge = false) => {
+    const url = `/admin/database?action=import&userId=${userId}&table=${table}${purge ? '&purge=true' : ''}`;
+    return await fetchAPI(url, {
+        method: 'POST',
+        body: data
+    });
+};
+
+
+

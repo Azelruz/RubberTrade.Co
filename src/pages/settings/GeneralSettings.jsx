@@ -103,9 +103,9 @@ export const GeneralSettings = ({ register, handleSubmit, onSubmit, saving, logo
                                 type="text"
                                 {...register('station_code')}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500 shadow-sm font-mono"
-                                placeholder="0335"
+                                placeholder="เช่น RTB หรือ 3 ตัวแรกของชื่อผู้ใช้"
                             />
-                            <p className="text-[10px] text-gray-400 mt-1">* ใช้แทนที่ตัวแปร {'{STATION}'} ในฟอร์แมต</p>
+                            <p className="text-[10px] text-gray-400 mt-1">* ใช้แทนที่ตัวแปร {`{STATION}`} ในฟอร์แมต</p>
                         </div>
 
                         <div>
@@ -134,7 +134,7 @@ export const GeneralSettings = ({ register, handleSubmit, onSubmit, saving, logo
                                 type="text"
                                 {...register('format_farmer_id')}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500 shadow-sm font-mono text-sm"
-                                placeholder="F-{SEQ4}"
+                                placeholder="{STATION}-F-{SEQ4}"
                             />
                         </div>
 
@@ -144,7 +144,7 @@ export const GeneralSettings = ({ register, handleSubmit, onSubmit, saving, logo
                                 type="text"
                                 {...register('format_employee_id')}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500 shadow-sm font-mono text-sm"
-                                placeholder="E-{SEQ3}"
+                                placeholder="{STATION}-E-{SEQ3}"
                             />
                         </div>
                     </div>

@@ -1,12 +1,13 @@
-import { jsonResponse, errorResponse } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth } from './_utils.js';
 
 /**
  * Send Receipt Image to Farmer via LINE Messaging API
  */
-export async function onRequestPost(context) {
+async function handlePost(context) {
     try {
         const body = await context.request.json();
         const { farmerId, receiptUrl } = body;
+        const userId = context.user.id;
 
         if (!farmerId || !receiptUrl) {
             return errorResponse('Missing farmerId or receiptUrl', 400);
@@ -14,8 +15,8 @@ export async function onRequestPost(context) {
 
         const db = context.env.DB;
 
-        // 1. Get LINE credentials from settings
-        const { results: settings } = await db.prepare("SELECT * FROM settings WHERE key IN ('lineChannelAccessToken', 'lineChannelSecret')").all();
+        // 1. Get LINE credentials from settings (Filtered by userId)
+        const { results: settings } = await db.prepare("SELECT * FROM settings WHERE userId = ? AND key IN ('lineChannelAccessToken', 'lineChannelSecret')").bind(userId).all();
         const creds = {};
         settings.forEach(s => creds[s.key] = s.value);
 
@@ -23,8 +24,8 @@ export async function onRequestPost(context) {
             return errorResponse('LINE Channel Access Token not configured in settings', 500);
         }
 
-        // 2. Get farmer's lineId
-        const farmer = await db.prepare("SELECT lineId, name FROM farmers WHERE id = ?").bind(farmerId).first();
+        // 2. Get farmer's lineId (Filtered by userId)
+        const farmer = await db.prepare("SELECT lineId, name FROM farmers WHERE id = ? AND userId = ?").bind(farmerId, userId).first();
         if (!farmer) {
             return errorResponse('Farmer record not found', 404);
         }
@@ -84,3 +85,5 @@ export async function onRequestPost(context) {
         return errorResponse(e.message);
     }
 }
+
+export const onRequestPost = withAuth(handlePost);

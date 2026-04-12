@@ -20,7 +20,7 @@ async function handlePost(context) {
         const { date, category, description, amount, note } = payload;
         
         await context.env.DB.prepare(
-            "INSERT INTO expenses (id, date, category, description, amount, note, userId) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            "INSERT OR REPLACE INTO expenses (id, date, category, description, amount, note, userId) VALUES (?, ?, ?, ?, ?, ?, ?)"
         ).bind(id, date || null, category || null, description || null, amount || 0, note || null, userId).run();
         
         return jsonResponse({ status: 'success', id });

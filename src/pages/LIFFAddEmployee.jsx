@@ -19,7 +19,24 @@ const LIFFAddEmployee = () => {
     useEffect(() => {
         const init = async () => {
             try {
-                await liff.init({ liffId: '2009445413-EuVTEBaS' });
+                const urlParams = new URLSearchParams(window.location.search);
+                const shopId = urlParams.get('shopId');
+
+                // Get dynamic LIFF ID if shopId is provided
+                let liffId = '2009445413-EuVTEBaS'; // Default
+                if (shopId) {
+                    try {
+                        const sRes = await fetch(`/api/liff-settings?shopId=${shopId}`);
+                        if (sRes.ok) {
+                            const settings = await sRes.json();
+                            if (settings.lineLiffIdAddEmployee) liffId = settings.lineLiffIdAddEmployee;
+                        }
+                    } catch (e) {
+                        console.error("Failed to load shop-specific LIFF settings");
+                    }
+                }
+
+                await liff.init({ liffId });
                 if (!liff.isLoggedIn()) {
                     liff.login();
                     return;

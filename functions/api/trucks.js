@@ -1,43 +1,34 @@
-export async function onRequestGet(context) {
+import { jsonResponse, errorResponse, withAuth } from './_utils.js';
+
+async function handleGet(context) {
     const { env } = context;
     try {
-        const { results } = await env.DB.prepare('SELECT * FROM trucks ORDER BY created_at DESC').all();
-        return new Response(JSON.stringify(results), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        const { results } = await env.DB.prepare('SELECT * FROM trucks WHERE userId = ? ORDER BY created_at DESC').bind(context.user.id).all();
+        return jsonResponse(results);
     } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return errorResponse(error.message);
     }
 }
 
-export async function onRequestPost(context) {
+export const onRequestGet = withAuth(handleGet);
+
+async function handlePost(context) {
     const { env, request } = context;
     try {
         const body = await request.json();
         const { payload } = body;
         const { id, licensePlate, chassisNumber, brand, model, prbExpiry } = payload;
+        const userId = context.user.id;
 
         await env.DB.prepare(`
-            INSERT INTO trucks (id, licensePlate, chassisNumber, brand, model, prbExpiry)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                licensePlate = excluded.licensePlate,
-                chassisNumber = excluded.chassisNumber,
-                brand = excluded.brand,
-                model = excluded.model,
-                prbExpiry = excluded.prbExpiry
-        `).bind(id, licensePlate, chassisNumber, brand, model, prbExpiry).run();
+            INSERT OR REPLACE INTO trucks (id, licensePlate, chassisNumber, brand, model, prbExpiry, userId)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).bind(id, licensePlate, chassisNumber, brand, model, prbExpiry, userId).run();
 
-        return new Response(JSON.stringify({ status: 'success', id }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ status: 'success', id });
     } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return errorResponse(error.message);
     }
 }
+
+export const onRequestPost = withAuth(handlePost);

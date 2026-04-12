@@ -1,15 +1,19 @@
-import { jsonResponse, errorResponse, withAuth, isUUID } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth, isUUID, trackUsage } from './_utils.js';
 import { generateNextId, getSetting } from './_id_utils.js';
 
 async function handleGet(context) {
     try {
         const { results } = await context.env.DB.prepare(`
-            SELECT b.*, f.name as farmerName 
+            SELECT b.*, COALESCE(f.name, b.farmerName) as farmerName 
             FROM buys b 
             LEFT JOIN farmers f ON b.farmerId = f.id 
             WHERE b.userId = ?
             ORDER BY b.date DESC, b.created_at DESC
         `).bind(context.user.id).all();
+        
+        // Track usage
+        context.waitUntil?.(trackUsage(context, { rowsRead: results.length }));
+        
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);
@@ -32,7 +36,7 @@ async function handlePost(context) {
             for (const p of body.payloads) {
                 let id = p.id;
                 if (!id || isUUID(id)) {
-                    id = await generateNextId(context.env.DB, 'buys', format, stationCode);
+                    id = await generateNextId(context.env.DB, 'buys', format, stationCode, userId);
                 }
 
                 const {
@@ -43,7 +47,7 @@ async function handlePost(context) {
                 } = p;
 
                 stmts.push(context.env.DB.prepare(`
-                    INSERT INTO buys (
+                    INSERT OR REPLACE INTO buys (
                         id, date, farmerId, farmerName, weight, drc, pricePerKg, total, 
                         dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                         farmerStatus, employeeStatus, receiptUrl, bucketWeight,
@@ -69,7 +73,7 @@ async function handlePost(context) {
         if (!id || isUUID(id)) {
             const stationCode = await getSetting(context.env.DB, 'station_code', '0335');
             const format = await getSetting(context.env.DB, 'format_buy_bill', 'B-{STATION}{YYYY}-{SEQ4}');
-            id = await generateNextId(context.env.DB, 'buys', format, stationCode);
+            id = await generateNextId(context.env.DB, 'buys', format, stationCode, userId);
         }
 
         const { 
@@ -80,7 +84,7 @@ async function handlePost(context) {
         } = payload;
         
         await context.env.DB.prepare(`
-            INSERT INTO buys (
+            INSERT OR REPLACE INTO buys (
                 id, date, farmerId, farmerName, weight, drc, pricePerKg, total, 
                 dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                 farmerStatus, employeeStatus, receiptUrl, bucketWeight,

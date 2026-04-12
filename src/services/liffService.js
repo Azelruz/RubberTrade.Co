@@ -3,9 +3,26 @@ import liff from '@line/liff';
 const LIFF_ID_PROFILE = '2009445413-LKTCq5J8';
 const LIFF_ID_ADD_EMPLOYEE = '2009445413-EuVTEBaS';
 
-export const initLiff = async (type = 'profile') => {
+export const initLiff = async (type = 'profile', shopId = null) => {
     try {
-        const liffId = type === 'profile' ? LIFF_ID_PROFILE : LIFF_ID_ADD_EMPLOYEE;
+        let liffId = type === 'profile' ? '2009445413-LKTCq5J8' : '2009445413-EuVTEBaS';
+
+        if (shopId) {
+            try {
+                const res = await fetch(`/api/liff-settings?shopId=${shopId}`);
+                if (res.ok) {
+                    const settings = await res.json();
+                    if (type === 'profile' && settings.lineLiffIdProfile) {
+                        liffId = settings.lineLiffIdProfile;
+                    } else if (type === 'add_employee' && settings.lineLiffIdAddEmployee) {
+                        liffId = settings.lineLiffIdAddEmployee;
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to fetch dynamic LIFF settings, using defaults', err);
+            }
+        }
+
         await liff.init({ liffId });
         if (!liff.isLoggedIn()) {
             liff.login();

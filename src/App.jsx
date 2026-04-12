@@ -29,6 +29,7 @@ import DataImport from './pages/DataImport';
 import Subscription from './pages/Subscription';
 import AdminSubscriptions from './pages/AdminSubscriptions';
 import AdminSubscriptionDashboard from './pages/AdminSubscriptionDashboard';
+import AdminReports from './pages/admin/AdminReports';
 
 function App() {
   useEffect(() => {
@@ -104,6 +105,11 @@ function App() {
             <Route path="admin/subscription-dashboard" element={
               <RoleRoute allowedRoles={['super_admin']}>
                 <AdminSubscriptionDashboard />
+              </RoleRoute>
+            } />
+            <Route path="admin/reports" element={
+              <RoleRoute allowedRoles={['super_admin']}>
+                <AdminReports />
               </RoleRoute>
             } />
             <Route path="import" element={

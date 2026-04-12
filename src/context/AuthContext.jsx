@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
-import { getSubscriptionStatus } from '../services/apiService';
+import { getSubscriptionStatus, clearAllCache } from '../services/apiService';
+import db from '../services/db';
 
 const AuthContext = createContext(undefined);
 
@@ -67,7 +68,10 @@ export const AuthProvider = ({ children }) => {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: window.location.origin
+                redirectTo: window.location.origin,
+                queryParams: {
+                    prompt: 'select_account'
+                }
             }
         });
         if (error) throw error;
@@ -77,6 +81,19 @@ export const AuthProvider = ({ children }) => {
         await supabase.auth.signOut();
         setUser(null);
         setSession(null);
+        
+        // Clear all IndexedDB and Session Storage caches upon logout to prevent multi-tenant data leakage
+        try {
+            clearAllCache();
+            await db.delete(); // Delete the entire IndexedDB database safely
+            
+            // Reload the page to ensure all memory state is wiped and DB is re-initialized for the next login
+            window.location.reload();
+        } catch (err) {
+            console.error("Failed to clear local cache on logout:", err);
+            // Fallback reload if wipe errors out
+            window.location.reload();
+        }
     };
 
     const getToken = () => session?.access_token;

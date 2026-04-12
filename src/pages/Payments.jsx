@@ -94,7 +94,8 @@ export const Payments = () => {
     };
 
     const filteredRecords = records.filter(r => {
-        const matchDate = (r.date || '').startsWith(filterDate);
+        const recordDate = (r.date || '').split('T')[0];
+        const matchDate = recordDate.startsWith(filterDate);
         const matchSearch = (r.farmerName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                            (r.id || '').toLowerCase().includes(searchTerm.toLowerCase());
         return matchDate && matchSearch;

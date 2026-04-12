@@ -6,13 +6,29 @@ import { jsonResponse, errorResponse } from './_utils.js';
  */
 export async function onRequestPost(context) {
     try {
+        const url = new URL(context.request.url);
+        const uid = url.searchParams.get('uid'); // Optional: target user ID for multi-tenancy
+
         const bodyRaw = await context.request.text();
         console.log("[LINE Webhook] Raw body:", bodyRaw);
 
+        const db = context.env.DB;
+
+        // Helper to save setting with UID filter if present
+        const saveSetting = async (key, value) => {
+            if (uid) {
+                await db.prepare(
+                    "INSERT INTO settings (key, value, userId, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key, userId) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP"
+                ).bind(key, value, uid).run();
+            } else {
+                await db.prepare(
+                    "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP"
+                ).bind(key, value).run();
+            }
+        };
+
         // Save raw body to settings for debugging
-        await context.env.DB.prepare(
-            "INSERT INTO settings (key, value, updated_at) VALUES ('lineLastEvent', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP"
-        ).bind(bodyRaw).run();
+        await saveSetting('lineLastEvent', bodyRaw);
 
         let body;
         try {
@@ -22,29 +38,34 @@ export async function onRequestPost(context) {
         }
 
         const { events } = body;
-        console.log(`[LINE Webhook] Received ${events?.length || 0} events`);
-
-        const db = context.env.DB;
+        console.log(`[LINE Webhook] Received ${events?.length || 0} events. Target UID: ${uid || 'GLOBAL'}`);
 
         // Immediately update status to show we received SOMETHING
         const timestamp = new Date().toLocaleTimeString();
-        await db.prepare(
-            "INSERT INTO settings (key, value, updated_at) VALUES ('lineLastStatus', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP"
-        ).bind(`ได้รับข้อมูลเมื่อ ${timestamp} (จำนวน ${events?.length || 0} รายการ)`).run();
+        await saveSetting('lineLastStatus', `ได้รับข้อมูลเมื่อ ${timestamp} (จำนวน ${events?.length || 0} รายการ)`);
 
         if (!events || events.length === 0) {
             return jsonResponse({ status: 'ok', message: 'No events' });
         }
         
-        // Get LINE credentials from settings
-        const { results: settings } = await db.prepare("SELECT * FROM settings WHERE key IN ('lineChannelAccessToken', 'lineChannelSecret')").all();
+        // Get LINE credentials from settings (filter by uid if provided)
+        let query = "SELECT * FROM settings WHERE key IN ('lineChannelAccessToken', 'lineChannelSecret')";
+        let params = [];
+        if (uid) {
+            query += " AND userId = ?";
+            params.push(uid);
+        } else {
+            query += " AND userId IS NULL";
+        }
+        
+        const { results: settings } = await db.prepare(query).bind(...params).all();
         const creds = {};
         settings.forEach(s => creds[s.key] = s.value);
 
         if (!creds.lineChannelAccessToken || !creds.lineChannelSecret) {
-            const err = "Missing credentials in settings";
+            const err = `Missing credentials in settings (UID: ${uid || 'GLOBAL'})`;
             console.error("[LINE Webhook]", err);
-            await db.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('lineLastError', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP").bind(err).run();
+            await saveSetting('lineLastError', err);
             return jsonResponse({ status: 'error', message: err });
         }
 
@@ -67,24 +88,26 @@ export async function onRequestPost(context) {
                 const id = `line_${lineId.substring(0, 8)}`;
                 
                 try {
+                    // Update farmer and ensure it's associated with the correct UID (if provided)
                     await db.prepare(`
-                        INSERT INTO farmers (id, name, lineId, lineName, linePicture)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO farmers (id, name, lineId, lineName, linePicture, userId)
+                        VALUES (?, ?, ?, ?, ?, ?)
                         ON CONFLICT(lineId) DO UPDATE SET
                             lineName = excluded.lineName,
-                            linePicture = excluded.linePicture
-                    `).bind(id, profile.displayName, lineId, profile.displayName, profile.pictureUrl || null).run();
-                    console.log(`[LINE Webhook] Farmer upserted successfully`);
+                            linePicture = excluded.linePicture,
+                            userId = COALESCE(excluded.userId, farmers.userId)
+                    `).bind(id, profile.displayName, lineId, profile.displayName, profile.pictureUrl || null, uid || null).run();
                     
-                    await db.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('lineLastStatus', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP").bind(`สำเร็จ: เชื่อมต่อคุณ ${profile.displayName} เรียบร้อย`).run();
+                    console.log(`[LINE Webhook] Farmer upserted successfully`);
+                    await saveSetting('lineLastStatus', `สำเร็จ: เชื่อมต่อคุณ ${profile.displayName} เรียบร้อย`);
                 } catch (dbErr) {
                     console.error("[LINE Webhook] DB Error during upsert:", dbErr.message);
-                    await db.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('lineLastError', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP").bind(`DB Error: ${dbErr.message}`).run();
+                    await saveSetting('lineLastError', `DB Error: ${dbErr.message}`);
                 }
             } else {
                 const err = "Failed to fetch profile (Check LINE Channel Access Token)";
                 console.error("[LINE Webhook]", err);
-                await db.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('lineLastError', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP").bind(err).run();
+                await saveSetting('lineLastError', err);
             }
         }
 
@@ -92,7 +115,13 @@ export async function onRequestPost(context) {
     } catch (e) {
         console.error("[LINE Webhook Fatal Error]", e.message);
         try {
-            await context.env.DB.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('lineLastError', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP").bind(`Fatal: ${e.message}`).run();
+            const url = new URL(context.request.url);
+            const uid = url.searchParams.get('uid');
+            if (uid) {
+                await context.env.DB.prepare("INSERT INTO settings (key, value, userId, updated_at) VALUES ('lineLastError', ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key, userId) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP").bind(`Fatal: ${e.message}`, uid).run();
+            } else {
+                await context.env.DB.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('lineLastError', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP").bind(`Fatal: ${e.message}`).run();
+            }
         } catch {}
         return errorResponse(e.message);
     }

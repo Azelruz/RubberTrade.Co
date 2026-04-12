@@ -1,6 +1,6 @@
-import { jsonResponse, errorResponse } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth } from './_utils.js';
 
-export async function onRequestPost(context) {
+async function handlePost(context) {
     try {
         const body = await context.request.json();
         const { base64, filename } = body;
@@ -23,7 +23,7 @@ export async function onRequestPost(context) {
             return errorResponse('Cloudflare R2 Bucket (BUCKET) is not configured. Please enable R2 and ensure it is bound to this project.', 500);
         }
 
-        const key = `receipts/${Date.now()}_${filename}`;
+        const key = `receipts/${context.user.id}/${Date.now()}_${filename}`;
         
         // Upload to R2
         try {
@@ -49,3 +49,5 @@ export async function onRequestPost(context) {
         return errorResponse('Upload failed: ' + e.message);
     }
 }
+
+export const onRequestPost = withAuth(handlePost);

@@ -5,8 +5,10 @@ import { PlusCircle, Printer, Download, Search, Trash2, FileText, Factory, User,
 import { format, addYears } from 'date-fns';
 import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
-import { addBuyRecord, fetchBuyRecords, deleteRecord, updateRecord, fetchFarmers, fetchDailyPrice, getSettings, fetchEmployees, saveReceiptImageToDrive, deleteReceiptFileToDrive, sendLineReceipt, fetchMemberTypes, isCached } from '../services/apiService';
+import { addBuyRecord, fetchBuyRecords, deleteRecord, updateRecord, fetchFarmers, fetchDailyPrice, getSettings, fetchEmployees, saveReceiptImageToDrive, deleteReceiptFileToDrive, sendLineReceipt, fetchMemberTypes, isCached, addFarmer } from '../services/apiService';
 import { truncateOneDecimal, calculateBuyTotal, calculateDrcBonus } from '../utils/calculations';
+import { platform } from '../utils/platform';
+import { printRecord } from '../utils/PrintService';
 
 export const Buy = () => {
     const [records, setRecords] = useState([]);
@@ -193,10 +195,48 @@ export const Buy = () => {
         setSubmitting(true);
         const toastId = toast.loading('กำลังประมวลผล...');
         try {
-            // Get actual farmer name from ID if selected
-            const selectedFarmer = farmers.find(f => f.id === data.farmerId);
-            const farmerName = selectedFarmer ? selectedFarmer.name : data.farmerName;
-            const farmerId = selectedFarmer ? selectedFarmer.id : data.farmerId;
+            // Automatic Farmer Registration Logic
+            let farmerId = data.farmerId;
+            let farmerName = data.farmerName;
+
+            const isNewFarmer = !farmerId && farmerName;
+
+            if (isNewFarmer) {
+                if (!data.note || data.note.trim().length < 5) {
+                    setSubmitting(false);
+                    toast.error('กรุณาระบุเลขบัตรประชาชนหรือเบอร์โทรศัพท์ในช่องหมายเหตุสำหรับเกษตรกรใหม่', { id: toastId });
+                    return;
+                }
+
+                toast.loading('กำลังลงทะเบียนเกษตรกรใหม่...', { id: toastId });
+                try {
+                    const resFarmer = await addFarmer({ 
+                        name: farmerName, 
+                        note: data.note,
+                        // You can add more default fields if needed
+                    });
+
+                    if (resFarmer.status === 'success') {
+                        farmerId = resFarmer.id;
+                        // Add to local state so it appears in list and correctly linked
+                        const newFarmerEntry = { id: farmerId, name: farmerName, note: data.note };
+                        setFarmers(prev => [newFarmerEntry, ...prev]);
+                        toast.loading('ลงทะเบียนสำเร็จ กำลังบันทึกรายการ...', { id: toastId });
+                    } else {
+                        throw new Error(resFarmer.message || 'ลงทะเบียนล้มเหลว');
+                    }
+                } catch (err) {
+                    setSubmitting(false);
+                    toast.error('ไม่สามารถลงทะเบียนเกษตรกรใหม่ได้: ' + err.message, { id: toastId });
+                    return;
+                }
+            } else {
+                // Get actual farmer name from ID if selected
+                const selectedFarmer = farmers.find(f => f.id === farmerId);
+                if (selectedFarmer) {
+                    farmerName = selectedFarmer.name;
+                }
+            }
 
             const w = Number(data.weight) || 0;
             const bw = Number(data.bucketWeight) || 0;
@@ -397,10 +437,14 @@ export const Buy = () => {
 
     const handlePrintReceipt = (record) => {
         setPrintingReceipt(record);
+        
+        // Wait for rendering then print via hidden iframe
         setTimeout(() => {
-            window.print();
-            setPrintingReceipt(null);
-        }, 300);
+            if (printRef.current) {
+                printRecord(printRef.current.innerHTML);
+                setPrintingReceipt(null);
+            }
+        }, 500);
     };
 
     const calculateTotal = () => {
@@ -439,7 +483,7 @@ export const Buy = () => {
     const filteredRecords = records.filter(r => {
         const matchesSearch = (r.farmerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (r.id || '').toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesDate = r.date === selectedDate;
+        const matchesDate = (r.date || '').split('T')[0] === selectedDate;
         return matchesSearch && matchesDate;
     });
 
@@ -528,15 +572,39 @@ export const Buy = () => {
                 </div>
             )}
 
-            {/* Print-optimized Receipt Template for 57x40mm (Thermal) */}
-            {printingReceipt && (
-                <div className="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-start print:relative print:z-auto">
-                    <div className="receipt-content text-black text-[12px] leading-snug">
+            {/* Hidden Print Container (Does not show on screen) */}
+            <div style={{ display: 'none' }}>
+                <div ref={printRef}>
+                    {printingReceipt && (
+                        <div className="receipt-content text-black text-[12px] leading-snug p-4 font-sans" style={{ width: '57mm', background: 'white' }}>
+                    {/* Control Bar - Hidden on Print */}
+                    <div className="w-full flex justify-between items-center p-4 bg-gray-50 border-b border-gray-200 no-print sticky top-0 z-20">
+                        <button 
+                            onClick={() => setPrintingReceipt(null)}
+                            className="flex items-center space-x-2 text-gray-600 font-bold px-3 py-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <X size={20} />
+                            <span>ปิด</span>
+                        </button>
+                        <div className="flex space-x-3">
+                            <button 
+                                onClick={() => window.print()}
+                                className="flex items-center space-x-2 bg-rubber-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-rubber-700 shadow-md transition-all active:scale-95"
+                            >
+                                <Printer size={20} />
+                                <span>พิมพ์บิล</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="receipt-content-inner">
                         {/* Header - High Contrast for Thermal */}
                         <div className="text-center mb-3 border-b-2 border-black pb-2">
-                            {settings.logoUrl && (
-                                <img src={settings.logoUrl} alt="Logo" className="h-12 mx-auto mb-2 object-contain" style={{ filter: 'grayscale(1) contrast(2)' }} />
-                            )}
+                            <div className="h-12 flex items-center justify-center mb-2">
+                                {settings.logoUrl && (
+                                    <img src={settings.logoUrl} alt="Logo" className="h-12 mx-auto object-contain" style={{ filter: 'grayscale(1) contrast(2)' }} />
+                                )}
+                            </div>
                             <h1 className="text-lg font-bold leading-tight">{settings.factoryName || 'ร้านรับซื้อน้ำยางพารา'}</h1>
                             <p className="text-[10px] font-medium">{settings.address || '-'}</p>
                             <p className="text-sm font-bold">โทร: {settings.phone || '-'}</p>
@@ -565,7 +633,7 @@ export const Buy = () => {
                                 <span>น้ำหนักยางดิบ</span>
                                 <span className="text-sm font-bold">{Number(printingReceipt.weight).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
                             </div>
-                            <div className="flex justify-between items-center text-[10px] text-black italic mb-1">
+                            <div className="flex justify-between items-center text-[12px] text-black italic mb-1">
                                 <span>น้ำหนักถัง</span>
                                 <span>-{Number(printingReceipt.bucketWeight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
                             </div>
@@ -584,22 +652,22 @@ export const Buy = () => {
 
                             <div className="my-2 border-t border-dashed border-black"></div>
 
-                            <div className="flex justify-between items-center text-[10px]">
+                            <div className="flex justify-between items-center text-[12px]">
                                 <span>ราคากลาง</span>
                                 <span>{Number(printingReceipt.basePrice || (Number(printingReceipt.actualPrice || printingReceipt.pricePerKg) - (printingReceipt.bonusDrc !== undefined ? Number(printingReceipt.bonusDrc) : calculateDrcBonus(printingReceipt.drc, drcBonuses)))).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
                             </div>
-                            <div className="flex justify-between items-center text-[10px] font-medium">
+                            <div className="flex justify-between items-center text-[12px] font-medium">
                                 <span>โบนัส DRC</span>
                                 <span>+{Number(printingReceipt.bonusDrc !== undefined ? printingReceipt.bonusDrc : calculateDrcBonus(printingReceipt.drc, drcBonuses)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
                             </div>
                             {Number(printingReceipt.fscBonus || (farmers.find(f => f.id === printingReceipt.farmerId)?.fscId ? (settings.fsc_bonus || 1) : 0)) > 0 && (
-                                <div className="flex justify-between items-center text-[10px] font-medium text-black">
+                                <div className="flex justify-between items-center text-[12px] font-medium text-black">
                                     <span>โบนัส FSC</span>
                                     <span>+{Number(printingReceipt.fscBonus || (farmers.find(f => f.id === printingReceipt.farmerId)?.fscId ? (settings.fsc_bonus || 1) : 0)).toLocaleString(undefined, { minimumFractionDigits: 0 })}/กก.</span>
                                 </div>
                             )}
                             {Number(printingReceipt.bonusMemberType || (farmers.find(f => f.id === printingReceipt.farmerId)?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === printingReceipt.farmerId).memberTypeId)?.bonus : 0)) > 0 && (
-                                <div className="flex justify-between items-center text-[10px] font-black text-rubber-700 bg-rubber-50 px-1 rounded">
+                                <div className="flex justify-between items-center text-[12px] font-black text-rubber-700 bg-rubber-50 px-1 rounded">
                                     <span>{memberTypes.find(mt => mt.id === (printingReceipt.memberTypeId || farmers.find(f => f.id === printingReceipt.farmerId)?.memberTypeId))?.name || 'โบนัสสมาชิก'}</span>
                                     <span>+{Number(printingReceipt.bonusMemberType || (farmers.find(f => f.id === printingReceipt.farmerId)?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === printingReceipt.farmerId).memberTypeId)?.bonus : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
                                 </div>
@@ -614,12 +682,12 @@ export const Buy = () => {
                         <div className="py-2 border-t-2 border-black my-2 space-y-1">
                             <div className="flex justify-between items-center font-bold">
                                 <span>เกษตรกร ({100 - (Number(printingReceipt.empPct) || 0)}%)</span>
-                                <span className="font-bold text-xl">฿{Math.floor(Number(printingReceipt.farmerTotal || printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                <span className="font-bold text-xl">{Math.floor(Number(printingReceipt.farmerTotal || printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
                             </div>
                             {Number(printingReceipt.empPct) > 0 && (
                                 <div className="flex justify-between items-center">
                                     <span>ลูกจ้าง ({Number(printingReceipt.empPct)}%)</span>
-                                    <span className="font-bold text-xl">฿{Math.floor(Number(printingReceipt.employeeTotal || 0)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                    <span className="font-bold text-xl">{Math.floor(Number(printingReceipt.employeeTotal || 0)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
                                 </div>
                             )}
                         </div>
@@ -628,7 +696,7 @@ export const Buy = () => {
                         <div className="border-t-4 border-double border-black py-2 mt-2">
                             <div className="flex justify-between items-center">
                                 <span className="font-bold text-xs uppercase">ยอดรวมสุทธิ</span>
-                                <span className="font-bold text-xl">฿{Math.floor(Number(printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                <span className="font-bold text-xl">{Math.floor(Number(printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
                             </div>
                         </div>
 
@@ -636,9 +704,11 @@ export const Buy = () => {
                         <div className="text-center mt-4 border-t border-black pt-2">
                             <p className="text-[10px] font-bold">=== ขอบคุณที่ใช้บริการ ===</p>
                         </div>
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
+        </div>
 
             {/* Main UI */}
             <div className="print:hidden">

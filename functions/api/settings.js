@@ -3,10 +3,18 @@ import { jsonResponse, errorResponse, withAuth } from './_utils.js';
 async function handleGet(context) {
     try {
         const userId = context.user.id;
-        const { results } = await context.env.DB.prepare("SELECT * FROM settings WHERE userId = ?").bind(userId).all();
-        // Convert array of {key, value} to a single object like { daily_price: '50' }
+        const { results } = await context.env.DB.prepare("SELECT * FROM settings WHERE userId = ? OR userId IS NULL").bind(userId).all();
+        
+        // Convert to a single object. 
+        // We sort so that userId IS NULL comes first, then userId = actual ID comes later and overwrites the defaults.
+        const sortedResults = results.sort((a, b) => {
+            if (a.userId === null && b.userId !== null) return -1;
+            if (a.userId !== null && b.userId === null) return 1;
+            return 0;
+        });
+
         const settingsObj = {};
-        results.forEach(row => {
+        sortedResults.forEach(row => {
             settingsObj[row.key] = row.value;
         });
         return jsonResponse(settingsObj);

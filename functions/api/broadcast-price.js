@@ -1,12 +1,13 @@
-import { jsonResponse, errorResponse } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth } from './_utils.js';
 
 /**
  * Broadcast New Price to all connected Farmers via LINE Multicast/Broadcast
  */
-export async function onRequestPost(context) {
+async function handlePost(context) {
     try {
         const body = await context.request.json();
         const { newPrice, imageUrl } = body;
+        const userId = context.user.id;
 
         if (!newPrice || !imageUrl) {
             return errorResponse('Missing newPrice or imageUrl', 400);
@@ -14,8 +15,8 @@ export async function onRequestPost(context) {
 
         const db = context.env.DB;
 
-        // 1. Get LINE credentials from settings
-        const { results: settings } = await db.prepare("SELECT * FROM settings WHERE key IN ('lineChannelAccessToken', 'lineChannelSecret')").all();
+        // 1. Get LINE credentials from settings (Filtered by userId)
+        const { results: settings } = await db.prepare("SELECT * FROM settings WHERE userId = ? AND key IN ('lineChannelAccessToken', 'lineChannelSecret')").bind(userId).all();
         const creds = {};
         settings.forEach(s => creds[s.key] = s.value);
 
@@ -23,8 +24,8 @@ export async function onRequestPost(context) {
             return errorResponse('LINE Channel Access Token not configured in settings', 500);
         }
 
-        // 2. Get all farmers with lineId
-        const { results: farmers } = await db.prepare("SELECT lineId FROM farmers WHERE lineId IS NOT NULL").all();
+        // 2. Get all farmers with lineId (Filtered by userId)
+        const { results: farmers } = await db.prepare("SELECT lineId FROM farmers WHERE userId = ? AND lineId IS NOT NULL").bind(userId).all();
         
         if (!farmers || farmers.length === 0) {
             return jsonResponse({ status: 'skipped', message: 'No farmers connected to LINE' });
@@ -82,3 +83,5 @@ export async function onRequestPost(context) {
         return errorResponse(e.message);
     }
 }
+
+export const onRequestPost = withAuth(handlePost);

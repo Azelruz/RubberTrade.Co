@@ -15,9 +15,24 @@ const LIFFProfile = () => {
     useEffect(() => {
         const init = async () => {
             try {
-                // In production, LIFF ID should be from config
-                // For now we try to init with a placeholder or handled by user
-                await liff.init({ liffId: '2009445413-LKTCq5J8' }); 
+                const urlParams = new URLSearchParams(window.location.search);
+                const shopId = urlParams.get('shopId');
+
+                // Get dynamic LIFF ID if shopId is provided
+                let liffId = '2009445413-LKTCq5J8'; // Default
+                if (shopId) {
+                    try {
+                        const sRes = await fetch(`/api/liff-settings?shopId=${shopId}`);
+                        if (sRes.ok) {
+                            const settings = await sRes.json();
+                            if (settings.lineLiffIdProfile) liffId = settings.lineLiffIdProfile;
+                        }
+                    } catch (e) {
+                        console.error("Failed to load shop-specific LIFF settings");
+                    }
+                }
+
+                await liff.init({ liffId });
                 
                 if (!liff.isLoggedIn()) {
                     liff.login();

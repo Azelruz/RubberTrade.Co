@@ -196,7 +196,7 @@ export const UserManagement = ({
                                                 )}
                                                 <div>
                                                     <div className="font-bold text-gray-900">{f.name}</div>
-                                                    <div className="text-[10px] text-gray-400 font-mono">ID: {f.id.substring(0, 8)}</div>
+                                                    <div className="text-[10px] text-gray-400 font-mono">ID: {f.id}</div>
                                                 </div>
                                             </div>
                                         </td>
@@ -370,7 +370,7 @@ export const UserManagement = ({
                                     <tr key={e.id} className="hover:bg-blue-50/30 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="font-bold text-gray-900">{e.name}</div>
-                                            <div className="text-[11px] text-gray-400">ID: {e.id.substring(0, 8)}</div>
+                                            <div className="text-[11px] text-gray-400">ID: {e.id}</div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-gray-700 text-xs border border-gray-200">

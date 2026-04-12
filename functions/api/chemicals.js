@@ -24,8 +24,7 @@ async function handlePost(context) {
 
             const stmts = payloads.map(p => {
                 return context.env.DB.prepare(
-                    "INSERT INTO chemical_usage (id, date, chemicalId, amount, unit, userId) VALUES (?, ?, ?, ?, ?, ?) " +
-                    "ON CONFLICT(id) DO UPDATE SET amount=excluded.amount, date=excluded.date, chemicalId=excluded.chemicalId"
+                    "INSERT OR REPLACE INTO chemical_usage (id, date, chemicalId, amount, unit, userId) VALUES (?, ?, ?, ?, ?, ?)"
                 ).bind(p.id || crypto.randomUUID(), p.date, p.chemicalId, p.amount, p.unit || 'กก.', userId);
             });
 

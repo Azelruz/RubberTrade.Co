@@ -30,7 +30,7 @@ async function handlePost(context) {
                 const wid = crypto.randomUUID();
                 const { date, staffId, staffName, dailyWage, bonus, workDays, total, note, description } = p;
                 return context.env.DB.prepare(
-                    "INSERT INTO wages (id, date, staffId, staffName, dailyWage, bonus, workDays, total, note, description, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    "INSERT OR REPLACE INTO wages (id, date, staffId, staffName, dailyWage, bonus, workDays, total, note, description, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 ).bind(
                     wid, date || null, staffId || null, staffName || null, 
                     Number(dailyWage) || 0, Number(bonus) || 0, Number(workDays) || 0, Number(total) || 0, 
@@ -45,7 +45,7 @@ async function handlePost(context) {
         const { date, staffId, staffName, dailyWage, bonus, workDays, total, note, description } = payload;
         
         await context.env.DB.prepare(
-            "INSERT INTO wages (id, date, staffId, staffName, dailyWage, bonus, workDays, total, note, description, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT OR REPLACE INTO wages (id, date, staffId, staffName, dailyWage, bonus, workDays, total, note, description, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         ).bind(
             id, date || null, staffId || null, staffName || null, 
             Number(dailyWage) || 0, Number(bonus) || 0, Number(workDays) || 0, Number(total) || 0, 

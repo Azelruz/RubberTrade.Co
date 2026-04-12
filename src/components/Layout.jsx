@@ -86,6 +86,7 @@ export const Layout = () => {
             roles: ['owner', 'admin', 'super_admin'],
             subItems: [
                 { name: 'ภาพรวมระบบสมาชิก', path: '/admin/subscription-dashboard', roles: ['super_admin'] },
+                { name: 'รายงานระบบ (Admin)', path: '/admin/reports', roles: ['super_admin'] },
                 { name: 'สถานะและการสมัคร', path: '/subscription', roles: ['owner', 'admin', 'super_admin'] },
                 { name: 'อนุมัติสมาชิก', path: '/admin/subscriptions', roles: ['super_admin'] }
             ]

@@ -24,14 +24,8 @@ async function handlePost(context) {
                 const id = p.id || crypto.randomUUID();
                 const { name, code, shortName, taxId, address } = p;
                 return context.env.DB.prepare(`
-                    INSERT INTO factories (id, name, code, shortName, taxId, address, userId)
+                    INSERT OR REPLACE INTO factories (id, name, code, shortName, taxId, address, userId)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        name = excluded.name,
-                        code = excluded.code,
-                        shortName = excluded.shortName,
-                        taxId = excluded.taxId,
-                        address = excluded.address
                 `).bind(id, name, code, shortName, taxId || null, address || null, userId);
             });
             await context.env.DB.batch(stmts);
@@ -43,14 +37,8 @@ async function handlePost(context) {
         const { name, code, shortName, taxId, address } = payload;
         
         await context.env.DB.prepare(`
-            INSERT INTO factories (id, name, code, shortName, taxId, address, userId)
+            INSERT OR REPLACE INTO factories (id, name, code, shortName, taxId, address, userId)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                name = excluded.name,
-                code = excluded.code,
-                shortName = excluded.shortName,
-                taxId = excluded.taxId,
-                address = excluded.address
         `).bind(id, name, code, shortName, taxId || null, address || null, userId).run();
         
         return jsonResponse({ status: 'success', id });

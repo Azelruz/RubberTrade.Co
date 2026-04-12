@@ -33,6 +33,9 @@ import {
     deleteMemberType
 } from '../services/apiService';
 
+// Auth
+import { useAuth } from '../context/AuthContext';
+
 // Sub-components
 import { GeneralSettings } from './settings/GeneralSettings';
 import { PriceSettings } from './settings/PriceSettings';
@@ -44,6 +47,7 @@ import { TruckManagement } from './settings/TruckManagement';
 import { ChemicalManagement } from './settings/ChemicalManagement';
 
 export const Settings = () => {
+    const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState('general'); // general, price, farmers_employees, staff, line_integration
@@ -91,6 +95,8 @@ export const Settings = () => {
             phone: '',
             lineChannelAccessToken: '',
             lineChannelSecret: '',
+            lineLiffIdProfile: '',
+            lineLiffIdAddEmployee: '',
             scriptUrl: getScriptUrl() || '',
             printESlip: true,
             printPaperSlip: true,
@@ -113,6 +119,8 @@ export const Settings = () => {
         try {
             if (activeTab === 'general') {
                 const res = await getSettings();
+                const defaultStation = user?.username ? user.username.substring(0, 3).toUpperCase() : 'RTB';
+
                 if (res.status === 'success' && res.data) {
                     reset({
                         factoryName: res.data.factoryName || '',
@@ -121,11 +129,13 @@ export const Settings = () => {
                         pointsPerKg: res.data.pointsPerKg || '10',
                         lineChannelAccessToken: res.data.lineChannelAccessToken || '',
                         lineChannelSecret: res.data.lineChannelSecret || '',
-                        station_code: res.data.station_code || '0335',
+                        lineLiffIdProfile: res.data.lineLiffIdProfile || '',
+                        lineLiffIdAddEmployee: res.data.lineLiffIdAddEmployee || '',
+                        station_code: res.data.station_code || defaultStation,
                         format_buy_bill: res.data.format_buy_bill || 'B-{STATION}{YYYY}-{SEQ4}',
                         format_sell_bill: res.data.format_sell_bill || 'S-{STATION}{YYYY}-{SEQ4}',
-                        format_farmer_id: res.data.format_farmer_id || 'F-{SEQ4}',
-                        format_employee_id: res.data.format_employee_id || 'E-{SEQ3}',
+                        format_farmer_id: res.data.format_farmer_id || '{STATION}-F-{SEQ4}',
+                        format_employee_id: res.data.format_employee_id || '{STATION}-E-{SEQ3}',
                         printESlip: res.data.printESlip === undefined ? true : (res.data.printESlip === 'true' || res.data.printESlip === true),
                         printPaperSlip: res.data.printPaperSlip === undefined ? true : (res.data.printPaperSlip === 'true' || res.data.printPaperSlip === true),
                         showPrizeDraw: res.data.showPrizeDraw === undefined ? true : (res.data.showPrizeDraw === 'true' || res.data.showPrizeDraw === true)
@@ -169,6 +179,8 @@ export const Settings = () => {
                 if (res.status === 'success' && res.data) {
                     setValue('lineChannelAccessToken', res.data.lineChannelAccessToken || '');
                     setValue('lineChannelSecret', res.data.lineChannelSecret || '');
+                    setValue('lineLiffIdProfile', res.data.lineLiffIdProfile || '');
+                    setValue('lineLiffIdAddEmployee', res.data.lineLiffIdAddEmployee || '');
                     setLineLogs({
                         lastEvent: res.data.lineLastEvent || 'ยังไม่มีความเคลื่อนไหวที่ได้รับ',
                         lastError: res.data.lineLastError || 'ไม่มีข้อผิดพลาด',
@@ -211,6 +223,8 @@ export const Settings = () => {
                 pointsPerKg: data.pointsPerKg,
                 lineChannelAccessToken: data.lineChannelAccessToken,
                 lineChannelSecret: data.lineChannelSecret,
+                lineLiffIdProfile: data.lineLiffIdProfile,
+                lineLiffIdAddEmployee: data.lineLiffIdAddEmployee,
                 station_code: data.station_code,
                 format_buy_bill: data.format_buy_bill,
                 format_sell_bill: data.format_sell_bill,
@@ -771,6 +785,7 @@ export const Settings = () => {
                             saving={saving}
                             lineLogs={lineLogs}
                             loadData={loadData}
+                            user={user}
                         />
                     )}
                 </div>

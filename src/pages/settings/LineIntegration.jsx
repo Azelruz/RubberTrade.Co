@@ -8,8 +8,11 @@ export const LineIntegration = ({
     onSubmit, 
     saving, 
     lineLogs, 
-    loadData 
+    loadData,
+    user
 }) => {
+    const webhookUrl = `${window.location.origin}/api/line-webhook${user?.id ? '?uid=' + user.id : ''}`;
+
     return (
         <div className="max-w-2xl">
             <div className="flex justify-between items-start mb-6">
@@ -42,12 +45,12 @@ export const LineIntegration = ({
                         <input
                             type="text"
                             readOnly
-                            value={`${window.location.origin}/api/line-webhook`}
+                            value={webhookUrl}
                             className="flex-1 bg-gray-50 px-3 py-2 text-xs font-mono border rounded-lg"
                         />
                         <button
                             onClick={() => {
-                                navigator.clipboard.writeText(`${window.location.origin}/api/line-webhook`);
+                                navigator.clipboard.writeText(webhookUrl);
                                 toast.success('คัดลอกสำเร็จ');
                             }}
                             className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-bold"
@@ -75,6 +78,37 @@ export const LineIntegration = ({
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 shadow-sm text-sm"
                             placeholder="secret..."
                         />
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100">
+                        <h4 className="text-sm font-bold text-gray-900 mb-4 flex items-center">
+                            <span className="w-8 h-8 bg-rubber-100 rounded-full flex items-center justify-center text-rubber-600 mr-2 text-xs">LIFF</span>
+                            ตั้งค่า LIFF แอปพลิเคชัน
+                        </h4>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">LIFF ID: หน้าโปรไฟล์เกษตรกร (Farmer Profile)</label>
+                                <input
+                                    type="text"
+                                    {...register('lineLiffIdProfile')}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 shadow-sm text-sm"
+                                    placeholder="เช่น 200xxxxxxx-xxxxxxxx"
+                                />
+                                <p className="text-[10px] text-gray-400 mt-1">URL ใน LINE Developers: {window.location.origin}/liff/profile?shopId={user?.id}</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">LIFF ID: หน้าเพิ่มพนักงาน (Add Employee)</label>
+                                <input
+                                    type="text"
+                                    {...register('lineLiffIdAddEmployee')}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 shadow-sm text-sm"
+                                    placeholder="เช่น 200xxxxxxx-xxxxxxxx"
+                                />
+                                <p className="text-[10px] text-gray-400 mt-1">URL ใน LINE Developers: {window.location.origin}/liff/add-employee?shopId={user?.id}</p>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="pt-4 flex justify-end">

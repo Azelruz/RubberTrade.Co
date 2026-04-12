@@ -1,9 +1,13 @@
-import { jsonResponse, errorResponse, withAuth, isUUID } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth, isUUID, trackUsage } from './_utils.js';
 import { generateNextId, getSetting } from './_id_utils.js';
 
 async function handleGet(context) {
     try {
         const { results } = await context.env.DB.prepare("SELECT * FROM sells WHERE userId = ? ORDER BY date DESC, created_at DESC").bind(context.user.id).all();
+        
+        // Track usage
+        context.waitUntil?.(trackUsage(context, { rowsRead: results.length }));
+        
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);
@@ -26,7 +30,7 @@ async function handlePost(context) {
             for (const p of body.payloads) {
                 let id = p.id;
                 if (!id || isUUID(id)) {
-                    id = await generateNextId(context.env.DB, 'sells', format, stationCode);
+                    id = await generateNextId(context.env.DB, 'sells', format, stationCode, userId);
                 }
 
                 const { 
@@ -36,27 +40,11 @@ async function handlePost(context) {
                 } = p;
 
                 stmts.push(context.env.DB.prepare(`
-                    INSERT INTO sells (
+                    INSERT OR REPLACE INTO sells (
                         id, date, buyerName, factoryId, employeeId, truckId, truckInfo,
                         weight, drc, pricePerKg, lossWeight, total, 
                         profitShareAmount, receiptUrl, note, userId
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        date = excluded.date,
-                        buyerName = excluded.buyerName,
-                        factoryId = excluded.factoryId,
-                        employeeId = excluded.employeeId,
-                        truckId = excluded.truckId,
-                        truckInfo = excluded.truckInfo,
-                        weight = excluded.weight,
-                        drc = excluded.drc,
-                        pricePerKg = excluded.pricePerKg,
-                        lossWeight = excluded.lossWeight,
-                        total = excluded.total,
-                        profitShareAmount = excluded.profitShareAmount,
-                        receiptUrl = excluded.receiptUrl,
-                        note = excluded.note,
-                        userId = excluded.userId
                 `).bind(
                     id, date || null, buyerName || null, factoryId || null, employeeId || null, 
                     truckId || null, truckInfo || null,
@@ -66,6 +54,10 @@ async function handlePost(context) {
             }
             
             await context.env.DB.batch(stmts);
+            
+            // Track usage
+            context.waitUntil?.(trackUsage(context, { rowsWritten: stmts.length }));
+            
             return jsonResponse({ status: 'success', count: stmts.length });
         }
 
@@ -74,7 +66,7 @@ async function handlePost(context) {
         if (!id || isUUID(id)) {
             const stationCode = await getSetting(context.env.DB, 'station_code', '0335');
             const format = await getSetting(context.env.DB, 'format_sell_bill', 'S-{STATION}{YYYY}-{SEQ4}');
-            id = await generateNextId(context.env.DB, 'sells', format, stationCode);
+            id = await generateNextId(context.env.DB, 'sells', format, stationCode, userId);
         }
 
         const { 
@@ -84,33 +76,20 @@ async function handlePost(context) {
         } = payload;
         
         await context.env.DB.prepare(`
-            INSERT INTO sells (
+            INSERT OR REPLACE INTO sells (
                 id, date, buyerName, factoryId, employeeId, truckId, truckInfo,
                 weight, drc, pricePerKg, lossWeight, total, 
                 profitShareAmount, receiptUrl, note, userId
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                date = excluded.date,
-                buyerName = excluded.buyerName,
-                factoryId = excluded.factoryId,
-                employeeId = excluded.employeeId,
-                truckId = excluded.truckId,
-                truckInfo = excluded.truckInfo,
-                weight = excluded.weight,
-                drc = excluded.drc,
-                pricePerKg = excluded.pricePerKg,
-                lossWeight = excluded.lossWeight,
-                total = excluded.total,
-                profitShareAmount = excluded.profitShareAmount,
-                receiptUrl = excluded.receiptUrl,
-                note = excluded.note,
-                userId = excluded.userId
         `).bind(
             id, date || null, buyerName || null, factoryId || null, employeeId || null, 
             truckId || null, truckInfo || null,
             weight || 0, drc || 0, pricePerKg || 0, lossWeight || 0, total || 0, 
             profitShareAmount || 0, receiptUrl || null, note || null, userId
         ).run();
+        
+        // Track usage
+        context.waitUntil?.(trackUsage(context, { rowsWritten: 1 }));
         
         return jsonResponse({ status: 'success', id });
     } catch (e) {

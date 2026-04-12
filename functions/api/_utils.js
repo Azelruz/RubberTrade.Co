@@ -118,6 +118,53 @@ export const withAuth = (handler) => {
             return errorResponse('Subscription expired. Please renew to continue saving data.', 402);
         }
         
+        // Track the query hit
+        context.waitUntil?.(trackUsage(context, { queryCount: 1 }));
+        
         return handler(context);
     };
 };
+
+// Specific middleware for super admin
+export const withSuperAdmin = (handler) => {
+    return withAuth(async (context) => {
+        const superAdminEmail = 'narapong.an@gmail.com';
+        const superAdminUser = 'narapong.an';
+        if (context.user.role !== 'super_admin' && 
+            context.user.email !== superAdminEmail && 
+            context.user.username !== superAdminUser) {
+            return errorResponse('Forbidden: Super Admin access required', 403);
+        }
+        return handler(context);
+    });
+};
+
+/**
+ * Usage Tracking Utility
+ */
+export const trackUsage = async (context, metrics = {}) => {
+    try {
+        const db = context.env.DB;
+        const userId = context.user?.id || metrics.userId;
+        if (!userId) return;
+
+        const queryCount = metrics.queryCount || 0;
+        const rowsRead = metrics.rowsRead || 0;
+        const rowsWritten = metrics.rowsWritten || 0;
+        const rowsDeleted = metrics.rowsDeleted || 0;
+        const date = metrics.date || new Date().toISOString().split('T')[0];
+
+        await db.prepare(`
+            INSERT INTO user_usage_stats (userId, date, queryCount, rowsRead, rowsWritten, rowsDeleted)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(userId, date) DO UPDATE SET
+                queryCount = queryCount + excluded.queryCount,
+                rowsRead = rowsRead + excluded.rowsRead,
+                rowsWritten = rowsWritten + excluded.rowsWritten,
+                rowsDeleted = rowsDeleted + excluded.rowsDeleted
+        `).bind(userId, date, queryCount, rowsRead, rowsWritten, rowsDeleted).run();
+    } catch (e) {
+        console.error('Usage Tracking Error:', e.message);
+    }
+};
+

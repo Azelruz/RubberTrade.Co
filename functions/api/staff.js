@@ -22,7 +22,7 @@ async function handlePost(context) {
                 const id = p.id || crypto.randomUUID();
                 const { name, phone, address, salary, bonus, note } = p;
                 return context.env.DB.prepare(
-                    "INSERT INTO staff (id, name, phone, address, salary, bonus, note, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                    "INSERT OR REPLACE INTO staff (id, name, phone, address, salary, bonus, note, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                 ).bind(id, name, phone, address, salary, bonus, note, userId);
             });
             await context.env.DB.batch(stmts);
@@ -34,7 +34,7 @@ async function handlePost(context) {
         const { name, phone, address, salary, bonus, note } = payload;
         
         await context.env.DB.prepare(
-            "INSERT INTO staff (id, name, phone, address, salary, bonus, note, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT OR REPLACE INTO staff (id, name, phone, address, salary, bonus, note, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         ).bind(id, name, phone, address, salary, bonus, note, userId).run();
         
         return jsonResponse({ status: 'success', id });
