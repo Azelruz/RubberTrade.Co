@@ -128,8 +128,10 @@ export const withAuth = (handler) => {
 // Specific middleware for super admin
 export const withSuperAdmin = (handler) => {
     return withAuth(async (context) => {
-        const superAdminEmail = 'narapong.an@gmail.com';
-        const superAdminUser = 'narapong.an';
+        // Use environment variables if available, otherwise fallback to hardcoded defaults
+        const superAdminEmail = context.env.SUPER_ADMIN_EMAIL || 'narapong.an@gmail.com';
+        const superAdminUser = context.env.SUPER_ADMIN_USERNAME || 'narapong.an';
+        
         if (context.user.role !== 'super_admin' && 
             context.user.email !== superAdminEmail && 
             context.user.username !== superAdminUser) {
