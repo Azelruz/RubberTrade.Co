@@ -6,9 +6,18 @@ async function handleUpdate(context) {
         const { sheetName, id, updates } = body;
         
         const validTables = ['farmers', 'staff', 'employees', 'buys', 'sells', 'expenses', 'wages', 'promotions', 'trucks', 'factories', 'chemicals'];
-        const tableName = sheetName.toLowerCase();
+        let tableName = sheetName.toLowerCase();
         
-        if (!validTables.includes(tableName)) {
+        // Map frontend table names to actual database table names if they differ
+        const tableMap = {
+            'chemicals': 'chemical_usage'
+        };
+        
+        if (tableMap[tableName]) {
+            tableName = tableMap[tableName];
+        }
+        
+        if (!validTables.includes(sheetName.toLowerCase())) {
             return errorResponse('Invalid table name: ' + sheetName);
         }
 
