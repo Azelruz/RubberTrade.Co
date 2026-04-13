@@ -176,7 +176,7 @@ export const Dashboard = () => {
 
         const todayTotalDry = latexBuys.reduce((sum, item) => sum + (Number(item.dryRubber || item.dryWeight || 0)), 0);
         const todayAvgDrc = todayLatexWeight > 0 
-            ? (todayTotalDry / todayLatexWeight) * 100 
+            ? truncateOneDecimal((todayTotalDry / todayLatexWeight) * 100)
             : 0;
 
         const unpaidBills = buys.reduce((count, r) => {

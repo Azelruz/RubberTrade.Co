@@ -54,9 +54,12 @@ const Sell = () => {
             drc: '',
             pricePerKg: '',
             note: '',
-            receiptUrl: ''
+            receiptUrl: '',
+            rubberType: 'latex'
         }
     });
+
+    const watchRubberType = watch('rubberType');
 
     const watchWeight = watch('weight');
     const watchDrc = watch('drc');
@@ -143,11 +146,14 @@ const Sell = () => {
             }
 
             const weight = Number(data.weight);
-            const rawLoss = Number(data.lossWeight || 0);
+            const isCupLump = data.rubberType === 'cup_lump';
+            
+            const rawLoss = isCupLump ? 0 : Number(data.lossWeight || 0);
             const lossWeight = lossSign === 'plus' ? -rawLoss : rawLoss;
-            const drc = Number(data.drc);
+            
+            const drc = isCupLump ? 100 : Number(data.drc);
             const price = Number(data.pricePerKg);
-            const dryRubber = truncateTwoDecimals((weight * drc) / 100);
+            const dryRubber = isCupLump ? weight : truncateTwoDecimals((weight * drc) / 100);
             const total = truncateTwoDecimals(dryRubber * price);
 
             const payload = {
@@ -177,7 +183,8 @@ const Sell = () => {
                 reset({
                     date: format(new Date(), 'yyyy-MM-dd'),
                     lossWeight: '',
-                    note: ''
+                    note: '',
+                    rubberType: data.rubberType || 'latex'
                 });
                 setFactorySearch('');
                 setTruckSearch('');
@@ -217,7 +224,8 @@ const Sell = () => {
             lossWeight: absLoss === 0 ? '' : absLoss,
             pricePerKg: record.pricePerKg,
             note: record.note,
-            receiptUrl: record.receiptUrl || ''
+            receiptUrl: record.receiptUrl || '',
+            rubberType: record.rubberType || 'latex'
         });
 
         setLossSign(lSign);
@@ -289,7 +297,9 @@ const Sell = () => {
     };
 
     const calculateDryRubber = () => {
+        const rubberType = watchRubberType;
         const w = truncateOneDecimal(Number(watchWeight) || 0);
+        if (rubberType === 'cup_lump') return w;
         const d = truncateTwoDecimals(Number(watchDrc) || 0);
         return truncateTwoDecimals((w * d) / 100);
     };
@@ -308,34 +318,53 @@ const Sell = () => {
     });
 
     const stockMetrics = React.useMemo(() => {
-        const buyWeight = allBuys.reduce((sum, item) => {
+        // Buys
+        const latexBuys = allBuys.filter(b => b.rubberType === 'latex' || !b.rubberType);
+        const cupLumpBuys = allBuys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง');
+
+        const buyWeightLatex = latexBuys.reduce((sum, item) => {
             const net = Number(item.netWeight);
             if (!isNaN(net) && net > 0) return sum + net;
             return sum + (Number(item.weight || 0) - Number(item.bucketWeight || 0));
         }, 0);
 
+        const buyWeightCupLump = cupLumpBuys.reduce((sum, item) => {
+            const net = Number(item.netWeight);
+            if (!isNaN(net) && net > 0) return sum + net;
+            return sum + (Number(item.weight || 0) - Number(item.bucketWeight || 0));
+        }, 0);
+
+        // Chemicals (Only for Latex)
         const ammoniaWeight = chemicalUsage.filter(c => c.chemicalId === 'ammonia').reduce((sum, c) => sum + Number(c.amount || 0), 0);
         const waterWeight = chemicalUsage.filter(c => c.chemicalId === 'water').reduce((sum, c) => sum + Number(c.amount || 0), 0);
         const whiteMedWeight = chemicalUsage.filter(c => c.chemicalId === 'whiteMedicine').reduce((sum, c) => sum + Number(c.amount || 0), 0);
 
-        const sellWeight = records.reduce((sum, r) => sum + Number(r.weight || 0), 0);
-        const sellLoss = records.reduce((sum, r) => sum + Number(r.lossWeight || 0), 0);
+        // Sells
+        const sellLatex = records.filter(r => r.rubberType === 'latex' || !r.rubberType);
+        const sellCupLump = records.filter(r => r.rubberType === 'cup_lump');
 
-        const currentStock = truncateOneDecimal(buyWeight + ammoniaWeight + waterWeight + whiteMedWeight - sellWeight - sellLoss);
+        const sellWeightLatex = sellLatex.reduce((sum, r) => sum + Number(r.weight || 0), 0);
+        const sellLossLatex = sellLatex.reduce((sum, r) => sum + Number(r.lossWeight || 0), 0);
 
-        const totalWeightedDrc = allBuys.reduce((sum, b) => {
+        const sellWeightCupLump = sellCupLump.reduce((sum, r) => sum + Number(r.weight || 0), 0);
+
+        const currentStockLatex = truncateOneDecimal(buyWeightLatex + ammoniaWeight + waterWeight + whiteMedWeight - sellWeightLatex - sellLossLatex);
+        const currentStockCupLump = truncateOneDecimal(buyWeightCupLump - sellWeightCupLump);
+
+        // DRC Average (Latex only)
+        const totalWeightedDrc = latexBuys.reduce((sum, b) => {
             const net = Number(b.netWeight);
             const w = (!isNaN(net) && net > 0) ? net : (Number(b.weight || 0) - Number(b.bucketWeight || 0));
             return sum + (w * (Number(b.drc || 0)));
         }, 0);
-        const avgDrc = buyWeight > 0 ? truncateOneDecimal(totalWeightedDrc / buyWeight) : 0;
+        const avgDrc = buyWeightLatex > 0 ? truncateOneDecimal(totalWeightedDrc / buyWeightLatex) : 0;
 
-        return { currentStock, avgDrc };
+        return { currentStock: currentStockLatex, cupLumpStock: currentStockCupLump, avgDrc };
     }, [allBuys, records, chemicalUsage]);
 
     // Auto Adjust Logic
     useEffect(() => {
-        if (isAutoAdjust && watchWeight !== undefined) {
+        if (isAutoAdjust && watchWeight !== undefined && watchRubberType !== 'cup_lump') {
             const currentStock = stockMetrics.currentStock;
             const weightValue = Number(watchWeight) || 0;
             const diff = truncateOneDecimal(currentStock - weightValue);
@@ -350,12 +379,12 @@ const Sell = () => {
                 setValue('lossWeight', 0);
             }
         }
-    }, [isAutoAdjust, watchWeight, stockMetrics.currentStock, setValue]);
+    }, [isAutoAdjust, watchWeight, watchRubberType, stockMetrics.currentStock, setValue]);
 
     return (
         <div className="space-y-6">
             {/* Stock Balance & Avg DRC Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
                 <div className="bg-white rounded-2xl p-5 border border-blue-100 shadow-sm flex items-center group hover:shadow-md transition-all relative overflow-hidden">
                     <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-blue-50 rounded-full group-hover:scale-150 transition-transform duration-700 z-0"></div>
                     <div className="p-4 rounded-xl bg-blue-500 text-white shadow-lg shadow-blue-200 z-10">
@@ -363,8 +392,21 @@ const Sell = () => {
                     </div>
                     <div className="ml-5 z-10">
                         <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-1">สต๊อกน้ำยางคงเหลือ</p>
-                        <h3 className="text-3xl font-black text-gray-900 tracking-tight">
-                            {Number(stockMetrics.currentStock).toLocaleString()} <span className="text-sm font-bold text-gray-400">กก.</span>
+                        <h3 className="text-2xl font-black text-gray-900 tracking-tight">
+                            {Number(stockMetrics.currentStock).toLocaleString()} <span className="text-xs font-bold text-gray-400">กก.</span>
+                        </h3>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-5 border border-indigo-100 shadow-sm flex items-center group hover:shadow-md transition-all relative overflow-hidden">
+                    <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-indigo-50 rounded-full group-hover:scale-150 transition-transform duration-700 z-0"></div>
+                    <div className="p-4 rounded-xl bg-indigo-500 text-white shadow-lg shadow-indigo-200 z-10">
+                        <Coins size={24} />
+                    </div>
+                    <div className="ml-5 z-10">
+                        <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-1">สต๊อกขี้ยางคงเหลือ</p>
+                        <h3 className="text-2xl font-black text-gray-900 tracking-tight">
+                            {Number(stockMetrics.cupLumpStock).toLocaleString()} <span className="text-xs font-bold text-gray-400">กก.</span>
                         </h3>
                     </div>
                 </div>
@@ -376,15 +418,15 @@ const Sell = () => {
                     </div>
                     <div className="ml-5 z-10">
                         <p className="text-[10px] font-black text-cyan-600 uppercase tracking-[0.2em] mb-1">เฉลี่ย % DRC ทั้งหมด</p>
-                        <h3 className="text-3xl font-black text-gray-900 tracking-tight">
-                            {Number(stockMetrics.avgDrc).toLocaleString()}<span className="text-sm font-bold text-gray-400">%</span>
+                        <h3 className="text-2xl font-black text-gray-900 tracking-tight">
+                            {Number(stockMetrics.avgDrc).toLocaleString()}<span className="text-xs font-bold text-gray-400">%</span>
                         </h3>
                     </div>
                 </div>
             </div>
 
             <div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">บันทึกการขายน้ำยาง</h1>
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">บันทึกการขายยางพารา</h1>
                 <p className="text-gray-500 mb-6">บันทึกข้อมูลการขายยางให้โรงงาน/ปลายทาง และแนบหลักฐาน</p>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -398,6 +440,24 @@ const Sell = () => {
                             </h2>
 
                             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                                <div className="flex p-1 bg-gray-100 rounded-lg">
+                                    <button 
+                                        type="button"
+                                        onClick={() => { setValue('rubberType', 'latex'); setIsAutoAdjust(true); }}
+                                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${watchRubberType === 'latex' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        น้ำยางสด
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={() => { setValue('rubberType', 'cup_lump'); setIsAutoAdjust(false); setValue('lossWeight', '0'); }}
+                                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${watchRubberType === 'cup_lump' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        ขี้ยาง
+                                    </button>
+                                </div>
+                                <input type="hidden" {...register('rubberType')} />
+
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">วันที่</label>
                                     <input type="date" {...register('date', { required: true })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500" />
@@ -453,175 +513,200 @@ const Sell = () => {
                                     <input type="hidden" {...register('buyerName', { required: true })} />
                                     <input type="hidden" {...register('factoryId')} />
                                 </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">รถขนส่ง</label>
-                                    <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                            <ChevronDown className="h-4 w-4 text-gray-400" />
-                                        </div>
-                                        <input 
-                                            type="text" 
-                                            value={truckSearch}
-                                            onChange={(e) => {
-                                                setTruckSearch(e.target.value);
-                                                setShowTruckResults(true);
-                                                setValue('truckInfo', e.target.value);
-                                            }}
-                                            onFocus={() => setShowTruckResults(true)}
-                                            onClick={() => setShowTruckResults(true)}
-                                            placeholder="ค้นหาทะเบียนรถ..." 
-                                            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 cursor-pointer" 
-                                        />
-                                        {showTruckResults && (
-                                            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-60 overflow-auto">
-                                                {trucks.filter(t => 
-                                                    !truckSearch || 
-                                                    t.licensePlate?.toLowerCase().includes(truckSearch.toLowerCase()) || 
-                                                    t.brand?.toLowerCase().includes(truckSearch.toLowerCase())
-                                                ).length === 0 ? (
-                                                    <div className="p-4 text-center text-gray-500 text-sm">ไม่พบข้อมูลรถ</div>
-                                                ) : (
-                                                    trucks.filter(t => 
-                                                        !truckSearch ||
-                                                        t.licensePlate?.toLowerCase().includes(truckSearch.toLowerCase()) || 
-                                                        t.brand?.toLowerCase().includes(truckSearch.toLowerCase())
-                                                    ).map(t => (
-                                                        <div 
-                                                            key={t.id}
-                                                            className="px-4 py-3 hover:bg-orange-50 cursor-pointer border-b border-gray-50 last:border-0 group"
-                                                            onClick={() => {
-                                                                setValue('truckInfo', t.licensePlate);
-                                                                setValue('truckId', t.id);
-                                                                setTruckSearch(t.licensePlate);
-                                                                setShowTruckResults(false);
-                                                            }}
-                                                        >
-                                                            <div className="font-black text-gray-900 group-hover:text-orange-700">{t.licensePlate}</div>
-                                                            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">{t.brand} {t.model}</div>
-                                                        </div>
-                                                    ))
+                                {watchRubberType === 'latex' && (
+                                    <>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">รถขนส่ง</label>
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                                                </div>
+                                                <input 
+                                                    type="text" 
+                                                    value={truckSearch}
+                                                    onChange={(e) => {
+                                                        setTruckSearch(e.target.value);
+                                                        setShowTruckResults(true);
+                                                        setValue('truckInfo', e.target.value);
+                                                    }}
+                                                    onFocus={() => setShowTruckResults(true)}
+                                                    placeholder="ค้นหาทะเบียนรถ..." 
+                                                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 cursor-pointer" 
+                                                />
+                                                {showTruckResults && (
+                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-60 overflow-auto">
+                                                        {trucks.filter(t => 
+                                                            !truckSearch || 
+                                                            t.licensePlate?.toLowerCase().includes(truckSearch.toLowerCase()) || 
+                                                            t.brand?.toLowerCase().includes(truckSearch.toLowerCase())
+                                                        ).length === 0 ? (
+                                                            <div className="p-4 text-center text-gray-500 text-sm">ไม่พบข้อมูลรถ</div>
+                                                        ) : (
+                                                            trucks.filter(t => 
+                                                                !truckSearch ||
+                                                                t.licensePlate?.toLowerCase().includes(truckSearch.toLowerCase()) || 
+                                                                t.brand?.toLowerCase().includes(truckSearch.toLowerCase())
+                                                            ).map(t => (
+                                                                <div 
+                                                                    key={t.id}
+                                                                    className="px-4 py-3 hover:bg-orange-50 cursor-pointer border-b border-gray-50 last:border-0 group"
+                                                                    onClick={() => {
+                                                                        setValue('truckInfo', t.licensePlate);
+                                                                        setValue('truckId', t.id);
+                                                                        setTruckSearch(t.licensePlate);
+                                                                        setShowTruckResults(false);
+                                                                    }}
+                                                                >
+                                                                    <div className="font-black text-gray-900 group-hover:text-orange-700">{t.licensePlate}</div>
+                                                                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">{t.brand} {t.model}</div>
+                                                                </div>
+                                                            ))
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
-                                        )}
-                                    </div>
-                                    <input type="hidden" {...register('truckInfo')} />
-                                    <input type="hidden" {...register('truckId')} />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">พนักงานผู้รับผิดชอบ</label>
-                                    <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                                            <input type="hidden" {...register('truckInfo')} />
+                                            <input type="hidden" {...register('truckId')} />
                                         </div>
-                                        <input 
-                                            type="text" 
-                                            value={staffSearch}
-                                            onChange={(e) => {
-                                                setStaffSearch(e.target.value);
-                                                setShowStaffResults(true);
-                                            }}
-                                            onFocus={() => setShowStaffResults(true)}
-                                            onClick={() => setShowStaffResults(true)}
-                                            placeholder="ค้นหาชื่อพนักงาน..." 
-                                            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 cursor-pointer" 
-                                        />
-                                        {showStaffResults && (
-                                            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-60 overflow-auto">
-                                                {staff.filter(s => 
-                                                    !staffSearch || s.name?.toLowerCase().includes(staffSearch.toLowerCase())
-                                                ).length === 0 ? (
-                                                    <div className="p-4 text-center text-gray-500 text-sm">ไม่พบข้อมูลพนักงาน</div>
-                                                ) : (
-                                                    staff.filter(s => 
-                                                        !staffSearch || s.name?.toLowerCase().includes(staffSearch.toLowerCase())
-                                                    ).map(s => (
-                                                        <div 
-                                                            key={s.id}
-                                                            className="px-4 py-3 hover:bg-orange-50 cursor-pointer border-b border-gray-50 last:border-0 group"
-                                                            onClick={() => {
-                                                                setValue('employeeId', s.id);
-                                                                setStaffSearch(s.name);
-                                                                setShowStaffResults(false);
-                                                            }}
-                                                        >
-                                                            <div className="font-black text-gray-900 group-hover:text-orange-700">{s.name}</div>
-                                                            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Phone: {s.phone || '-'}</div>
-                                                        </div>
-                                                    ))
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">พนักงานผู้รับผิดชอบ</label>
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                                                </div>
+                                                <input 
+                                                    type="text" 
+                                                    value={staffSearch}
+                                                    onChange={(e) => {
+                                                        setStaffSearch(e.target.value);
+                                                        setShowStaffResults(true);
+                                                    }}
+                                                    onFocus={() => setShowStaffResults(true)}
+                                                    placeholder="ค้นหาชื่อพนักงาน..." 
+                                                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 cursor-pointer" 
+                                                />
+                                                {showStaffResults && (
+                                                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-60 overflow-auto">
+                                                        {staff.filter(s => 
+                                                            !staffSearch || s.name?.toLowerCase().includes(staffSearch.toLowerCase())
+                                                        ).length === 0 ? (
+                                                            <div className="p-4 text-center text-gray-500 text-sm">ไม่พบข้อมูลพนักงาน</div>
+                                                        ) : (
+                                                            staff.filter(s => 
+                                                                !staffSearch || s.name?.toLowerCase().includes(staffSearch.toLowerCase())
+                                                            ).map(s => (
+                                                                <div 
+                                                                    key={s.id}
+                                                                    className="px-4 py-3 hover:bg-orange-50 cursor-pointer border-b border-gray-50 last:border-0 group"
+                                                                    onClick={() => {
+                                                                        setValue('employeeId', s.id);
+                                                                        setStaffSearch(s.name);
+                                                                        setShowStaffResults(false);
+                                                                    }}
+                                                                >
+                                                                    <div className="font-black text-gray-900 group-hover:text-orange-700">{s.name}</div>
+                                                                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Phone: {s.phone || '-'}</div>
+                                                                </div>
+                                                            ))
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
-                                        )}
-                                    </div>
-                                    <input type="hidden" {...register('employeeId')} />
-                                </div>
+                                            <input type="hidden" {...register('employeeId')} />
+                                        </div>
+                                    </>
+                                )}
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1 font-bold">น้ำหนักรวมขาย (กก.)</label>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <label className="block text-sm font-medium text-gray-700 font-bold">น้ำหนักรวมขาย (กก.)</label>
+                                            <button 
+                                                type="button"
+                                                onClick={() => setValue('weight', watchRubberType === 'cup_lump' ? stockMetrics.cupLumpStock : stockMetrics.currentStock)}
+                                                className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-md font-black hover:bg-gray-200 transition-colors cursor-pointer"
+                                                title="คลิกเพื่อใส่ค่ายอดคงเหลือ"
+                                            >
+                                                คงเหลือ: {(watchRubberType === 'cup_lump' ? stockMetrics.cupLumpStock : stockMetrics.currentStock).toLocaleString()} กก.
+                                            </button>
+                                        </div>
                                         <input type="number" step="0.1" {...register('weight', { required: true })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 font-bold" />
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">DRC (%)</label>
-                                        <input type="number" step="0.01" {...register('drc', { required: true })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500" />
-                                    </div>
-                                </div>
-
-                                <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 border-dashed">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <label className="block text-sm font-bold text-gray-700">ปรับปรุงสต๊อก (Stock Adjustment)</label>
-                                        <button 
-                                            type="button"
-                                            onClick={() => setIsAutoAdjust(!isAutoAdjust)}
-                                            className={`px-2 py-1 rounded text-[10px] font-black transition-all flex items-center gap-1 ${isAutoAdjust ? 'bg-orange-600 text-white' : 'bg-gray-200 text-gray-500'}`}
-                                        >
-                                            {isAutoAdjust ? 'AUTO ON' : 'AUTO OFF'}
-                                        </button>
-                                    </div>
-                                    
-                                    <div className="flex items-center space-x-2 mb-2">
-                                        <button 
-                                            type="button"
-                                            onClick={() => { setLossSign('plus'); setIsAutoAdjust(false); }}
-                                            className={`flex-1 py-1.5 rounded-md text-[11px] font-black transition-all ${lossSign === 'plus' ? 'bg-green-600 text-white shadow-sm ring-2 ring-green-100' : 'bg-white text-gray-400 border border-gray-200 hover:bg-gray-50'}`}
-                                        >
-                                            + เพิ่มสต๊อก
-                                        </button>
-                                        <button 
-                                            type="button"
-                                            onClick={() => { setLossSign('minus'); setIsAutoAdjust(false); }}
-                                            className={`flex-1 py-1.5 rounded-md text-[11px] font-black transition-all ${lossSign === 'minus' ? 'bg-red-600 text-white shadow-sm ring-2 ring-red-100' : 'bg-white text-gray-400 border border-gray-200 hover:bg-gray-50'}`}
-                                        >
-                                            - ลดสต๊อก (สูญเสีย)
-                                        </button>
-                                    </div>
-
-                                    <div className="relative">
-                                        <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none font-bold ${lossSign === 'plus' ? 'text-green-600' : 'text-red-600'}`}>
-                                            {lossSign === 'plus' ? '+' : '-'}
+                                    {watchRubberType === 'latex' && (
+                                        <div>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <label className="block text-sm font-medium text-gray-700">DRC (%)</label>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setValue('drc', stockMetrics.avgDrc)}
+                                                    className="text-[10px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded-md font-black hover:bg-orange-100 transition-colors cursor-pointer"
+                                                    title="คลิกเพื่อใช้ค่า DRC เฉลี่ย"
+                                                >
+                                                    เฉลี่ย: {stockMetrics.avgDrc.toFixed(2)}%
+                                                </button>
+                                            </div>
+                                            <input type="number" step="0.01" {...register('drc', { required: true })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500" />
                                         </div>
-                                        <input 
-                                            type="number" 
-                                            step="0.1" 
-                                            {...register('lossWeight')} 
-                                            readOnly={isAutoAdjust}
-                                            placeholder="กรอกน้ำหนัก (กก.)"
-                                            className={`w-full pl-8 pr-3 py-2 border rounded-lg focus:ring-opacity-50 font-bold transition-colors ${
-                                                isAutoAdjust ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200' :
-                                                lossSign === 'plus' 
-                                                    ? 'border-green-200 focus:ring-green-500 focus:border-green-500 bg-white text-green-700' 
-                                                    : 'border-red-200 focus:ring-red-500 focus:border-red-500 bg-white text-red-700'
-                                            }`} 
-                                        />
-                                    </div>
-                                    <p className="text-[10px] text-gray-400 mt-2">
-                                        {isAutoAdjust ? `* คำนวณอัตโนมัติเพื่อให้สต๊อกเหลือ 0 กก.` : `* ใช้สำหรับปรับยอดคงเหลือให้ตรงกับหน้างานจริง`}
-                                    </p>
+                                    )}
                                 </div>
+
+                                {watchRubberType === 'latex' && (
+                                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 border-dashed">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <label className="block text-sm font-bold text-gray-700">ปรับปรุงสต๊อก (Stock Adjustment)</label>
+                                            <button 
+                                                type="button"
+                                                onClick={() => setIsAutoAdjust(!isAutoAdjust)}
+                                                className={`px-2 py-1 rounded text-[10px] font-black transition-all flex items-center gap-1 ${isAutoAdjust ? 'bg-orange-600 text-white' : 'bg-gray-200 text-gray-500'}`}
+                                            >
+                                                {isAutoAdjust ? 'AUTO ON' : 'AUTO OFF'}
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="flex items-center space-x-2 mb-2">
+                                            <button 
+                                                type="button"
+                                                onClick={() => { setLossSign('plus'); setIsAutoAdjust(false); }}
+                                                className={`flex-1 py-1.5 rounded-md text-[11px] font-black transition-all ${lossSign === 'plus' ? 'bg-green-600 text-white shadow-sm ring-2 ring-green-100' : 'bg-white text-gray-400 border border-gray-200 hover:bg-gray-50'}`}
+                                            >
+                                                + เพิ่มสต๊อก
+                                            </button>
+                                            <button 
+                                                type="button"
+                                                onClick={() => { setLossSign('minus'); setIsAutoAdjust(false); }}
+                                                className={`flex-1 py-1.5 rounded-md text-[11px] font-black transition-all ${lossSign === 'minus' ? 'bg-red-600 text-white shadow-sm ring-2 ring-red-100' : 'bg-white text-gray-400 border border-gray-200 hover:bg-gray-50'}`}
+                                            >
+                                                - ลดสต๊อก (สูญเสีย)
+                                            </button>
+                                        </div>
+
+                                        <div className="relative">
+                                            <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none font-bold ${lossSign === 'plus' ? 'text-green-600' : 'text-red-600'}`}>
+                                                {lossSign === 'plus' ? '+' : '-'}
+                                            </div>
+                                            <input 
+                                                type="number" 
+                                                step="0.1" 
+                                                {...register('lossWeight')} 
+                                                readOnly={isAutoAdjust}
+                                                placeholder="กรอกน้ำหนัก (กก.)"
+                                                className={`w-full pl-8 pr-3 py-2 border rounded-lg focus:ring-opacity-50 font-bold transition-colors ${
+                                                    isAutoAdjust ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200' :
+                                                    lossSign === 'plus' 
+                                                        ? 'border-green-200 focus:ring-green-500 focus:border-green-500 bg-white text-green-700' 
+                                                        : 'border-red-200 focus:ring-red-500 focus:border-red-500 bg-white text-red-700'
+                                                }`} 
+                                            />
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 mt-2">
+                                            {isAutoAdjust ? `* คำนวณอัตโนมัติเพื่อให้สต๊อกเหลือ 0 กก.` : `* ใช้สำหรับปรับยอดคงเหลือให้ตรงกับหน้างานจริง`}
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">ราคาที่ขายได้ (บาท/กก. ยางแห้ง)</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">{watchRubberType === 'cup_lump' ? 'ราคาขายขี้ยาง (บาท/กก.)' : 'ราคาขายน้ำยาง (บาท/กก. ยางแห้ง)'}</label>
                                     <input type="number" step="0.01" {...register('pricePerKg', { required: true })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500" />
                                 </div>
 
@@ -658,9 +743,9 @@ const Sell = () => {
                                     </div>
                                 </div>
 
-                                <div className="bg-orange-50 p-4 rounded-lg border border-orange-100 mt-6 space-y-2">
+                                <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 mt-6 space-y-2">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm text-orange-800">น้ำยางแห้งรวม:</span>
+                                        <span className="text-sm text-orange-800">{watchRubberType === 'cup_lump' ? 'น้ำหนักขี้ยางรวม:' : 'น้ำยางแห้งรวม:'}</span>
                                         <span className="font-bold text-orange-900">{calculateDryRubber().toLocaleString()} กก.</span>
                                     </div>
                                     <div className="flex justify-between items-center pt-2 border-t border-orange-200">
@@ -743,12 +828,35 @@ const Sell = () => {
                                             {filteredRecords.map((record) => (
                                                 <tr key={record.id} className="hover:bg-gray-50 transition-colors text-sm">
                                                     <td className="p-3">
-                                                        <div className="font-bold text-gray-900">{record.buyerName}</div>
-                                                        <div className="text-xs text-gray-500">{record.truckInfo}</div>
+                                                        <div className="flex items-center gap-2">
+                                                            {record.rubberType === 'cup_lump' ? (
+                                                                <div className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px] font-black border border-indigo-100 whitespace-nowrap">
+                                                                    ขี้ยาง
+                                                                </div>
+                                                            ) : (
+                                                                <div className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-black border border-blue-100 whitespace-nowrap">
+                                                                    น้ำยางสด
+                                                                </div>
+                                                            )}
+                                                            <div>
+                                                                <div className="font-bold text-gray-900 leading-tight">{record.buyerName}</div>
+                                                                <div className="text-[10px] text-gray-500">{record.truckInfo}</div>
+                                                            </div>
+                                                        </div>
                                                     </td>
                                                     <td className="p-3 text-center">
-                                                        <div className="font-medium">{(truncateTwoDecimals(record.weight * record.drc / 100)).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} กก.</div>
-                                                        <div className="text-[10px] text-gray-400">{record.weight} กก. @ {record.drc.toFixed(2)}%</div>
+                                                        <div className="font-medium">
+                                                            {record.rubberType === 'cup_lump' 
+                                                                ? `${Number(record.weight || 0).toLocaleString()} กก.`
+                                                                : `${(truncateTwoDecimals(record.weight * record.drc / 100)).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} กก.`
+                                                            }
+                                                        </div>
+                                                        <div className="text-[10px] text-gray-400">
+                                                            {record.rubberType === 'cup_lump' 
+                                                                ? 'ขี้ยาง 100%' 
+                                                                : `${record.weight} กก. @ ${record.drc?.toFixed(2)}%`
+                                                            }
+                                                        </div>
                                                     </td>
                                                     <td className="p-3 text-center">
                                                         <div className="font-black text-orange-600">฿{record.total?.toLocaleString()}</div>

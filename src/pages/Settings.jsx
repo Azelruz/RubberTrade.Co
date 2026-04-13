@@ -73,10 +73,12 @@ export const Settings = () => {
     const [showFarmerForm, setShowFarmerForm] = useState(false);
     const [editingFarmer, setEditingFarmer] = useState(null);
     const [showEmployeeForm, setShowEmployeeForm] = useState(false);
+    const [editingEmployee, setEditingEmployee] = useState(null);
 
     // Staff State
     const [staffList, setStaffList] = useState([]);
     const [showStaffForm, setShowStaffForm] = useState(false);
+    const [editingStaff, setEditingStaff] = useState(null);
 
     // Factory State
     const [factories, setFactories] = useState([]);
@@ -407,40 +409,105 @@ export const Settings = () => {
         }
     };
 
-    const onAddEmployee = async (data) => {
+    const onSubmitEmployee = async (data) => {
         setSaving(true);
         try {
-            const res = await addEmployee(data);
-            if (res.status === 'success') {
-                toast.success('เพิ่มข้อมูลลูกจ้างสำเร็จ');
-                employeeForm.reset();
-                setShowEmployeeForm(false);
-                loadData();
+            let res;
+            if (editingEmployee) {
+                res = await updateRecord('employees', editingEmployee.id, data);
+                if (res.status === 'success') {
+                    toast.success('แก้ไขข้อมูลลูกจ้างสำเร็จ');
+                    setEditingEmployee(null);
+                    employeeForm.reset();
+                    setShowEmployeeForm(false);
+                    loadData();
+                }
+            } else {
+                res = await addEmployee(data);
+                if (res.status === 'success') {
+                    toast.success('เพิ่มข้อมูลลูกจ้างสำเร็จ');
+                    employeeForm.reset();
+                    setShowEmployeeForm(false);
+                    loadData();
+                }
             }
         } catch (err) {
-            toast.error('บันทึกล้มเหลว');
+            toast.error(editingEmployee ? 'แก้ไขข้อมูลล้มเหลว' : 'บันทึกล้มเหลว');
         } finally {
             setSaving(false);
         }
     };
 
-    const onAddStaff = async (data) => {
+    const handleEditEmployee = (emp) => {
+        setEditingEmployee(emp);
+        setShowEmployeeForm(true);
+        employeeForm.reset({
+            name: emp.name,
+            farmerId: emp.farmerId,
+            profitSharePct: emp.profitSharePct,
+            phone: emp.phone,
+            bankAccount: emp.bankAccount,
+            bankName: emp.bankName
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelEmployeeEdit = () => {
+        setEditingEmployee(null);
+        employeeForm.reset();
+        setShowEmployeeForm(false);
+    };
+
+    const onSubmitStaff = async (data) => {
         setSaving(true);
         try {
-            const res = await addStaff(data);
-            if (res.status === 'success') {
-                toast.success('เพิ่มพนักงานสำเร็จ');
-                staffForm.reset();
-                setShowStaffForm(false);
-                loadData();
+            let res;
+            if (editingStaff) {
+                res = await updateRecord('staff', editingStaff.id, data);
+                if (res.status === 'success') {
+                    toast.success('แก้ไขพนักงานสำเร็จ');
+                    setEditingStaff(null);
+                    staffForm.reset();
+                    setShowStaffForm(false);
+                    loadData();
+                }
             } else {
-                toast.error(res.message || 'บันทึกล้มเหลว');
+                res = await addStaff(data);
+                if (res.status === 'success') {
+                    toast.success('เพิ่มพนักงานสำเร็จ');
+                    staffForm.reset();
+                    setShowStaffForm(false);
+                    loadData();
+                } else {
+                    toast.error(res.message || 'บันทึกล้มเหลว');
+                }
             }
         } catch (err) {
-            toast.error('บันทึกล้มเหลว: ' + err.message);
+            toast.error(editingStaff ? 'แก้ไขข้อมูลล้มเหลว' : 'บันทึกล้มเหลว: ' + err.message);
         } finally {
             setSaving(false);
         }
+    };
+
+    const handleEditStaff = (staff) => {
+        setEditingStaff(staff);
+        setShowStaffForm(true);
+        staffForm.reset({
+            name: staff.name,
+            phone: staff.phone,
+            address: staff.address,
+            salary: staff.salary,
+            bonus: staff.bonus,
+            note: staff.note
+        });
+        document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelStaffEdit = () => {
+        setEditingStaff(null);
+        staffForm.reset();
+        setShowStaffForm(false);
     };
 
     const onSubmitFactory = async (data) => {
@@ -516,12 +583,14 @@ export const Settings = () => {
             fscId: farmer.fscId || '',
             memberTypeId: farmer.memberTypeId || ''
         });
+        document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleEditFactory = (factory) => {
         setEditingFactory(factory);
         setShowFactoryForm(true);
+        document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -743,6 +812,7 @@ export const Settings = () => {
                         <UserManagement
                             farmers={farmers}
                             employees={employees}
+                            memberTypes={memberTypes}
                             loading={loading}
                             saving={saving}
                             loadData={loadData}
@@ -756,9 +826,11 @@ export const Settings = () => {
                             handleDelete={handleDelete}
                             showEmployeeForm={showEmployeeForm}
                             setShowEmployeeForm={setShowEmployeeForm}
+                            editingEmployee={editingEmployee}
+                            handleEditEmployee={handleEditEmployee}
+                            handleCancelEmployeeEdit={handleCancelEmployeeEdit}
                             employeeForm={employeeForm}
-                            onAddEmployee={onAddEmployee}
-                            memberTypes={memberTypes}
+                            onSubmitEmployee={onSubmitEmployee}
                             addMemberType={addMemberType}
                             deleteMemberType={deleteMemberType}
                         />
@@ -772,8 +844,11 @@ export const Settings = () => {
                             showStaffForm={showStaffForm}
                             setShowStaffForm={setShowStaffForm}
                             staffForm={staffForm}
-                            onAddStaff={onAddStaff}
+                            onSubmitStaff={onSubmitStaff}
                             handleDelete={handleDelete}
+                            editingStaff={editingStaff}
+                            onEditStaff={handleEditStaff}
+                            onCancelEdit={handleCancelStaffEdit}
                         />
                     )}
 

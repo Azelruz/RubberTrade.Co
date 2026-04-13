@@ -122,8 +122,8 @@ export const Report = () => {
             return isWithinInterval(parseISO(item.date || item.timestamp), { start, end });
         };
 
-        const periodBuys = buys.filter(filterFn);
-        const periodSells = sells.filter(filterFn);
+        const periodBuys = buys.filter(b => filterFn(b) && (b.rubberType === 'latex' || !b.rubberType));
+        const periodSells = sells.filter(s => filterFn(s) && (s.rubberType === 'latex' || !s.rubberType));
 
         const buyTotal = truncateOneDecimal(periodBuys.reduce((sum, item) => sum + Number(item.total || 0), 0));
         const buyWeight = truncateOneDecimal(periodBuys.reduce((sum, item) => {
@@ -157,8 +157,8 @@ export const Report = () => {
         const chartData = Object.values(dailyMap);
 
         // Period Forecast summary (fStart/fEnd)
-        const periodForecastBuys = buys.filter(b => b.date >= fStart && b.date <= fEnd);
-        const periodForecastSells = sells.filter(s => s.date >= fStart && s.date <= fEnd);
+        const periodForecastBuys = buys.filter(b => b.date >= fStart && b.date <= fEnd && (b.rubberType === 'latex' || !b.rubberType));
+        const periodForecastSells = sells.filter(s => s.date >= fStart && s.date <= fEnd && (s.rubberType === 'latex' || !s.rubberType));
         
         const fBuyWeight = truncateOneDecimal(periodForecastBuys.reduce((sum, b) => sum + (Number(b.weight || 0) - Number(b.bucketWeight || 0)), 0));
         const fBuyTotal = truncateOneDecimal(periodForecastBuys.reduce((sum, b) => sum + Number(b.total || 0), 0));

@@ -19,7 +19,7 @@ const DailySummaryReport = () => {
     const [loading, setLoading] = useState(true);
     const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-    const [activeTab, setActiveTab] = useState('buys'); // buys, sells, expenses
+    const [activeTab, setActiveTab] = useState('buys_latex'); // buys_latex, buys_cup_lump, sells, expenses
     
     const [buys, setBuys] = useState([]);
     const [sells, setSells] = useState([]);
@@ -83,51 +83,66 @@ const DailySummaryReport = () => {
         let filename = `Report_${startDate}_to_${endDate}_${activeTab}.csv`;
         let headers = [];
 
-        if (activeTab === 'buys') {
-            headers = ['เกษตรกร', 'รหัส', 'น้ำหนักรวม', 'ถัง', 'น้ำหนักสุทธิ', '%DRC', 'ยางแห้ง', 'ราคาซื้อ', 'ยอดเงินรวม', 'แบ่งเกษตรกร', 'ยอดเกษตรกร', 'แบ่งลูกจ้าง', 'ยอดลูกจ้าง'];
-            data = dailyData.buys.map(b => [
-                b.farmerName,
-                b.farmerId || '-',
-                b.weight,
-                b.bucketWeight || 0,
-                Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0))),
-                b.drc,
-                b.dryRubber || b.dryWeight || 0,
-                b.pricePerKg,
-                b.total,
-                `${100 - (Number(b.empPct) || 0)}%`,
-                b.farmerTotal,
-                `${b.empPct || 0}%`,
-                b.employeeTotal
-            ]);
-            // Calculate Totals for CSV
-            const totalWeight = dailyData.buys.reduce((sum, b) => sum + Number(b.weight || 0), 0);
-            const totalBucket = dailyData.buys.reduce((sum, b) => sum + Number(b.bucketWeight || 0), 0);
-            const totalNet = dailyData.buys.reduce((sum, b) => sum + Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0))), 0);
-            const totalDry = dailyData.buys.reduce((sum, b) => sum + Number(b.dryRubber || b.dryWeight || 0), 0);
-            const totalValue = dailyData.buys.reduce((sum, b) => sum + Number(b.total || 0), 0);
-            const totalFarmer = dailyData.buys.reduce((sum, b) => sum + Number(b.farmerTotal || 0), 0);
-            const totalEmp = dailyData.buys.reduce((sum, b) => sum + Number(b.employeeTotal || 0), 0);
-            
-            const avgDrc = totalNet > 0 ? (totalDry / totalNet) * 100 : 0;
-            const avgPrice = totalDry > 0 ? (totalValue / totalDry) : 0;
+        if (activeTab === 'buys_latex' || activeTab === 'buys_cup_lump') {
+            const isCupLumpTab = activeTab === 'buys_cup_lump';
+            const filteredBuys = dailyData.buys.filter(b => {
+                const type = b.rubberType || 'latex';
+                return isCupLumpTab ? (type === 'cup_lump' || type === 'ขี้ยาง') : (type === 'latex');
+            });
 
-            const totalRow = [
-                'รวม/เฉลี่ย',
-                '-',
-                totalWeight,
-                totalBucket,
-                totalNet,
-                avgDrc.toFixed(1) + '%',
-                totalDry,
-                avgPrice.toFixed(1),
-                totalValue,
-                '-',
-                totalFarmer,
-                '-',
-                totalEmp
-            ];
-            data.push(totalRow);
+            if (isCupLumpTab) {
+                headers = ['เกษตรกร', 'รหัส', 'น้ำหนักรวม', 'ถัง', 'น้ำหนักสุทธิ', 'ราคาซื้อ', 'ยอดเงินรวม', 'แบ่งเกษตรกร', 'ยอดเกษตรกร', 'แบ่งลูกจ้าง', 'ยอดลูกจ้าง'];
+                data = filteredBuys.map(b => [
+                    b.farmerName,
+                    b.farmerId || '-',
+                    b.weight,
+                    b.bucketWeight || 0,
+                    Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0))),
+                    b.pricePerKg,
+                    b.total,
+                    `${100 - (Number(b.empPct) || 0)}%`,
+                    b.farmerTotal,
+                    `${b.empPct || 0}%`,
+                    b.employeeTotal
+                ]);
+                
+                const totalWeight = filteredBuys.reduce((sum, b) => sum + Number(b.weight || 0), 0);
+                const totalNet = filteredBuys.reduce((sum, b) => sum + Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0))), 0);
+                const totalValue = filteredBuys.reduce((sum, b) => sum + Number(b.total || 0), 0);
+                const totalFarmer = filteredBuys.reduce((sum, b) => sum + Number(b.farmerTotal || 0), 0);
+                const totalEmp = filteredBuys.reduce((sum, b) => sum + Number(b.employeeTotal || 0), 0);
+
+                data.push(['รวม', '-', totalWeight, '-', totalNet, '-', totalValue, '-', totalFarmer, '-', totalEmp]);
+            } else {
+                headers = ['เกษตรกร', 'รหัส', 'น้ำหนักรวม', 'ถัง', 'น้ำหนักสุทธิ', '%DRC', 'ยางแห้ง', 'ราคาซื้อ', 'ยอดเงินรวม', 'แบ่งเกษตรกร', 'ยอดเกษตรกร', 'แบ่งลูกจ้าง', 'ยอดลูกจ้าง'];
+                data = filteredBuys.map(b => [
+                    b.farmerName,
+                    b.farmerId || '-',
+                    b.weight,
+                    b.bucketWeight || 0,
+                    Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0))),
+                    b.drc,
+                    b.dryRubber || b.dryWeight || 0,
+                    b.pricePerKg,
+                    b.total,
+                    `${100 - (Number(b.empPct) || 0)}%`,
+                    b.farmerTotal,
+                    `${b.empPct || 0}%`,
+                    b.employeeTotal
+                ]);
+
+                const totalWeight = filteredBuys.reduce((sum, b) => sum + Number(b.weight || 0), 0);
+                const totalNet = filteredBuys.reduce((sum, b) => sum + Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0))), 0);
+                const totalDry = filteredBuys.reduce((sum, b) => sum + Number(b.dryRubber || b.dryWeight || 0), 0);
+                const totalValue = filteredBuys.reduce((sum, b) => sum + Number(b.total || 0), 0);
+                const totalFarmer = filteredBuys.reduce((sum, b) => sum + Number(b.farmerTotal || 0), 0);
+                const totalEmp = filteredBuys.reduce((sum, b) => sum + Number(b.employeeTotal || 0), 0);
+                
+                const avgDrc = totalNet > 0 ? (totalDry / totalNet) * 100 : 0;
+                const avgPrice = totalDry > 0 ? (totalValue / totalDry) : 0;
+
+                data.push(['รวม/เฉลี่ย', '-', totalWeight, '-', totalNet, avgDrc.toFixed(1) + '%', totalDry, avgPrice.toFixed(1), totalValue, '-', totalFarmer, '-', totalEmp]);
+            }
         } else if (activeTab === 'sells') {
             headers = ['ผู้ซื้อ', 'รถขนส่ง', 'น้ำหนักรวม', 'DRC', 'น้ำยางแห้ง', 'ราคาขาย', 'ยอดขายสุทธิ'];
             data = dailyData.sells.map(s => [
@@ -174,7 +189,8 @@ const DailySummaryReport = () => {
     };
 
     const tabs = [
-        { id: 'buys', name: 'ยอดรับซื้อ', icon: <Droplets size={18} /> },
+        { id: 'buys_latex', name: 'น้ำยางสด', icon: <Droplets size={18} /> },
+        { id: 'buys_cup_lump', name: 'ขี้ยาง', icon: <Droplets size={18} className="text-orange-500" /> },
         { id: 'sells', name: 'ยอดขาย', icon: <Truck size={18} /> },
         { id: 'expenses', name: 'รายจ่าย', icon: <Wallet size={18} /> }
     ];
@@ -250,7 +266,7 @@ const DailySummaryReport = () => {
 
             {/* Tab Content */}
             <div className="bg-white rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 overflow-hidden transition-all">
-                {activeTab === 'buys' && (
+                {activeTab === 'buys_latex' && (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left border-collapse">
                             <thead className="bg-[#1e293b] text-white font-bold">
@@ -270,12 +286,16 @@ const DailySummaryReport = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {dailyData.buys.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="12" className="px-5 py-20 text-center text-gray-400 font-medium">ไม่พบข้อมูลการรับซื้อในวันที่เลือก</td>
-                                    </tr>
-                                ) : (
-                                    dailyData.buys.map((b, idx) => {
+                                {(() => {
+                                    const filtered = dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex');
+                                    if (filtered.length === 0) {
+                                        return (
+                                            <tr>
+                                                <td colSpan="12" className="px-5 py-20 text-center text-gray-400 font-medium">ไม่พบข้อมูลการรับซื้อน้ำยางสดในวันที่เลือก</td>
+                                            </tr>
+                                        );
+                                    }
+                                    return filtered.map((b, idx) => {
                                         const netWeight = Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0)));
                                         const farmerPct = 100 - (Number(b.empPct) || 0);
                                         return (
@@ -296,60 +316,135 @@ const DailySummaryReport = () => {
                                                 <td className="px-5 py-4 text-right text-gray-500 font-mono font-bold">฿{Number(b.pricePerKg || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
                                                 <td className="px-5 py-4 text-right font-black text-gray-900 font-mono bg-rubber-50/30">฿{Number(b.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
                                                 <td className="px-5 py-4 text-right text-[10px] text-gray-400 font-black">{farmerPct}%</td>
-                                                <td className="px-5 py-4 text-right font-black text-emerald-700 font-mono bg-emerald-50/30 animate-pulse-subtle">฿{Number(b.farmerTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                <td className="px-5 py-4 text-right font-black text-emerald-700 font-mono bg-emerald-50/30">฿{Number(b.farmerTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
                                                 <td className="px-5 py-4 text-right text-[10px] text-gray-400 font-black">{Number(b.empPct || 0)}%</td>
                                                 <td className="px-5 py-4 text-right font-black text-orange-700 font-mono bg-orange-50/30">฿{Number(b.employeeTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
                                             </tr>
                                         );
-                                    })
-                                )}
+                                    });
+                                })()}
                             </tbody>
-                            {dailyData.buys.length > 0 && (
-                                <tfoot className="bg-gray-900 text-white font-black border-t-4 border-rubber-600">
-                                    <tr className="divide-x divide-white/10 uppercase text-sm tracking-tight">
-                                        {(() => {
-                                            const totalWeight = dailyData.buys.reduce((sum, b) => sum + Number(b.weight || 0), 0);
-                                            const totalBucket = dailyData.buys.reduce((sum, b) => sum + Number(b.bucketWeight || 0), 0);
-                                            const totalNet = dailyData.buys.reduce((sum, b) => sum + Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0))), 0);
-                                            const totalDry = dailyData.buys.reduce((sum, b) => sum + Number(b.dryRubber || b.dryWeight || 0), 0);
-                                            const totalValue = dailyData.buys.reduce((sum, b) => sum + Number(b.total || 0), 0);
-                                            const totalFarmer = dailyData.buys.reduce((sum, b) => sum + Number(b.farmerTotal || 0), 0);
-                                            const totalEmp = dailyData.buys.reduce((sum, b) => sum + Number(b.employeeTotal || 0), 0);
-                                            
-                                            // Averages (Weighted)
-                                            const avgDrc = totalNet > 0 ? (totalDry / totalNet) * 100 : 0;
-                                            const avgPrice = totalDry > 0 ? (totalValue / totalDry) : 0;
+                            <tfoot className="bg-gray-900 text-white font-black border-t-4 border-rubber-600">
+                                {(() => {
+                                    const filtered = dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex');
+                                    if (filtered.length === 0) return null;
+                                    
+                                    const totalWeight = filtered.reduce((sum, b) => sum + Number(b.weight || 0), 0);
+                                    const totalBucket = filtered.reduce((sum, b) => sum + Number(b.bucketWeight || 0), 0);
+                                    const totalNet = filtered.reduce((sum, b) => sum + Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0))), 0);
+                                    const totalDry = filtered.reduce((sum, b) => sum + Number(b.dryRubber || b.dryWeight || 0), 0);
+                                    const totalValue = filtered.reduce((sum, b) => sum + Number(b.total || 0), 0);
+                                    const totalFarmer = filtered.reduce((sum, b) => sum + Number(b.farmerTotal || 0), 0);
+                                    const totalEmp = filtered.reduce((sum, b) => sum + Number(b.employeeTotal || 0), 0);
+                                    
+                                    const avgDrc = totalNet > 0 ? (totalDry / totalNet) * 100 : 0;
+                                    const avgPrice = totalDry > 0 ? (totalValue / totalDry) : 0;
 
-                                            return (
-                                                <>
-                                                    <td className="px-5 py-5 text-rubber-400">ยอดรวม {dailyData.buys.length} บิล</td>
-                                                    <td className="px-5 py-5 text-right font-mono text-gray-400">{totalWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                    <td className="px-5 py-5 text-right font-mono text-red-400">-{totalBucket.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                    <td className="px-5 py-5 text-right font-mono text-white bg-gray-800">
-                                                        {totalNet.toLocaleString(undefined, { minimumFractionDigits: 1 })}
-                                                    </td>
-                                                    <td className="px-5 py-5 text-center">
-                                                        <div className="text-[10px] text-gray-400 leading-none mb-1">เฉลี่ย</div>
-                                                        <span className="text-blue-300">{avgDrc.toLocaleString(undefined, { minimumFractionDigits: 1 })}%</span>
-                                                    </td>
-                                                    <td className="px-5 py-5 text-right font-mono text-blue-400 bg-blue-900/50">
-                                                        {totalDry.toLocaleString(undefined, { minimumFractionDigits: 1 })} 
-                                                    </td>
-                                                    <td className="px-5 py-5 text-right">
-                                                        <div className="text-[10px] text-gray-400 leading-none mb-1">เฉลี่ย</div>
-                                                        <span className="text-gray-300">฿{avgPrice.toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
-                                                    </td>
-                                                    <td className="px-5 py-5 text-right font-mono text-rubber-400">฿{totalValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                    <td className="px-5 py-5"></td>
-                                                    <td className="px-5 py-5 text-right font-mono text-emerald-400 bg-emerald-900/50">฿{totalFarmer.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                    <td className="px-5 py-5"></td>
-                                                    <td className="px-5 py-5 text-right font-mono text-orange-400 bg-orange-900/50">฿{totalEmp.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                </>
-                                            );
-                                        })()}
-                                    </tr>
-                                </tfoot>
-                            )}
+                                    return (
+                                        <tr className="divide-x divide-white/10 uppercase text-sm tracking-tight">
+                                            <td className="px-5 py-5 text-rubber-400">ยอดรวม {filtered.length} บิล</td>
+                                            <td className="px-5 py-5 text-right font-mono text-gray-400">{totalWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-5 py-5 text-right font-mono text-red-400">-{totalBucket.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-5 py-5 text-right font-mono text-white bg-gray-800">{totalNet.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-5 py-5 text-center">
+                                                <div className="text-[10px] text-gray-400 leading-none mb-1">เฉลี่ย</div>
+                                                <span className="text-blue-300">{avgDrc.toLocaleString(undefined, { minimumFractionDigits: 1 })}%</span>
+                                            </td>
+                                            <td className="px-5 py-5 text-right font-mono text-blue-400 bg-blue-900/50">{totalDry.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-5 py-5 text-right">
+                                                <div className="text-[10px] text-gray-400 leading-none mb-1">เฉลี่ย</div>
+                                                <span className="text-gray-300">฿{avgPrice.toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
+                                            </td>
+                                            <td className="px-5 py-5 text-right font-mono text-rubber-400">฿{totalValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-5 py-5"></td>
+                                            <td className="px-5 py-5 text-right font-mono text-emerald-400 bg-emerald-900/50">฿{totalFarmer.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-5 py-5"></td>
+                                            <td className="px-5 py-5 text-right font-mono text-orange-400 bg-orange-900/50">฿{totalEmp.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                        </tr>
+                                    );
+                                })()}
+                            </tfoot>
+                        </table>
+                    </div>
+                )}
+
+                {activeTab === 'buys_cup_lump' && (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left border-collapse">
+                            <thead className="bg-[#1e293b] text-white font-bold">
+                                <tr>
+                                    <th className="px-5 py-5 border-r border-white/10">เกษตรกร</th>
+                                    <th className="px-5 py-5 text-right border-r border-white/10">น้ำหนักขี้ยาง</th>
+                                    <th className="px-5 py-5 text-right border-r border-white/10">ถัง</th>
+                                    <th className="px-5 py-5 text-right border-r border-white/10 bg-[#334155]">สุทธิ</th>
+                                    <th className="px-5 py-5 text-right border-r border-white/10">ราคาคซื้อ</th>
+                                    <th className="px-5 py-5 text-right border-r border-white/10 bg-rubber-600">ยอดเงินรวม</th>
+                                    <th className="px-5 py-5 text-right border-r border-white/10">แบ่ง%</th>
+                                    <th className="px-5 py-5 text-right border-r border-white/10 bg-emerald-600">ยอดเกษตรกร</th>
+                                    <th className="px-5 py-5 text-right border-r border-white/10">แบ่ง%</th>
+                                    <th className="px-5 py-5 text-right bg-orange-600">ยอดลูกจ้าง</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {(() => {
+                                    const filtered = dailyData.buys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง');
+                                    if (filtered.length === 0) {
+                                        return (
+                                            <tr>
+                                                <td colSpan="10" className="px-5 py-20 text-center text-gray-400 font-medium">ไม่พบข้อมูลการรับซื้อขี้ยางในวันที่เลือก</td>
+                                            </tr>
+                                        );
+                                    }
+                                    return filtered.map((b, idx) => {
+                                        const netWeight = Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0)));
+                                        const farmerPct = 100 - (Number(b.empPct) || 0);
+                                        return (
+                                            <tr key={b.id || idx} className="hover:bg-gray-50/80 transition-colors group">
+                                                <td className="px-5 py-4 border-r border-gray-50">
+                                                    <div className="font-black text-gray-900">{b.farmerName}</div>
+                                                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">ID: {b.farmerId || '-'}</div>
+                                                </td>
+                                                <td className="px-5 py-4 text-right font-mono font-bold text-gray-600">{Number(b.weight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                <td className="px-5 py-4 text-right font-mono text-red-500 font-medium">-{Number(b.bucketWeight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                <td className="px-5 py-4 text-right font-black text-gray-900 font-mono bg-gray-50/50">{netWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                <td className="px-5 py-4 text-right text-gray-500 font-mono font-bold">฿{Number(b.pricePerKg || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                <td className="px-5 py-4 text-right font-black text-gray-900 font-mono bg-rubber-50/30">฿{Number(b.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                <td className="px-5 py-4 text-right text-[10px] text-gray-400 font-black">{farmerPct}%</td>
+                                                <td className="px-5 py-4 text-right font-black text-emerald-700 font-mono bg-emerald-50/30">฿{Number(b.farmerTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                <td className="px-5 py-4 text-right text-[10px] text-gray-400 font-black">{Number(b.empPct || 0)}%</td>
+                                                <td className="px-5 py-4 text-right font-black text-orange-700 font-mono bg-orange-50/30">฿{Number(b.employeeTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            </tr>
+                                        );
+                                    });
+                                })()}
+                            </tbody>
+                            <tfoot className="bg-gray-900 text-white font-black border-t-4 border-rubber-600">
+                                {(() => {
+                                    const filtered = dailyData.buys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง');
+                                    if (filtered.length === 0) return null;
+                                    
+                                    const totalWeight = filtered.reduce((sum, b) => sum + Number(b.weight || 0), 0);
+                                    const totalBucket = filtered.reduce((sum, b) => sum + Number(b.bucketWeight || 0), 0);
+                                    const totalNet = filtered.reduce((sum, b) => sum + Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0))), 0);
+                                    const totalValue = filtered.reduce((sum, b) => sum + Number(b.total || 0), 0);
+                                    const totalFarmer = filtered.reduce((sum, b) => sum + Number(b.farmerTotal || 0), 0);
+                                    const totalEmp = filtered.reduce((sum, b) => sum + Number(b.employeeTotal || 0), 0);
+
+                                    return (
+                                        <tr className="divide-x divide-white/10 uppercase text-sm tracking-tight">
+                                            <td className="px-5 py-5 text-rubber-400">ยอดรวม {filtered.length} บิล</td>
+                                            <td className="px-5 py-5 text-right font-mono text-gray-400">{totalWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-5 py-5 text-right font-mono text-red-400">-{totalBucket.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-5 py-5 text-right font-mono text-white bg-gray-800">{totalNet.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-5 py-5 text-right font-mono text-rubber-400" colSpan="2">฿{totalValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-5 py-5"></td>
+                                            <td className="px-5 py-5 text-right font-mono text-emerald-400 bg-emerald-900/50">฿{totalFarmer.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-5 py-5"></td>
+                                            <td className="px-5 py-5 text-right font-mono text-orange-400 bg-orange-900/50">฿{totalEmp.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                        </tr>
+                                    );
+                                })()}
+                            </tfoot>
                         </table>
                     </div>
                 )}
@@ -488,46 +583,95 @@ const DailySummaryReport = () => {
             </div>
 
             {/* Daily Overall Summary Footer */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12 pb-12">
-                <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-xl shadow-gray-200/50 flex items-center justify-between group hover:border-blue-500 transition-all hover:-translate-y-1">
-                    <div className="flex items-center space-x-5">
-                        <div className="p-4 bg-blue-50 rounded-2xl group-hover:bg-blue-600 transition-colors duration-500 shadow-inner group-hover:rotate-6">
-                            <Droplets className="text-blue-600 group-hover:text-white transition-colors duration-500" size={32} />
-                        </div>
-                        <div>
-                            <p className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-1">ยอดรับซื้อรวม</p>
-                            <p className="text-4xl font-black text-gray-900">฿{dailyData.buys.reduce((sum, b) => sum + Number(b.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
-                        </div>
-                    </div>
-                </div>
+            {(() => {
+                const latexBuyTotal = dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex').reduce((sum, b) => sum + Number(b.total || 0), 0);
+                const cupLumpBuyTotal = dailyData.buys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง').reduce((sum, b) => sum + Number(b.total || 0), 0);
+                const totalBuy = latexBuyTotal + cupLumpBuyTotal;
 
-                <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-xl shadow-gray-200/50 flex items-center justify-between group hover:border-orange-500 transition-all hover:-translate-y-1">
-                    <div className="flex items-center space-x-5">
-                        <div className="p-4 bg-orange-50 rounded-2xl group-hover:bg-orange-600 transition-colors duration-500 shadow-inner group-hover:-rotate-6">
-                            <Truck className="text-orange-600 group-hover:text-white transition-colors duration-500" size={32} />
-                        </div>
-                        <div>
-                            <p className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-1">ยอดขายรวม</p>
-                            <p className="text-4xl font-black text-gray-900">฿{dailyData.sells.reduce((sum, s) => sum + Number(s.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
-                        </div>
-                    </div>
-                </div>
+                const latexSellTotal = dailyData.sells.filter(s => (s.rubberType || 'latex') === 'latex').reduce((sum, s) => sum + Number(s.total || 0), 0);
+                const cupLumpSellTotal = dailyData.sells.filter(s => s.rubberType === 'cup_lump' || s.rubberType === 'ขี้ยาง').reduce((sum, s) => sum + Number(s.total || 0), 0);
+                const totalSell = latexSellTotal + cupLumpSellTotal;
 
-                <div className={`p-8 rounded-[2.5rem] border shadow-2xl transition-all transform hover:scale-105 duration-500 cursor-default shadow-rubber-200/50
-                    ${(dailyData.sells.reduce((sum, s) => sum + Number(s.total || 0), 0) - dailyData.buys.reduce((sum, b) => sum + Number(b.total || 0), 0) - dailyData.expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0) - dailyData.wages.reduce((sum, w) => sum + Number(w.total || 0), 0)) >= 0
-                        ? 'bg-gradient-to-br from-[#10b981] via-[#059669] to-[#047857] border-emerald-400 ring-8 ring-emerald-50' 
-                        : 'bg-gradient-to-br from-red-600 via-red-700 to-red-800 border-red-500 ring-8 ring-red-50'}`}>
-                    <div className="flex items-center space-x-5">
-                        <div className="p-4 bg-white/20 rounded-2xl shadow-lg backdrop-blur-md animate-bounce-subtle"><PieChart className="text-white" size={32} /></div>
-                        <div>
-                            <p className="text-xs font-black text-white/70 uppercase tracking-[0.2em] mb-1">กำไรสุทธิวันนี้</p>
-                            <p className="text-4xl font-black text-white drop-shadow-md">
-                                ฿{(dailyData.sells.reduce((sum, s) => sum + Number(s.total || 0), 0) - dailyData.buys.reduce((sum, b) => sum + Number(b.total || 0), 0) - dailyData.expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0) - dailyData.wages.reduce((sum, w) => sum + Number(w.total || 0), 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}
-                            </p>
+                const totalExpense = dailyData.expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+                const totalWage = dailyData.wages.reduce((sum, w) => sum + Number(w.total || 0), 0);
+                const netProfit = totalSell - totalBuy - totalExpense - totalWage;
+
+                return (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8 pb-10">
+                        {/* Total Buys Card */}
+                        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-lg shadow-gray-200/50 flex flex-col group hover:border-blue-500 transition-all">
+                            <div className="flex items-center space-x-4 mb-3">
+                                <div className="p-3 bg-blue-50 rounded-xl group-hover:bg-blue-600 transition-colors duration-500 shadow-inner">
+                                    <Droplets className="text-blue-600 group-hover:text-white transition-colors duration-500" size={24} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">ยอดรับซื้อรวม</p>
+                                    <p className="text-2xl font-black text-gray-900 leading-none">฿{totalBuy.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
+                                </div>
+                            </div>
+                            <div className="flex border-t border-gray-50 pt-3 mt-auto">
+                                <div className="flex-1 text-center border-r border-gray-50">
+                                    <p className="text-[9px] font-bold text-gray-400 uppercase">น้ำยาง</p>
+                                    <p className="text-xs font-black text-blue-700">+฿{latexBuyTotal.toLocaleString()}</p>
+                                </div>
+                                <div className="flex-1 text-center">
+                                    <p className="text-[9px] font-bold text-gray-400 uppercase">ขี้ยาง</p>
+                                    <p className="text-xs font-black text-orange-700">+฿{cupLumpBuyTotal.toLocaleString()}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Total Sells Card */}
+                        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-lg shadow-gray-200/50 flex flex-col group hover:border-orange-500 transition-all">
+                            <div className="flex items-center space-x-4 mb-3">
+                                <div className="p-3 bg-orange-50 rounded-xl group-hover:bg-orange-600 transition-colors duration-500 shadow-inner">
+                                    <Truck className="text-orange-600 group-hover:text-white transition-colors duration-500" size={24} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">ยอดขายรวม</p>
+                                    <p className="text-2xl font-black text-gray-900 leading-none">฿{totalSell.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
+                                </div>
+                            </div>
+                            <div className="flex border-t border-gray-50 pt-3 mt-auto">
+                                <div className="flex-1 text-center border-r border-gray-50">
+                                    <p className="text-[9px] font-bold text-gray-400 uppercase">น้ำยาง</p>
+                                    <p className="text-xs font-black text-blue-700">฿{latexSellTotal.toLocaleString()}</p>
+                                </div>
+                                <div className="flex-1 text-center">
+                                    <p className="text-[9px] font-bold text-gray-400 uppercase">ขี้ยาง</p>
+                                    <p className="text-xs font-black text-orange-700">฿{cupLumpSellTotal.toLocaleString()}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Net Profit Card */}
+                        <div className={`p-5 rounded-2xl border shadow-xl transition-all duration-500 flex flex-col
+                            ${netProfit >= 0
+                                ? 'bg-gradient-to-br from-[#10b981] via-[#059669] to-[#047857] border-emerald-400 shadow-emerald-200/50' 
+                                : 'bg-gradient-to-br from-red-600 via-red-700 to-red-800 border-red-500 shadow-red-200/50'}`}>
+                            <div className="flex items-center space-x-4 mb-3">
+                                <div className="p-3 bg-white/20 rounded-xl shadow-lg backdrop-blur-md">
+                                    <PieChart className="text-white" size={24} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-white/70 uppercase tracking-widest leading-none mb-1">กำไรสุทธิ</p>
+                                    <p className="text-2xl font-black text-white leading-none">฿{netProfit.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
+                                </div>
+                            </div>
+                            <div className="flex border-t border-white/10 pt-3 mt-auto">
+                                <div className="flex-1 text-center border-r border-white/10">
+                                    <p className="text-[9px] font-bold text-white/50 uppercase">จ่ายพนักงาน</p>
+                                    <p className="text-xs font-black text-white">-฿{totalWage.toLocaleString()}</p>
+                                </div>
+                                <div className="flex-1 text-center">
+                                    <p className="text-[9px] font-bold text-white/50 uppercase">จ่ายทั่วไป</p>
+                                    <p className="text-xs font-black text-white">-฿{totalExpense.toLocaleString()}</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
+                );
+            })()}
         </div>
     );
 };
