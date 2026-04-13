@@ -4,7 +4,13 @@ async function handleDelete(context) {
     try {
         const body = await context.request.json();
         const { sheetName, id } = body;
+        const user = context.user;
+        const isSuperAdmin = user.role === 'super_admin';
         
+        if (!sheetName || !id) {
+            return errorResponse('Missing required fields (sheetName, id)', 400);
+        }
+
         const validTables = ['farmers', 'staff', 'employees', 'buys', 'sells', 'expenses', 'wages', 'promotions', 'trucks', 'factories', 'chemicals'];
         let tableName = sheetName.toLowerCase();
         
@@ -17,14 +23,23 @@ async function handleDelete(context) {
             tableName = tableMap[tableName];
         }
         
-        if (!validTables.includes(sheetName.toLowerCase())) {
-            return errorResponse('Invalid table name: ' + sheetName);
+        if (!validTables.includes(tableName)) {
+            return errorResponse('Invalid table name: ' + sheetName, 400);
         }
 
-        // Enforce user isolation: only delete records belonging to this user
-        // Note: For tables without userId (like settings?), this might need adjustment, 
-        // but all transactional tables should have it.
-        const res = await context.env.DB.prepare(`DELETE FROM ${tableName} WHERE id = ? AND userId = ?`).bind(id, context.user.id).run();
+        let query;
+        const params = [id];
+
+        if (isSuperAdmin) {
+            // SuperAdmin can delete any record by ID (Global administrative control)
+            query = `DELETE FROM ${tableName} WHERE id = ?`;
+        } else {
+            // Standard User: strictly restricted to their own data
+            query = `DELETE FROM ${tableName} WHERE id = ? AND userId = ?`;
+            params.push(user.id);
+        }
+
+        const res = await context.env.DB.prepare(query).bind(...params).run();
         
         if (res.meta.rows_written === 0) {
             return errorResponse('Record not found or unauthorized', 404);
@@ -32,6 +47,7 @@ async function handleDelete(context) {
 
         return jsonResponse({ status: 'success' });
     } catch (e) {
+        console.error("[API Delete Error]", e);
         return errorResponse(e.message);
     }
 }

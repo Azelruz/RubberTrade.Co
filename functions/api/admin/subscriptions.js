@@ -1,18 +1,4 @@
-import { jsonResponse, errorResponse, withAuth } from '../_utils.js';
-
-// Specific middleware for super admin
-const withSuperAdmin = (handler) => {
-    return withAuth(async (context) => {
-        const superAdminEmail = 'narapong.an@gmail.com';
-        const superAdminUser = 'narapong.an';
-        if (context.user.role !== 'super_admin' && 
-            context.user.email !== superAdminEmail && 
-            context.user.username !== superAdminUser) {
-            return errorResponse('Forbidden: Super Admin access required', 403);
-        }
-        return handler(context);
-    });
-};
+import { jsonResponse, errorResponse, withSuperAdmin } from '../_utils.js';
 
 async function handleGet(context) {
     try {
