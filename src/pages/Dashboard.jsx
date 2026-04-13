@@ -331,18 +331,16 @@ export const Dashboard = () => {
                 (s.rubberType === 'latex' || !s.rubberType)
             );
 
-            // Calculate weighted average price
-            const buyWeight = dayBuys.reduce((sum, item) => {
-                const net = Number(item.netWeight);
-                if (!isNaN(net) && net > 0) return sum + net;
-                return sum + (Number(item.weight || 0) - Number(item.bucketWeight || 0));
-            }, 0);
-            const buyTotal = dayBuys.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
-            const avgBuyPrice = buyWeight > 0 ? buyTotal / buyWeight : null;
+            // Use pricePerKg from bills as requested
+            const buyPrices = dayBuys
+                .map(b => Number(b.pricePerKg))
+                .filter(p => !isNaN(p) && p > 0);
+            const avgBuyPrice = buyPrices.length > 0 ? (buyPrices.reduce((a, b) => a + b, 0) / buyPrices.length) : null;
 
-            const sellWeight = daySells.reduce((sum, item) => sum + (Number(item.totalWeight || item.weight || item.netWeight || 0)), 0);
-            const sellTotal = daySells.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
-            const avgSellPrice = sellWeight > 0 ? sellTotal / sellWeight : null;
+            const sellPrices = daySells
+                .map(s => Number(s.pricePerKg))
+                .filter(p => !isNaN(p) && p > 0);
+            const avgSellPrice = sellPrices.length > 0 ? (sellPrices.reduce((a, b) => a + b, 0) / sellPrices.length) : null;
 
             data.push({
                 date: format(date, 'dd MMM', { locale: th }),
@@ -1030,7 +1028,7 @@ const StatCard = ({ title, value, icon, bgColor, valueColor, details }) => (
             {details && details.length > 0 && (
                 <div className="mt-2 space-y-1">
                     {details.map((d, i) => (
-                        <div key={i} className="flex justify-between items-center text-xs uppercase tracking-wider font-extrabold">
+                        <div key={i} className="flex justify-between items-center text-sm uppercase tracking-tight font-black">
                             <span className="text-gray-400">{d.label}</span>
                             <span className="text-gray-700">{d.value}</span>
                         </div>
