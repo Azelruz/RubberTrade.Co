@@ -31,8 +31,12 @@ export const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
         todayBuy: 0,
+        todayLatexBuy: 0,
+        todayCupLumpBuy: 0,
         todaySell: 0,
         todayBuyWeight: 0,
+        todayLatexWeight: 0,
+        todayCupLumpWeight: 0,
         todayExpense: 0,
         monthIncome: 0,
         monthCost: 0,
@@ -43,6 +47,7 @@ export const Dashboard = () => {
     });
     const [chemicalCalcs, setChemicalCalcs] = useState([]);
     const [chartData, setChartData] = useState([]);
+    const [priceChartData, setPriceChartData] = useState([]);
     const [recentTransactions, setRecentTransactions] = useState([]);
     const [allBuys, setAllBuys] = useState([]); // store all buys for lucky draw
     const [allStaff, setAllStaff] = useState([]);
@@ -111,6 +116,7 @@ export const Dashboard = () => {
 
             calculateStats(buys, sells, expenses, wages, dashData, farmerArr);
             generateChartData(buys, sells);
+            generatePriceChartData(buys, sells);
 
             const recent = [
                 ...buys.map(b => ({ ...b, type: 'buy' })),
@@ -139,12 +145,26 @@ export const Dashboard = () => {
         };
 
         const todayBuys = buys.filter(b => isValidDate(b.date) && isWithinInterval(new Date(b.date), todayRange));
-        const todayBuyTotal = todayBuys.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
-        const todayBuyWeight = todayBuys.reduce((sum, item) => {
+        
+        // Split Today Buy by Rubber Type
+        const latexBuys = todayBuys.filter(b => b.rubberType === 'latex' || !b.rubberType);
+        const cupLumpBuys = todayBuys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง');
+
+        const todayLatexBuyTotal = latexBuys.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
+        const todayCupLumpBuyTotal = cupLumpBuys.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
+        const todayBuyTotal = todayLatexBuyTotal + todayCupLumpBuyTotal;
+
+        const todayLatexWeight = latexBuys.reduce((sum, item) => {
             const net = Number(item.netWeight);
             if (!isNaN(net) && net > 0) return sum + net;
             return sum + (Number(item.weight || 0) - Number(item.bucketWeight || 0));
         }, 0);
+        const todayCupLumpWeight = cupLumpBuys.reduce((sum, item) => {
+            const net = Number(item.netWeight);
+            if (!isNaN(net) && net > 0) return sum + net;
+            return sum + (Number(item.weight || 0) - Number(item.bucketWeight || 0));
+        }, 0);
+        const todayBuyWeight = todayLatexWeight + todayCupLumpWeight;
 
         const todaySells = sells.filter(s => isValidDate(s.date) && isWithinInterval(new Date(s.date), todayRange));
         const todaySellTotal = todaySells.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
@@ -154,9 +174,9 @@ export const Dashboard = () => {
         const todayExpTotal = todayExps.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
         const todayWageTotal = todayWages.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
 
-        const todayTotalDry = todayBuys.reduce((sum, item) => sum + (Number(item.dryRubber || item.dryWeight || 0)), 0);
-        const todayAvgDrc = todayBuyWeight > 0 
-            ? (todayTotalDry / todayBuyWeight) * 100 
+        const todayTotalDry = latexBuys.reduce((sum, item) => sum + (Number(item.dryRubber || item.dryWeight || 0)), 0);
+        const todayAvgDrc = todayLatexWeight > 0 
+            ? (todayTotalDry / todayLatexWeight) * 100 
             : 0;
 
         const unpaidBills = buys.reduce((count, r) => {
@@ -184,8 +204,12 @@ export const Dashboard = () => {
 
         setStats({
             todayBuy: truncateOneDecimal(todayBuyTotal),
+            todayLatexBuy: truncateOneDecimal(todayLatexBuyTotal),
+            todayCupLumpBuy: truncateOneDecimal(todayCupLumpBuyTotal),
             todaySell: truncateOneDecimal(todaySellTotal),
             todayBuyWeight: truncateOneDecimal(todayBuyWeight),
+            todayLatexWeight: truncateOneDecimal(todayLatexWeight),
+            todayCupLumpWeight: truncateOneDecimal(todayCupLumpWeight),
             todayExpense: truncateOneDecimal(todayExpTotal + todayWageTotal),
             monthIncome: monthIncome,
             monthCost: monthCost,
@@ -196,8 +220,8 @@ export const Dashboard = () => {
             todayAvgDrc: todayAvgDrc
         });
 
-        // Calculate Chemicals
-        calculateChemicals(todayBuyWeight, dashData?.settings?.chemicalSettings);
+        // Calculate Chemicals (Only based on Latex weight)
+        calculateChemicals(todayLatexWeight, dashData?.settings?.chemicalSettings);
     };
 
     const calculateChemicals = (totalWeight, settingsJson) => {
@@ -280,6 +304,49 @@ export const Dashboard = () => {
             });
         }
         setChartData(data);
+    };
+
+    const generatePriceChartData = (buys, sells) => {
+        const isValidDate = (d) => {
+            const date = new Date(d);
+            return date instanceof Date && !isNaN(date);
+        };
+
+        const data = [];
+        for (let i = 29; i >= 0; i--) {
+            const date = subDays(new Date(), i);
+            const start = startOfDay(date);
+            const end = endOfDay(date);
+
+            // Filter for LATEX only as requested
+            const dayBuys = buys.filter(b => 
+                isValidDate(b.date) && 
+                isWithinInterval(new Date(b.date), { start, end }) &&
+                (b.rubberType === 'latex' || !b.rubberType)
+            );
+            
+            const daySells = sells.filter(s => 
+                isValidDate(s.date) && 
+                isWithinInterval(new Date(s.date), { start, end }) &&
+                (s.rubberType === 'latex' || !s.rubberType)
+            );
+
+            // Calculate weighted average price
+            const buyWeight = dayBuys.reduce((sum, item) => sum + (Number(item.weight || 0) - Number(item.bucketWeight || 0)), 0);
+            const buyTotal = dayBuys.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
+            const avgBuyPrice = buyWeight > 0 ? buyTotal / buyWeight : null;
+
+            const sellWeight = daySells.reduce((sum, item) => sum + (Number(item.totalWeight || item.weight || 0)), 0);
+            const sellTotal = daySells.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
+            const avgSellPrice = sellWeight > 0 ? sellTotal / sellWeight : null;
+
+            data.push({
+                date: format(date, 'dd MMM', { locale: th }),
+                'ราคาซื้อ': avgBuyPrice ? truncateOneDecimal(avgBuyPrice) : null,
+                'ราคาขาย': avgSellPrice ? truncateOneDecimal(avgSellPrice) : null,
+            });
+        }
+        setPriceChartData(data);
     };
 
     const handleAutoWages = () => {
@@ -653,12 +720,20 @@ export const Dashboard = () => {
                         value={`฿${Number(stats.todayBuy).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
                         icon={<Droplets className="text-blue-500" size={24} />}
                         bgColor="bg-blue-50"
+                        details={[
+                            { label: 'น้ำยางสด', value: `฿${Number(stats.todayLatexBuy).toLocaleString()}` },
+                            { label: 'ขี้ยาง', value: `฿${Number(stats.todayCupLumpBuy).toLocaleString()}` }
+                        ]}
                     />
                     <StatCard
-                        title="ปริมาณน้ำยางวันนี้"
+                        title="ปริมาณยางวันนี้"
                         value={`${Number(stats.todayBuyWeight).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} กก.`}
                         icon={<TrendingUp className="text-rubber-500" size={24} />}
                         bgColor="bg-rubber-50"
+                        details={[
+                            { label: 'น้ำยางสด', value: `${Number(stats.todayLatexWeight).toLocaleString()} กก.` },
+                            { label: 'ขี้ยาง', value: `${Number(stats.todayCupLumpWeight).toLocaleString()} กก.` }
+                        ]}
                     />
                     <StatCard
                         title="เฉลี่ย % DRC วันนี้"
@@ -863,19 +938,101 @@ export const Dashboard = () => {
                 </div>
 
             </div>
+
+            {/* Price Trend Chart 30 Days */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
+                <div className="flex items-center justify-between mb-6">
+                    <div>
+                        <h2 className="text-lg font-bold text-gray-900">แนวโน้มราคาน้ำยาง (30 วันย้อนหลัง)</h2>
+                        <p className="text-xs text-gray-500">เปรียบเทียบราคารับซื้อเฉลี่ย และราคาส่งขายโรงงาน</p>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                        <div className="flex items-center">
+                            <div className="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
+                            <span className="text-xs font-medium text-gray-600">รับซื้อ</span>
+                        </div>
+                        <div className="flex items-center">
+                            <div className="w-3 h-3 rounded-full bg-emerald-500 mr-2"></div>
+                            <span className="text-xs font-medium text-gray-600">ขายส่ง</span>
+                        </div>
+                    </div>
+                </div>
+                <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={priceChartData} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                            <XAxis 
+                                dataKey="date" 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tick={{ fill: '#9ca3af', fontSize: 10 }} 
+                                dy={10}
+                                interval={window.innerWidth < 768 ? 4 : 2}
+                            />
+                            <YAxis 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tick={{ fill: '#9ca3af', fontSize: 10 }} 
+                                dx={-10} 
+                                domain={['auto', 'auto']}
+                                tickFormatter={(value) => `฿${value}`}
+                            />
+                            <Tooltip
+                                contentStyle={{ 
+                                    borderRadius: '12px', 
+                                    border: 'none', 
+                                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                                    padding: '12px'
+                                }}
+                                formatter={(value) => [`฿${Number(value).toLocaleString()}`, undefined]}
+                                labelStyle={{ fontWeight: 'bold', marginBottom: '4px', color: '#111827' }}
+                                cursor={{ stroke: '#f3f4f6', strokeWidth: 2 }}
+                            />
+                            <Line 
+                                type="monotone" 
+                                dataKey="ราคาซื้อ" 
+                                stroke="#3b82f6" 
+                                strokeWidth={3} 
+                                dot={{ r: 0 }} 
+                                activeDot={{ r: 6, strokeWidth: 0 }} 
+                                connectNulls
+                            />
+                            <Line 
+                                type="monotone" 
+                                dataKey="ราคาขาย" 
+                                stroke="#10b981" 
+                                strokeWidth={3} 
+                                dot={{ r: 0 }} 
+                                activeDot={{ r: 6, strokeWidth: 0 }} 
+                                connectNulls
+                            />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
         </div>
     );
 };
 
 // Helper Component
-const StatCard = ({ title, value, icon, bgColor, valueColor }) => (
+const StatCard = ({ title, value, icon, bgColor, valueColor, details }) => (
     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex items-center space-x-4">
         <div className={`p-4 rounded-full ${bgColor}`}>
             {icon}
         </div>
-        <div>
+        <div className="flex-1">
             <p className="text-sm font-medium text-gray-500">{title}</p>
             <p className={`text-2xl font-bold ${valueColor || 'text-gray-900'}`}>{value}</p>
+            {details && details.length > 0 && (
+                <div className="mt-2 space-y-1">
+                    {details.map((d, i) => (
+                        <div key={i} className="flex justify-between items-center text-[10px] uppercase tracking-wider font-bold">
+                            <span className="text-gray-400">{d.label}</span>
+                            <span className="text-gray-600">{d.value}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     </div>
 );
