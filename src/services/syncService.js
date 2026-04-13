@@ -2,7 +2,7 @@ import db from './db';
 import Dexie from 'dexie';
 
 import { supabase } from '../utils/supabase';
-import { clearAllCache } from './apiService';
+import { clearAllCache, validateRecordData, triggerDataRefresh } from './apiService';
 
 const directFetch = async (endpoint, options = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -18,9 +18,19 @@ const directFetch = async (endpoint, options = {}) => {
     };
 
     const response = await fetch(`/api${endpoint}`, config);
-    if (!response.ok) throw new Error(`API Error ${response.status}`);
+    
+    if (!response.ok) {
+        // Return structured error info
+        return { 
+            status: 'error', 
+            httpStatus: response.status, 
+            message: `API Error ${response.status}` 
+        };
+    }
+    
     return await response.json();
 };
+
 
 export const hydrateLocalDB = async () => {
     try {
@@ -107,8 +117,17 @@ export const syncQueueToServer = async () => {
 
         for (const item of queue) {
             try {
-                let endpointTemplate = `/${item.type}`; 
+                // DATA INTEGRITY CHECK: Validate data before syncing
+                const recordData = item.payload?.payload || item.payload;
+                const validation = validateRecordData(item.type, recordData);
                 
+                if (item.action !== 'DELETE' && !validation.valid) {
+                    console.error(`[SyncService] Data incomplete for item ${item.uuid}:`, validation.message);
+                    await db.sync_queue.delete(item.uuid); // Remove invalid data to unblock sync
+                    continue;
+                }
+
+                let endpointTemplate = `/${item.type}`; 
                 if (item.type === 'member_types' || item.type === 'farmer_types') {
                     endpointTemplate = '/member-types';
                 }
@@ -118,10 +137,12 @@ export const syncQueueToServer = async () => {
                     body: JSON.stringify(item.payload)
                 });
 
-                // data is decoded JSON from directFetch
-                // CRITICAL FIX: Only delete from local queue if SERVER confirmed success.
-                // If status is 'error', keep it in the queue for a retry later.
-                if (data && data.status === 'success') {
+                // Handle server response or HTTP errors
+                const isSuccess = data && data.status === 'success';
+                const is404 = data && data.httpStatus === 404;
+
+                // SPECIAL LOGIC: If deleting something that's already gone (404), consider it sync'd
+                if (isSuccess || (is404 && item.action === 'DELETE')) {
                     // Handle ID mapping if the server replaced a temporary UUID
                     const payloadId = item.payload?.payload?.id || item.payload?.id;
                     
@@ -153,19 +174,27 @@ export const syncQueueToServer = async () => {
                     await db.sync_queue.delete(item.uuid);
                     syncedCount++;
                 } else {
-                    console.error(`[SyncService] Server reported failure for item ${item.uuid}:`, data);
-                    break; // Stop sync loop if we hit a server error
+                    console.error(`[SyncService] Sync failed for item ${item.uuid}:`, data);
+                    // If it's a persistent 404 for something else, maybe we should skip it or handle it.
+                    // For now, we break to avoid looping on error if it's a server failure.
+                    if (is404) {
+                        console.warn("[SyncService] Skipping invalid endpoint/resource 404");
+                        await db.sync_queue.delete(item.uuid);
+                        continue;
+                    }
+                    break;
                 }
             } catch (e) {
-                console.error(`[SyncService] Network or API error for item ${item.uuid}:`, e);
+                console.error(`[SyncService] Unexpected error for item ${item.uuid}:`, e);
                 break; 
             }
         }
 
         if (syncedCount > 0) {
-            clearAllCache();
+            triggerDataRefresh();
             window.dispatchEvent(new CustomEvent('sync-complete', { detail: { count: syncedCount } }));
         }
+
     } finally {
         isSyncing = false;
     }

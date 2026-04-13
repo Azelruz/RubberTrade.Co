@@ -3,13 +3,21 @@ import { generateNextId, getSetting } from './_id_utils.js';
 
 async function handleGet(context) {
     try {
-        const { results } = await context.env.DB.prepare(`
-            SELECT b.*, COALESCE(f.name, b.farmerName) as farmerName 
-            FROM buys b 
-            LEFT JOIN farmers f ON b.farmerId = f.id 
-            WHERE b.userId = ?
-            ORDER BY b.date DESC, b.created_at DESC
-        `).bind(context.user.id).all();
+        const userId = context.user.id;
+        const url = new URL(context.request.url);
+        const since = url.searchParams.get('since');
+        
+        let query = "SELECT b.*, COALESCE(f.name, b.farmerName) as farmerName FROM buys b LEFT JOIN farmers f ON b.farmerId = f.id WHERE b.userId = ?";
+        const params = [userId];
+        
+        if (since) {
+            query += " AND b.updated_at > ?";
+            params.push(since);
+        }
+        
+        query += " ORDER BY b.date DESC, b.created_at DESC";
+        
+        const { results } = await context.env.DB.prepare(query).bind(...params).all();
         
         // Track usage
         context.waitUntil?.(trackUsage(context, { rowsRead: results.length }));
@@ -29,21 +37,22 @@ async function handlePost(context) {
 
         // Bulk Insert Support
         if (body.action === 'bulk' && Array.isArray(body.payloads)) {
-            const stationCode = await getSetting(context.env.DB, 'station_code', '0335');
-            const format = await getSetting(context.env.DB, 'format_buy_bill', 'B-{STATION}{YYYY}-{SEQ4}');
+            const stationCode = await getSetting(context.env.DB, 'station_code', userId, '0335');
+            const format = await getSetting(context.env.DB, 'format_buy_bill', userId, 'B-{STATION}{YYYY}-{SEQ4}');
             const stmts = [];
             
-            for (const p of body.payloads) {
+            for (let i = 0; i < body.payloads.length; i++) {
+                const p = body.payloads[i];
                 let id = p.id;
                 if (!id || isUUID(id)) {
-                    id = await generateNextId(context.env.DB, 'buys', format, stationCode, userId);
+                    const nonce = isUUID(id) ? id.substring(0, 4).toUpperCase() : '';
+                    id = await generateNextId(context.env.DB, 'buys', format, stationCode, userId, nonce, i);
                 }
-
                 const {
-                    date, farmerId, farmerName, weight, drc, pricePerKg, total, 
+                    date, farmerId, farmerName, weight, drc, pricePerKg, total,
                     dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                     farmerStatus, employeeStatus, receiptUrl, bucketWeight,
-                    basePrice, bonusDrc, actualPrice, bonusMemberType
+                    basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType
                 } = p;
 
                 stmts.push(context.env.DB.prepare(`
@@ -51,8 +60,8 @@ async function handlePost(context) {
                         id, date, farmerId, farmerName, weight, drc, pricePerKg, total, 
                         dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                         farmerStatus, employeeStatus, receiptUrl, bucketWeight,
-                        basePrice, bonusDrc, actualPrice, bonusMemberType, userId
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, userId
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `).bind(
                     id, date || null, farmerId || null, farmerName || null, 
                     weight || 0, drc || 0, pricePerKg || 0, total || 0, 
@@ -60,7 +69,8 @@ async function handlePost(context) {
                     note || null, status || null, 
                     farmerStatus || 'Pending', employeeStatus || 'Pending', 
                     receiptUrl || null, bucketWeight || 0,
-                    basePrice || 0, bonusDrc || 0, actualPrice || 0, bonusMemberType || 0, userId
+                    basePrice || 0, bonusDrc || 0, actualPrice || 0, bonusMemberType || 0, 
+                    rubberType || 'latex', userId
                 ));
             }
             
@@ -71,16 +81,17 @@ async function handlePost(context) {
         const payload = body.payload;
         let id = payload.id;
         if (!id || isUUID(id)) {
-            const stationCode = await getSetting(context.env.DB, 'station_code', '0335');
-            const format = await getSetting(context.env.DB, 'format_buy_bill', 'B-{STATION}{YYYY}-{SEQ4}');
-            id = await generateNextId(context.env.DB, 'buys', format, stationCode, userId);
+            const stationCode = await getSetting(context.env.DB, 'station_code', userId, '0335');
+            const format = await getSetting(context.env.DB, 'format_buy_bill', userId, 'B-{STATION}{YYYY}-{SEQ4}');
+            const nonce = isUUID(id) ? id.substring(0, 4).toUpperCase() : '';
+            id = await generateNextId(context.env.DB, 'buys', format, stationCode, userId, nonce, 0);
         }
 
         const { 
             date, farmerId, farmerName, weight, drc, pricePerKg, total, 
             dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
             farmerStatus, employeeStatus, receiptUrl, bucketWeight,
-            basePrice, bonusDrc, actualPrice, bonusMemberType
+            basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType
         } = payload;
         
         await context.env.DB.prepare(`
@@ -88,8 +99,8 @@ async function handlePost(context) {
                 id, date, farmerId, farmerName, weight, drc, pricePerKg, total, 
                 dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                 farmerStatus, employeeStatus, receiptUrl, bucketWeight,
-                basePrice, bonusDrc, actualPrice, bonusMemberType, userId
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, userId
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
             id, date || null, farmerId || null, farmerName || null, 
             weight || 0, drc || 0, pricePerKg || 0, total || 0, 
@@ -97,7 +108,8 @@ async function handlePost(context) {
             note || null, status || null, 
             farmerStatus || 'Pending', employeeStatus || 'Pending', 
             receiptUrl || null, bucketWeight || 0,
-            basePrice || 0, bonusDrc || 0, actualPrice || 0, bonusMemberType || 0, userId
+            basePrice || 0, bonusDrc || 0, actualPrice || 0, bonusMemberType || 0, 
+            rubberType || 'latex', userId
         ).run();
         
         return jsonResponse({ status: 'success', id });

@@ -67,6 +67,7 @@ CREATE TABLE buys (
     basePrice REAL DEFAULT 0,
     bonusDrc REAL DEFAULT 0,
     actualPrice REAL DEFAULT 0,
+    rubberType TEXT DEFAULT 'latex',
     userId TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (farmerId) REFERENCES farmers(id) ON DELETE SET NULL
@@ -90,6 +91,7 @@ CREATE TABLE sells (
     receiptUrl TEXT,
     note TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    rubberType TEXT DEFAULT 'latex',
     userId TEXT,
     FOREIGN KEY (employeeId) REFERENCES staff(id) ON DELETE SET NULL,
     FOREIGN KEY (factoryId) REFERENCES factories(id) ON DELETE SET NULL,

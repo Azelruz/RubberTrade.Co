@@ -310,7 +310,16 @@ export const TransactionHistory = () => {
                                                         <User size={14} />
                                                     </div>
                                                     <span className="font-black text-gray-800 text-sm">
-                                                        {activeTab === 'buy' ? (r.farmerName || 'ลูกค้าทั่วไป') : r.buyerName}
+                                                        <span className="flex items-center gap-2">
+                                                            {activeTab === 'buy' ? (r.farmerName || 'ลูกค้าทั่วไป') : r.buyerName}
+                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${
+                                                                (r.rubberType === 'cup_lump' || r.rubber_type === 'cup_lump') 
+                                                                    ? 'bg-amber-100 text-amber-700 border border-amber-200' 
+                                                                    : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                                            }`}>
+                                                                {(r.rubberType === 'cup_lump' || r.rubber_type === 'cup_lump') ? 'ขี้ยาง' : 'น้ำยาง'}
+                                                            </span>
+                                                        </span>
                                                     </span>
                                                 </div>
                                             </td>

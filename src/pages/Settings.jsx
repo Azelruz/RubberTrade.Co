@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
-import { Settings as SettingsIcon, Save, Link, Building2, UserCircle, Leaf, Users, Trash2, DollarSign, RefreshCw, Truck } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Link, Building2, UserCircle, Leaf, Users, Trash2, DollarSign, RefreshCw, Truck, Database } from 'lucide-react';
+
 import toast from 'react-hot-toast';
 
 // API Services
@@ -21,7 +22,9 @@ import {
     fetchDailyPrice,
     updateDailyPriceAPI,
     clearCache,
+    clearAllCache,
     saveReceiptImageToDrive,
+
     broadcastPrice,
     updateRecord,
     fetchFactories,
@@ -33,8 +36,10 @@ import {
     deleteMemberType
 } from '../services/apiService';
 
-// Auth
+// Auth & DB
 import { useAuth } from '../context/AuthContext';
+import db from '../services/db';
+
 
 // Sub-components
 import { GeneralSettings } from './settings/GeneralSettings';
@@ -163,6 +168,7 @@ export const Settings = () => {
                         setDrcBonuses(getDefaultDrcBonuses());
                     }
                     setFscBonus(settingsRes.data.fsc_bonus || '1');
+                    priceForm.setValue('cupLumpPrice', settingsRes.data.cupLumpPrice || '');
                 }
             } else if (activeTab === 'farmers_employees') {
                 clearCache('farmers', 'employees', 'farmer_types');
@@ -282,6 +288,7 @@ export const Settings = () => {
         setSaving(true);
         try {
             const res = await updateDailyPriceAPI(data.dailyPrice);
+            await updateSettingsAPI({ cupLumpPrice: data.cupLumpPrice });
             if (res.status === 'success') {
                 toast.success('อัปเดตราคากลางประจำวันสำเร็จ');
                 if (notifyPriceLine) {
@@ -539,6 +546,31 @@ export const Settings = () => {
         }
     };
 
+    const handleResetLocalDB = async () => {
+        if (!window.confirm('คำเตือน: นี่คือการล้างข้อมูล "ในเครื่องนี้เท่านั้น" \n- ข้อมูลที่ซิงค์ไปแล้วจะไม่หาย \n- ข้อมูลที่ค้างในคิวซิงค์ (Offline) จะหายทั้งหมด \nคุณแน่ใจหรือไม่ว่าต้องการดำเนินการ?')) {
+            return;
+        }
+
+        const toastId = toast.loading('กำลังล้างฐานข้อมูลเครื่อง...');
+        try {
+            // Delete and reopen DB
+            await db.delete();
+            await db.open();
+            
+            // Clear session cache
+            clearAllCache();
+            
+            toast.success('ล้างข้อมูลสำเร็จ ระบบจะเริ่มใหม่ใน 2 วินาที', { id: toastId });
+            
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        } catch (err) {
+            toast.error('เกิดข้อผิดพลาด: ' + err.message, { id: toastId });
+        }
+    };
+
+
     if (loading && !saving && (activeTab !== 'farmers_employees' && activeTab !== 'price')) {
         return (
             <div className="flex justify-center items-center h-64">
@@ -684,7 +716,9 @@ export const Settings = () => {
                             logoUrl={logoUrl}
                             setLogoUrl={setLogoUrl}
                             handleLogoUpload={handleLogoUpload}
+                            onResetDB={handleResetLocalDB}
                         />
+
                     )}
 
                     {activeTab === 'price' && (

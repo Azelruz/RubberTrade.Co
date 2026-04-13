@@ -19,14 +19,15 @@ async function handlePost(context) {
 
         // Bulk Insert Support
         if (body.action === 'bulk' && Array.isArray(body.payloads)) {
-            const stationCode = await getSetting(context.env.DB, 'station_code', 'RTB');
-            const format = await getSetting(context.env.DB, 'format_farmer_id', '{STATION}-F-{SEQ4}');
+            const stationCode = await getSetting(context.env.DB, 'station_code', userId, 'RTB');
+            const format = await getSetting(context.env.DB, 'format_farmer_id', userId, '{STATION}-F-{SEQ4}');
             
             const stmts = [];
-            for (const p of body.payloads) {
+            for (let i = 0; i < body.payloads.length; i++) {
+                const p = body.payloads[i];
                 let id = p.id;
                 if (!id || isUUID(id)) {
-                    id = await generateNextId(context.env.DB, 'farmers', format, stationCode, userId);
+                    id = await generateNextId(context.env.DB, 'farmers', format, stationCode, userId, '', i);
                 }
                 const { name, phone, bankAccount, bankName, address, note, fscId, memberTypeId } = p;
                 stmts.push(context.env.DB.prepare(
@@ -41,9 +42,9 @@ async function handlePost(context) {
         const payload = body.payload;
         let id = payload.id;
         if (!id || isUUID(id)) {
-            const stationCode = await getSetting(context.env.DB, 'station_code', 'RTB');
-            const format = await getSetting(context.env.DB, 'format_farmer_id', '{STATION}-F-{SEQ4}');
-            id = await generateNextId(context.env.DB, 'farmers', format, stationCode, userId);
+            const stationCode = await getSetting(context.env.DB, 'station_code', userId, 'RTB');
+            const format = await getSetting(context.env.DB, 'format_farmer_id', userId, '{STATION}-F-{SEQ4}');
+            id = await generateNextId(context.env.DB, 'farmers', format, stationCode, userId, '', 0);
         }
 
         const { name, phone, bankAccount, bankName, address, note, fscId, memberTypeId } = payload;

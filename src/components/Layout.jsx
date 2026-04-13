@@ -31,26 +31,47 @@ export const Layout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [openMenus, setOpenMenus] = useState([]); // Default collapsed menus
     const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [syncQueueCount, setSyncQueueCount] = useState(0);
+    const [isSyncing, setIsSyncing] = useState(false);
     const { user, logout } = useAuth();
     const navigate = useNavigate();
 
     useEffect(() => {
-        const handleOnline = () => setIsOnline(true);
+        const updateQueueCount = async () => {
+            try {
+                const { db } = await import('../services/db');
+                const count = await db.sync_queue.count();
+                setSyncQueueCount(count);
+            } catch (err) {
+                console.error('Error fetching sync count:', err);
+            }
+        };
+
+        const handleOnline = () => {
+            setIsOnline(true);
+            updateQueueCount();
+        };
         const handleOffline = () => setIsOnline(false);
         const handleSyncComplete = (e) => {
             if (e.detail && e.detail.count > 0) {
                 toast.success(`อัปโหลดล่วงล้ำเข้าระบบสำเร็จ ${e.detail.count} รายการ 🚀`, { duration: 4000 });
             }
+            updateQueueCount();
         };
 
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
         window.addEventListener('sync-complete', handleSyncComplete);
 
+        // Initial count and periodic update
+        updateQueueCount();
+        const interval = setInterval(updateQueueCount, 5000); 
+
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
             window.removeEventListener('sync-complete', handleSyncComplete);
+            clearInterval(interval);
         };
     }, []);
 
@@ -221,7 +242,10 @@ export const Layout = () => {
                         </div>
                     </div>
                     <button 
+                        disabled={isSyncing}
                         onClick={async () => {
+                            if (isSyncing) return;
+                            setIsSyncing(true);
                             // Dynamic import to clear caches and trigger refresh
                             const { clearAllCache } = await import('../services/apiService');
                             const { hydrateLocalDB, syncQueueToServer } = await import('../services/syncService');
@@ -232,13 +256,25 @@ export const Layout = () => {
                                 toast.loading('กำลังดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์...', { id: 'manual-refresh' });
                                 await hydrateLocalDB();
                                 toast.success('อัปเดตข้อมูลล่าสุดเรียบร้อย', { id: 'manual-refresh' });
+                            } else {
+                                toast.error('ไม่สามารถซิงค์ได้ขณะออฟไลน์', { id: 'manual-refresh' });
                             }
+                            setIsSyncing(false);
                             window.dispatchEvent(new Event('dashboard-refresh'));
                         }}
-                        className="flex items-center w-full px-4 py-2 text-sm font-medium text-white bg-rubber-600 rounded-lg hover:bg-rubber-700 transition-colors mb-2 shadow-sm"
+                        className={`flex items-center justify-between w-full px-4 py-3 text-sm font-bold text-white rounded-xl transition-all mb-2 shadow-md relative overflow-hidden group
+                            ${isSyncing ? 'bg-rubber-400 cursor-not-allowed' : 'bg-rubber-600 hover:bg-rubber-700 active:scale-95'}`}
                     >
-                        <RefreshCw size={20} className="mr-3" />
-                        ดึงข้อมูลล่าสุด (Sync)
+                        <div className="flex items-center">
+                            <RefreshCw size={20} className={`mr-3 ${isSyncing ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+                            <span>{isSyncing ? 'กำลังทำงาน...' : 'ซิงค์ข้อมูลล่าสุด'}</span>
+                        </div>
+                        
+                        {syncQueueCount > 0 && (
+                            <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 bg-red-500 text-white text-[10px] font-black rounded-full shadow-sm animate-bounce">
+                                {syncQueueCount}
+                            </span>
+                        )}
                     </button>
                     <button
                         onClick={handleLogout}

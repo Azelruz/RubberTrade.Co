@@ -48,6 +48,19 @@ export const PriceSettings = ({
                                 <span className="absolute right-4 bottom-4 text-gray-400 font-bold">บาท</span>
                             </div>
 
+                            <label className="block text-sm font-bold text-gray-700 mt-6 mb-2">ราคากลางขี้ยางวันนี้ (บาท/กก.)</label>
+                            <div className="relative">
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    {...priceForm.register('cupLumpPrice')}
+                                    className="w-full text-2xl font-black text-amber-700 px-4 py-3 border-b-4 border-amber-500 focus:outline-none bg-amber-50/30 rounded-t-lg transition-all"
+                                    placeholder="0.00"
+                                />
+                                <span className="absolute right-4 bottom-3 text-gray-400 font-bold">บาท</span>
+                            </div>
+
+
                             <div className="mt-4 p-3 bg-rubber-50/50 rounded-xl border border-rubber-100/50">
                                 <label className="flex items-center cursor-pointer group">
                                     <div className="relative">

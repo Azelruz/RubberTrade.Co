@@ -19,13 +19,14 @@ async function handlePost(context) {
 
         // Bulk Insert Support
         if (body.action === 'bulk' && Array.isArray(body.payloads)) {
-            const stationCode = await getSetting(context.env.DB, 'station_code', 'RTB');
-            const format = await getSetting(context.env.DB, 'format_employee_id', '{STATION}-E-{SEQ3}');
+            const stationCode = await getSetting(context.env.DB, 'station_code', userId, 'RTB');
+            const format = await getSetting(context.env.DB, 'format_employee_id', userId, '{STATION}-E-{SEQ3}');
             const stmts = [];
-            for (const p of body.payloads) {
+            for (let i = 0; i < body.payloads.length; i++) {
+                const p = body.payloads[i];
                 let id = p.id;
                 if (!id || isUUID(id)) {
-                    id = await generateNextId(context.env.DB, 'employees', format, stationCode, userId);
+                    id = await generateNextId(context.env.DB, 'employees', format, stationCode, userId, '', i);
                 }
                 const { name, farmerId, profitSharePct, phone, bankAccount, bankName } = p;
                 stmts.push(context.env.DB.prepare(
@@ -39,9 +40,9 @@ async function handlePost(context) {
         const payload = body.payload;
         let id = payload.id;
         if (!id || isUUID(id)) {
-            const stationCode = await getSetting(context.env.DB, 'station_code', 'RTB');
-            const format = await getSetting(context.env.DB, 'format_employee_id', '{STATION}-E-{SEQ3}');
-            id = await generateNextId(context.env.DB, 'employees', format, stationCode, userId);
+            const stationCode = await getSetting(context.env.DB, 'station_code', userId, 'RTB');
+            const format = await getSetting(context.env.DB, 'format_employee_id', userId, '{STATION}-E-{SEQ3}');
+            id = await generateNextId(context.env.DB, 'employees', format, stationCode, userId, '', 0);
         }
 
         const { name, farmerId, profitSharePct, phone, bankAccount, bankName } = payload;

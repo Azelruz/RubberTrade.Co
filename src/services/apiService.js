@@ -46,6 +46,36 @@ export const isCached = (...keys) => {
     } catch { return false; }
 };
 
+// Data validation before writing or syncing
+export const validateRecordData = (table, data) => {
+    if (!data) return { valid: false, message: 'ไม่มีข้อมูล' };
+    
+    // Core fields check
+    if (table === 'buys') {
+        if (!data.farmerId) return { valid: false, message: 'กรุณาระบุรหัสเกษตรกร' };
+        if (!data.weight || data.weight <= 0) return { valid: false, message: 'น้ำหนักต้องมากกว่า 0' };
+    }
+    
+    if (table === 'sells') {
+        if (!data.factoryId) return { valid: false, message: 'กรุณาระบุรหัสโรงงาน' };
+        if (!data.weight || data.weight <= 0) return { valid: false, message: 'น้ำหนักต้องมากกว่า 0' };
+    }
+
+    if (table === 'farmers' || table === 'employees') {
+        if (!data.name) return { valid: false, message: 'กรุณาระบุชื่อ' };
+    }
+
+    return { valid: true };
+};
+
+// Global refresh trigger for UI
+export const triggerDataRefresh = () => {
+    clearAllCache();
+    window.dispatchEvent(new CustomEvent('dashboard-refresh', { detail: { timestamp: Date.now() } }));
+    window.dispatchEvent(new CustomEvent('data-updated', { detail: { timestamp: Date.now() } }));
+};
+
+
 // Internal fetch wrapper
 const fetchAPI = async (endpoint, options = {}) => {
     try {
@@ -131,8 +161,15 @@ const offlineRead = async (table, fallbackEndpoint) => {
 
 // --- HYBRID WRITE: Online = API direct, Offline = queue ---
 const offlineWrite = async (table, endpoint, payload, action = 'POST') => {
+    // Validate data before proceeding
+    const validation = validateRecordData(table, payload);
+    if (!validation.valid) {
+        throw new Error(validation.message);
+    }
+
     const id = payload?.id || crypto.randomUUID();
     const finalPayload = { ...payload, id };
+
     
     // ONLINE: Send directly to API
     if (navigator.onLine) {
@@ -152,7 +189,7 @@ const offlineWrite = async (table, endpoint, payload, action = 'POST') => {
                 if (table !== 'settings') await db[table].put(updatedItem);
             } catch {}
             
-            clearCache(table, 'dashboard');
+            triggerDataRefresh();
             return res;
         } catch {
             // Network failed — fall through to offline queue
@@ -174,7 +211,7 @@ const offlineWrite = async (table, endpoint, payload, action = 'POST') => {
             uuid: crypto.randomUUID()
         });
         
-        clearCache(table, 'dashboard');
+        triggerDataRefresh();
         return { status: 'success', id };
     } catch (e) {
         console.error("[Offline Write] Error", e);
@@ -270,13 +307,13 @@ export const deleteMemberType = async (id) => {
     if (navigator.onLine) {
         const res = await fetchAPI(`/member-types?id=${id}`, { method: 'DELETE' });
         try { await db.farmer_types.delete(id); } catch {}
-        clearCache('farmer_types');
+        triggerDataRefresh();
         return res;
     }
     // Offline delete
     await db.sync_queue.put({ type: 'farmer_types', action: 'DELETE', payload: { id }, status: 'pending', createdAt: Date.now(), uuid: crypto.randomUUID() });
     try { await db.farmer_types.delete(id); } catch {}
-    clearCache('farmer_types');
+    triggerDataRefresh();
     return { status: 'success' };
 };
 
@@ -284,7 +321,7 @@ export const deleteMemberType = async (id) => {
 export const updateSettingsAPI = async (payload) => {
     if (!navigator.onLine) return { status: 'offline' };
     const res = await fetchAPI('/settings', { method: 'POST', body: { action: 'updateSettings', payload } });
-    clearCache('dashboard', 'settings');
+    triggerDataRefresh();
     db.settings.clear(); 
     return res;
 };
@@ -297,7 +334,7 @@ export const deleteRecord = async (sheetName, id) => {
         try {
             const res = await fetchAPI('/deleteRecord', { method: 'POST', body: { sheetName, id } });
             try { await db[table].delete(id); } catch {}
-            clearCache(table, 'dashboard');
+            triggerDataRefresh();
             return res;
         } catch {
             // Fall through to offline queue
@@ -315,7 +352,7 @@ export const deleteRecord = async (sheetName, id) => {
     });
     
     try { await db[table].delete(id); } catch {}
-    clearCache(table, 'dashboard');
+    triggerDataRefresh();
     return { status: 'success', message: 'Queued for deletion' };
 };
 
@@ -327,7 +364,7 @@ export const updateRecord = async (sheetName, id, updates) => {
         try {
             const res = await fetchAPI('/updateRecord', { method: 'POST', body: { sheetName, id, updates } });
             try { await db[table].update(id, updates); } catch {}
-            clearCache(table, 'dashboard');
+            triggerDataRefresh();
             return res;
         } catch {
             // Fall through to offline queue
@@ -345,14 +382,14 @@ export const updateRecord = async (sheetName, id, updates) => {
     });
     
     try { await db[table].update(id, updates); } catch {}
-    clearCache(table, 'dashboard');
+    triggerDataRefresh();
     return { status: 'success' };
 };
 
 export const addBulkWages = async (payloads) => {
     if (!navigator.onLine) return { status: 'offline' };
     const res = await fetchAPI('/wages', { method: 'POST', body: { action: 'addBulkWages', payloads } });
-    clearCache('wages', 'dashboard');
+    triggerDataRefresh();
     return res;
 };
 

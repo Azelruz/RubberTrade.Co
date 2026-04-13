@@ -1,7 +1,8 @@
-import { Building2, Save, CreditCard, Copy } from 'lucide-react';
+import { Building2, Save, CreditCard, Copy, Trash2, Database, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export const GeneralSettings = ({ register, handleSubmit, onSubmit, saving, logoUrl, setLogoUrl, handleLogoUpload }) => {
+export const GeneralSettings = ({ register, handleSubmit, onSubmit, saving, logoUrl, setLogoUrl, handleLogoUpload, onResetDB }) => {
+
     return (
         <div className="max-w-xl">
             <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center">
@@ -239,6 +240,37 @@ export const GeneralSettings = ({ register, handleSubmit, onSubmit, saving, logo
                     </button>
                 </div>
             </form>
+
+            {/* Maintenance Section */}
+            <div className="mt-12 pt-8 border-t border-gray-100">
+                <h3 className="text-sm font-bold text-red-800 mb-4 flex items-center">
+                    <Database className="mr-2" size={18} />
+                    การดูแลรักษาพื่นที่เก็บข้อมูล (Maintenance)
+                </h3>
+                <div className="bg-red-50/50 p-6 rounded-2xl border border-red-100 space-y-4">
+                    <div className="flex items-start space-x-4">
+                        <div className="p-3 bg-red-100 rounded-xl text-red-600">
+                            <AlertTriangle size={24} />
+                        </div>
+                        <div className="flex-1">
+                            <h4 className="text-sm font-bold text-gray-900 mb-1">ล้างข้อมูลเฉพาะเครื่องนี้ (Reset Local Database)</h4>
+                            <p className="text-xs text-gray-500 leading-relaxed mb-4">
+                                หากคุณพบปัญหาข้อมูลแสดงผลผิดเพี้ยน หรือต้องการล้างข้อมูลเก่าที่สะสมใน browser เครื่องนี้ 
+                                คุณสามารถสั่งล้างฐานข้อมูลเครื่องได้ โดยระบบจะทำการดึงข้อมูลใหม่มาให้จาก Server
+                            </p>
+                            <button
+                                type="button"
+                                onClick={onResetDB}
+                                className="inline-flex items-center px-4 py-2 bg-white border border-red-200 text-red-600 rounded-xl text-xs font-bold hover:bg-red-50 transition-all shadow-sm"
+                            >
+                                <Trash2 size={14} className="mr-2" />
+                                ล้างข้อมูลเฉพาะเครื่องนี้
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
+
