@@ -2,8 +2,8 @@ import { jsonResponse, errorResponse, withAuth } from './_utils.js';
 
 async function handleGet(context) {
     try {
-        const userId = context.user.id;
-        const { results } = await context.env.DB.prepare("SELECT * FROM settings WHERE userId = ? OR userId IS NULL").bind(userId).all();
+        const storeId = context.user.storeId;
+        const { results } = await context.env.DB.prepare("SELECT * FROM settings WHERE userId = ? OR userId IS NULL").bind(storeId).all();
         
         // Convert to a single object. 
         // We sort so that userId IS NULL comes first, then userId = actual ID comes later and overwrites the defaults.
@@ -35,7 +35,7 @@ async function handlePost(context) {
         if (body.action === 'updateDailyPrice' && payload?.price) {
             await context.env.DB.prepare(
                 "INSERT INTO settings (key, value, userId, updated_at) VALUES ('daily_price', ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key, userId) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP"
-            ).bind(payload.price, userId).run();
+            ).bind(payload.price, context.user.storeId).run();
             return jsonResponse({ status: 'success' });
         }
         
@@ -44,7 +44,7 @@ async function handlePost(context) {
             const stmts = Object.keys(payload).map(key => {
                 return context.env.DB.prepare(
                     "INSERT INTO settings (key, value, userId, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key, userId) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP"
-                ).bind(key, String(payload[key]), userId);
+                ).bind(key, String(payload[key]), context.user.storeId);
             });
             if(stmts.length > 0) {
                await context.env.DB.batch(stmts);

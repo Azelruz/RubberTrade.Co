@@ -25,6 +25,13 @@ const StatCard = ({ title, value, icon, bgColor, valueColor, details }) => (
     </div>
 );
 
+const formatVal = (val, prefix = '', suffix = '') => {
+    if (val === '***') return '***';
+    const num = Number(val);
+    if (isNaN(num)) return '-';
+    return `${prefix}${num.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${suffix}`;
+};
+
 const DashboardStats = ({ stats }) => {
     return (
         <div className="space-y-6">
@@ -38,45 +45,45 @@ const DashboardStats = ({ stats }) => {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <StatCard
                         title="ยอดรับซื้อวันนี้"
-                        value={`฿${Number(stats.todayBuy).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
+                        value={formatVal(stats.todayBuy, '฿')}
                         icon={<Droplets className="text-blue-500" size={24} />}
                         bgColor="bg-blue-50"
                         details={[
-                            { label: 'น้ำยางสด', value: `฿${Number(stats.todayLatexBuy).toLocaleString()}` },
-                            { label: 'ขี้ยาง', value: `฿${Number(stats.todayCupLumpBuy).toLocaleString()}` }
+                            { label: 'น้ำยางสด', value: formatVal(stats.todayLatexBuy, '฿') },
+                            { label: 'ขี้ยาง', value: formatVal(stats.todayCupLumpBuy, '฿') }
                         ]}
                     />
                     <StatCard
                         title="ปริมาณยางวันนี้"
-                        value={`${Number(stats.todayBuyWeight).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} กก.`}
+                        value={formatVal(stats.todayBuyWeight, '', ' กก.')}
                         icon={<TrendingUp className="text-rubber-500" size={24} />}
                         bgColor="bg-rubber-50"
                         details={[
-                            { label: 'น้ำยางสด', value: `${Number(stats.todayLatexWeight).toLocaleString()} กก.` },
-                            { label: 'ขี้ยาง', value: `${Number(stats.todayCupLumpWeight).toLocaleString()} กก.` }
+                            { label: 'น้ำยางสด', value: formatVal(stats.todayLatexWeight, '', ' กก.') },
+                            { label: 'ขี้ยาง', value: formatVal(stats.todayCupLumpWeight, '', ' กก.') }
                         ]}
                     />
                     <StatCard
                         title="เฉลี่ย % DRC วันนี้"
-                        value={`${Number(stats.todayAvgDrc).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`}
+                        value={formatVal(stats.todayAvgDrc, '', '%')}
                         icon={<Activity className="text-cyan-500" size={24} />}
                         bgColor="bg-cyan-50"
                     />
                     <StatCard
                         title="ยอดขายวันนี้"
-                        value={`฿${Number(stats.todaySell).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
+                        value={formatVal(stats.todaySell, '฿')}
                         icon={<Truck className="text-orange-500" size={24} />}
                         bgColor="bg-orange-50"
                     />
                     <StatCard
                         title="ราคายางวันนี้"
-                        value={`฿${Number(stats.dailyPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
+                        value={formatVal(stats.dailyPrice || 0, '฿')}
                         icon={<DollarSign className="text-emerald-500" size={24} />}
                         bgColor="bg-emerald-50"
                     />
                     <StatCard
                         title="ค่าใช้จ่ายวันนี้"
-                        value={`฿${Number(stats.todayExpense).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
+                        value={formatVal(stats.todayExpense, '฿')}
                         icon={<Wallet className="text-red-500" size={24} />}
                         bgColor="bg-red-50"
                     />
@@ -105,22 +112,22 @@ const DashboardStats = ({ stats }) => {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <StatCard
                         title="รายรับรวม (ยอดขาย)"
-                        value={`฿${Number(stats.monthIncome).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
+                        value={formatVal(stats.monthIncome, '฿')}
                         icon={<TrendingUp className="text-green-500" size={24} />}
                         bgColor="bg-green-50"
                     />
                     <StatCard
                         title="ต้นทุนรวม (ซื้อน้ำยาง+ค่าใช้จ่าย)"
-                        value={`฿${Number(stats.monthCost).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
+                        value={formatVal(stats.monthCost, '฿')}
                         icon={<TrendingDown className="text-red-500" size={24} />}
                         bgColor="bg-red-50"
                     />
                     <StatCard
                         title="กำไรสุทธิ"
-                        value={`${stats.monthProfit >= 0 ? '+' : '-'}฿${Number(Math.abs(stats.monthProfit)).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
-                        icon={<DollarSign className={`${stats.monthProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} size={24} />}
-                        bgColor={stats.monthProfit >= 0 ? 'bg-emerald-50' : 'bg-rose-50'}
-                        valueColor={stats.monthProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}
+                        value={stats.monthProfit === '***' ? '***' : `${stats.monthProfit >= 0 ? '+' : '-'}฿${Number(Math.abs(stats.monthProfit)).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`}
+                        icon={<DollarSign className={`${stats.monthProfit === '***' || stats.monthProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} size={24} />}
+                        bgColor={stats.monthProfit === '***' || stats.monthProfit >= 0 ? 'bg-emerald-50' : 'bg-rose-50'}
+                        valueColor={stats.monthProfit === '***' || stats.monthProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}
                     />
                 </div>
             </div>

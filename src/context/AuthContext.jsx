@@ -18,7 +18,11 @@ export const AuthProvider = ({ children }) => {
                 email: sbUser.email,
                 role: sbUser.user_metadata?.role || 'owner',
                 username: sbUser.email?.split('@')[0] || 'User',
-                user_metadata: sbUser.user_metadata
+                user_metadata: sbUser.user_metadata,
+                // Fallback from localStorage if offline
+                subscriptionStatus: localStorage.getItem('rt_subscription_status') || 'trial',
+                subscriptionExpiry: localStorage.getItem('rt_subscription_expiry'),
+                lastSync: localStorage.getItem('rt_last_sync')
             };
 
             setUser(baseUser);
@@ -27,12 +31,22 @@ export const AuthProvider = ({ children }) => {
             try {
                 const subRes = await getSubscriptionStatus();
                 if (subRes && subRes.status === 'success') {
+                    const status = subRes.subscription?.subscription_status || 'trial';
+                    const expiry = subRes.subscription?.subscription_expiry;
+                    const role = subRes.subscription?.role || baseUser.role;
+                    const now = new Date().toISOString();
+
+                    // Persist to localStorage for offline security checks
+                    localStorage.setItem('rt_subscription_status', status);
+                    if (expiry) localStorage.setItem('rt_subscription_expiry', expiry);
+                    localStorage.setItem('rt_last_sync', now);
+
                     setUser(prev => ({
                         ...prev,
-                        subscriptionStatus: subRes.subscription?.subscription_status || 'trial',
-                        subscriptionExpiry: subRes.subscription?.subscription_expiry,
-                        // Override role if it exists in our DB (e.g. super_admin)
-                        role: subRes.subscription?.role || baseUser.role
+                        subscriptionStatus: status,
+                        subscriptionExpiry: expiry,
+                        lastSync: now,
+                        role: role
                     }));
                 }
             } catch (err) {

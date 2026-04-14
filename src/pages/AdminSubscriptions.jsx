@@ -40,12 +40,13 @@ const AdminSubscriptions = () => {
 
     // Member Edit state
     const [editingMember, setEditingMember] = useState(null);
-    const [editForm, setEditForm] = useState({ status: '', expiry: '' });
+    const [editForm, setEditForm] = useState({ status: '', expiry: '', maxStaffLimit: 1 });
     const [isUpdatingMember, setIsUpdatingMember] = useState(false);
 
     // Package form state
     const [showPackageForm, setShowPackageForm] = useState(false);
-    const [newPkg, setNewPkg] = useState({ name: '', days: '', price: '' });
+    const [newPkg, setNewPkg] = useState({ name: '', days: '', price: '', maxStaff: 1 });
+    const [isEditingPkg, setIsEditingPkg] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -144,7 +145,8 @@ const AdminSubscriptions = () => {
         setEditingMember(member);
         setEditForm({
             status: member.subscription_status || 'trial',
-            expiry: member.subscription_expiry ? member.subscription_expiry.substring(0, 10) : ''
+            expiry: member.subscription_expiry ? member.subscription_expiry.substring(0, 10) : '',
+            maxStaffLimit: member.maxStaffLimit || 1
         });
     };
 
@@ -152,7 +154,7 @@ const AdminSubscriptions = () => {
         if (!editingMember) return;
         setIsUpdatingMember(true);
         try {
-            const res = await adminUpdateUserSubscription(editingMember.id, editForm.status, editForm.expiry);
+            const res = await adminUpdateUserSubscription(editingMember.id, editForm.status, editForm.expiry, editForm.maxStaffLimit);
             if (res.status === 'success') {
                 toast.success('อัปเดตข้อมูลสมาชิกเรียบร้อยแล้ว');
                 setEditingMember(null);
@@ -171,15 +173,36 @@ const AdminSubscriptions = () => {
         try {
             const res = await adminCreatePackage(newPkg);
             if (res.status === 'success') {
-                toast.success('สร้างแพ็กเกจเรียบร้อยแล้ว');
-                setNewPkg({ name: '', days: '', price: '' });
+                toast.success(isEditingPkg ? 'อัปเดตแพ็กเกจเรียบร้อยแล้ว' : 'สร้างแพ็กเกจเรียบร้อยแล้ว');
+                setNewPkg({ name: '', days: '', price: '', maxStaff: 1 });
                 setShowPackageForm(false);
+                setIsEditingPkg(false);
                 const pkgRes = await fetchPackages();
                 if (pkgRes.status === 'success') setPackages(pkgRes.packages);
             }
         } catch (err) {
-            toast.error('สร้างแพ็กเกจไม่สำเร็จ: ' + err.message);
+            toast.error('การดำเนินการล้มเหลว: ' + err.message);
         }
+    };
+
+    const handleEditPackage = (pkg) => {
+        setNewPkg({
+            id: pkg.id,
+            name: pkg.name,
+            days: pkg.days,
+            price: pkg.price,
+            maxStaff: pkg.maxStaff || 1
+        });
+        setIsEditingPkg(true);
+        setShowPackageForm(true);
+        // Scroll to form
+        window.scrollTo({ top: 300, behavior: 'smooth' });
+    };
+
+    const handleCancelPkgEdit = () => {
+        setNewPkg({ name: '', days: '', price: '', maxStaff: 1 });
+        setIsEditingPkg(false);
+        setShowPackageForm(false);
     };
 
     const handleDeletePackage = async (id) => {
@@ -300,16 +323,25 @@ const AdminSubscriptions = () => {
                                 จัดการแพ็กเกจสมาชิก
                             </h2>
                             <button 
-                                onClick={() => setShowPackageForm(!showPackageForm)}
-                                className="flex items-center space-x-2 bg-rubber-50 hover:bg-rubber-100 text-rubber-600 px-4 py-2 rounded-xl font-bold transition-colors"
+                                onClick={() => {
+                                    if(showPackageForm && isEditingPkg) {
+                                        handleCancelPkgEdit();
+                                    } else {
+                                        setShowPackageForm(!showPackageForm);
+                                        if(!showPackageForm) setIsEditingPkg(false);
+                                    }
+                                }}
+                                className={`flex items-center space-x-2 px-4 py-2 rounded-xl font-bold transition-colors ${
+                                    showPackageForm && isEditingPkg ? 'bg-gray-100 text-gray-600' : 'bg-rubber-50 hover:bg-rubber-100 text-rubber-600'
+                                }`}
                             >
-                                <Plus size={18} />
-                                <span>เพิ่มแพ็กเกจ</span>
+                                {showPackageForm && isEditingPkg ? <XCircle size={18} /> : <Plus size={18} />}
+                                <span>{showPackageForm && isEditingPkg ? 'ยกเลิกการแก้ไข' : 'เพิ่มแพ็กเกจ'}</span>
                             </button>
                         </div>
 
                         {showPackageForm && (
-                            <form onSubmit={handleCreatePackage} className="bg-gray-50 border border-gray-100 rounded-2xl p-6 mb-8 mt-4 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                            <form onSubmit={handleCreatePackage} className="bg-gray-50 border border-gray-100 rounded-2xl p-6 mb-8 mt-4 grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                                 <div className="space-y-1">
                                     <label className="text-xs font-black text-gray-500 uppercase tracking-wider">ชื่อแพ็กเกจ</label>
                                     <input required type="text" className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:ring-2 focus:ring-rubber-500" value={newPkg.name} onChange={e => setNewPkg({...newPkg, name: e.target.value})} placeholder="เช่น 1 เดือน" />
@@ -319,11 +351,15 @@ const AdminSubscriptions = () => {
                                     <input required type="number" className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:ring-2 focus:ring-rubber-500" value={newPkg.days} onChange={e => setNewPkg({...newPkg, days: e.target.value})} placeholder="30" />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-xs font-black text-gray-500 uppercase tracking-wider">ราคา (บาท)</label>
+                                    <label className="text-xs font-black text-gray-400 uppercase tracking-wider">ราคา (บาท)</label>
                                     <input required type="number" step="0.01" className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:ring-2 focus:ring-rubber-500" value={newPkg.price} onChange={e => setNewPkg({...newPkg, price: e.target.value})} placeholder="299" />
                                 </div>
-                                <button type="submit" className="bg-rubber-600 hover:bg-rubber-700 text-white rounded-xl p-3 font-bold shadow flex justify-center items-center h-[50px]">
-                                    บันทึกแพ็กเกจ
+                                <div className="space-y-1">
+                                    <label className="text-xs font-black text-gray-400 uppercase tracking-wider">พนักงานสูงสุด</label>
+                                    <input required type="number" className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:ring-2 focus:ring-rubber-500" value={newPkg.maxStaff} onChange={e => setNewPkg({...newPkg, maxStaff: e.target.value})} placeholder="3" />
+                                </div>
+                                <button type="submit" className={`${isEditingPkg ? 'bg-amber-500 hover:bg-amber-600' : 'bg-rubber-600 hover:bg-rubber-700'} text-white rounded-xl p-3 font-bold shadow flex justify-center items-center h-[50px] transition-colors`}>
+                                    {isEditingPkg ? 'บันทึกการแก้ไข' : 'สร้างแพ็กเกจ'}
                                 </button>
                             </form>
                         )}
@@ -331,12 +367,23 @@ const AdminSubscriptions = () => {
                         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
                             {packages.map(pkg => (
                                 <div key={pkg.id} className="border border-gray-100 bg-white rounded-2xl p-5 shadow-sm relative group hover:border-rubber-200 hover:shadow-md transition-all">
-                                    <button onClick={() => handleDeletePackage(pkg.id)} className="absolute top-4 right-4 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="absolute top-4 right-4 flex space-x-2">
+                                    <button onClick={() => handleEditPackage(pkg)} className="text-gray-300 hover:text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                                        <Edit3 size={18} />
+                                    </button>
+                                    <button onClick={() => handleDeletePackage(pkg.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1">
                                         <Trash2 size={18} />
                                     </button>
+                                </div>
                                     <div className="text-xs font-bold text-rubber-500 uppercase tracking-widest mb-1">{pkg.days} วัน</div>
                                     <div className="text-xl font-black text-gray-800">{pkg.name}</div>
-                                    <div className="text-lg font-bold text-gray-600 mt-1">฿{pkg.price}</div>
+                                    <div className="flex justify-between items-center mt-2 group-hover:transform group-hover:translate-y-[-2px] transition-transform">
+                                        <div className="text-lg font-bold text-rubber-600">฿{pkg.price}</div>
+                                        <div className="flex items-center text-[11px] font-black text-gray-400 uppercase bg-gray-50 px-2.5 py-1 rounded-lg">
+                                            <Users size={12} className="mr-1.5" />
+                                            {pkg.maxStaff} Staff
+                                        </div>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -503,6 +550,7 @@ const AdminSubscriptions = () => {
                                     <th className="px-8 py-4">ชื่อร้าน / สมาชิก</th>
                                     <th className="px-8 py-4">บัญชี</th>
                                     <th className="px-8 py-4">สถานะ</th>
+                                    <th className="px-8 py-4 text-center">พนักงาน</th>
                                     <th className="px-8 py-4 text-center">วันหมดอายุ</th>
                                     <th className="px-8 py-4 text-right">การจัดการ</th>
                                 </tr>
@@ -520,6 +568,12 @@ const AdminSubscriptions = () => {
                                         </td>
                                         <td className="px-8 py-5">
                                             {getStatusBadge(m.subscription_status)}
+                                        </td>
+                                        <td className="px-8 py-5 text-center">
+                                            <div className="inline-flex items-center px-2 py-1 bg-gray-50 rounded-lg border border-gray-100 font-black text-gray-600 text-xs shadow-inner">
+                                                <Users size={12} className="mr-1.5 text-gray-400" />
+                                                {m.maxStaffLimit || 1}
+                                            </div>
                                         </td>
                                         <td className="px-8 py-5 text-center font-bold text-sm text-gray-600">
                                             {m.subscription_expiry ? format(new Date(m.subscription_expiry), 'dd/MM/yyyy') : '-'}
@@ -602,6 +656,26 @@ const AdminSubscriptions = () => {
                                     />
                                     <p className="text-[10px] text-gray-400 italic">
                                         * กำหนดวันสิ้นสุดการรับโบนัสและการใช้ฟีเจอร์พรีเมียม
+                                    </p>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center">
+                                        <Users size={12} className="mr-1.5" />
+                                        โควตาพนักงาน (Staff Quota)
+                                    </label>
+                                    <div className="relative">
+                                        <input 
+                                            type="number"
+                                            className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 font-bold text-gray-800 focus:ring-2 focus:ring-rubber-500 transition-all outline-none"
+                                            value={editForm.maxStaffLimit}
+                                            onChange={(e) => setEditForm({...editForm, maxStaffLimit: e.target.value})}
+                                            min="1"
+                                        />
+                                        <div className="absolute right-6 top-1/2 -translate-y-1/2 text-xs font-black text-gray-300">USER(S)</div>
+                                    </div>
+                                    <p className="text-[10px] text-gray-400 italic">
+                                        * จำนวนพนักงานที่เจ้าของร้านสามารถเพิ่มเข้าระบบได้
                                     </p>
                                 </div>
 

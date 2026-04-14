@@ -106,7 +106,9 @@ export const syncQueueToServer = async () => {
     isSyncing = true;
 
     try {
-        const queue = await db.sync_queue.orderBy('createdAt').toArray();
+        const allItems = await db.sync_queue.orderBy('createdAt').toArray();
+        const queue = allItems.filter(item => (item.retryCount || 0) < 5);
+        
         if (queue.length === 0) {
             isSyncing = false;
             return;
@@ -175,8 +177,11 @@ export const syncQueueToServer = async () => {
                     syncedCount++;
                 } else {
                     console.error(`[SyncService] Sync failed for item ${item.uuid}:`, data);
-                    // If it's a persistent 404 for something else, maybe we should skip it or handle it.
-                    // For now, we break to avoid looping on error if it's a server failure.
+                    
+                    // Increment retry count
+                    const currentRetry = item.retryCount || 0;
+                    await db.sync_queue.update(item.uuid, { retryCount: currentRetry + 1 });
+
                     if (is404) {
                         console.warn("[SyncService] Skipping invalid endpoint/resource 404");
                         await db.sync_queue.delete(item.uuid);
@@ -186,6 +191,9 @@ export const syncQueueToServer = async () => {
                 }
             } catch (e) {
                 console.error(`[SyncService] Unexpected error for item ${item.uuid}:`, e);
+                // Increment retry count even on unexpected errors
+                const currentRetry = item.retryCount || 0;
+                await db.sync_queue.update(item.uuid, { retryCount: currentRetry + 1 });
                 break; 
             }
         }

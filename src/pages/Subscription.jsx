@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { submitSubscriptionRequest, getSubscriptionStatus, fetchPackages } from '../services/apiService';
-import { CreditCard, CheckCircle, Clock, AlertCircle, Upload, History, DollarSign, ExternalLink, ShieldCheck, Package, Building2, User, QrCode } from 'lucide-react';
+import { 
+    CreditCard, CheckCircle, Clock, AlertCircle, Upload, History, 
+    DollarSign, ExternalLink, ShieldCheck, Package, Building2, 
+    User, QrCode, Sparkles, Crown, Zap, Check, ChevronRight, XCircle
+} from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format, addDays } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { th } from 'date-fns/locale';
 
 const Subscription = () => {
@@ -33,7 +37,7 @@ const Subscription = () => {
             }
             if (pkgRes.status === 'success') {
                 setPackages(pkgRes.packages);
-                if (pkgRes.packages.length > 0) setSelectedPackage(pkgRes.packages[0]); // default select first
+                if (pkgRes.packages.length > 0) setSelectedPackage(pkgRes.packages[0]);
             }
         } catch (err) {
             toast.error('ไม่สามารถโหลดข้อมูลสมาชิกได้');
@@ -81,295 +85,438 @@ const Subscription = () => {
     };
 
     if (loading) return (
-        <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-rubber-600"></div>
+        <div className="flex justify-center items-center h-[60vh]">
+            <div className="relative">
+                <div className="w-16 h-16 border-4 border-rubber-100 border-t-rubber-600 rounded-full animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <Zap className="text-rubber-600 animate-pulse" size={24} />
+                </div>
+            </div>
         </div>
     );
 
     const isExpired = user?.subscriptionExpiry && new Date(user.subscriptionExpiry) < new Date();
     const expiryDate = user?.subscriptionExpiry ? new Date(user.subscriptionExpiry) : null;
+    const daysLeft = expiryDate ? differenceInDays(expiryDate, new Date()) : 0;
+    const progressPercent = Math.max(0, Math.min(100, (daysLeft / 30) * 100)); // Base on 30 days for visual
 
     return (
-        <div className="max-w-5xl mx-auto space-y-8 pb-12 animate-in fade-in duration-500">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-black text-gray-900 tracking-tight">ระบบสมาชิก & การชำระเงิน</h1>
-                    <p className="text-gray-500 font-medium">จัดการอายุการใช้งานและตรวจสอบประวัติการชำระเงิน</p>
+        <div className="max-w-6xl mx-auto space-y-12 pb-24 px-4 sm:px-6">
+            {/* Header with Premium Feel */}
+            <div className="text-center space-y-4 pt-8">
+                <div className="inline-flex items-center px-4 py-2 bg-rubber-50 rounded-full text-rubber-600 font-black text-[10px] uppercase tracking-[0.2em] animate-in slide-in-from-top-4 duration-700">
+                    <Crown size={14} className="mr-2" />
+                    Rubber Trade Premium Experience
                 </div>
-                <div className={`px-6 py-3 rounded-2xl flex items-center space-x-3 shadow-lg ${isExpired ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-rubber-50 text-rubber-700 border border-rubber-100'}`}>
-                    {isExpired ? <AlertCircle size={24} /> : <ShieldCheck size={24} />}
-                    <div>
-                        <div className="text-[10px] font-black uppercase tracking-widest opacity-60">Status</div>
-                        <div className="font-bold text-lg">{isExpired ? 'หมดอายุแล้ว' : 'กำลังใช้งาน'}</div>
+                <h1 className="text-4xl md:text-5xl font-black text-gray-900 tracking-tight">
+                    ยกระดับธุรกิจของคุณด้วย <span className="text-transparent bg-clip-text bg-gradient-to-r from-rubber-600 to-teal-500">Subscription</span>
+                </h1>
+                <p className="text-gray-500 font-medium max-w-2xl mx-auto text-lg leading-relaxed">
+                    จัดการอายุการใช้งาน เพิ่มสิทธิ์พนักงาน และปลดล็อกฟีเจอร์รายงานเชิงลึกเพื่อการเติบโตที่ยั่งยืน
+                </p>
+            </div>
+
+            {/* Current Status Dashboard */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div className="lg:col-span-8 lg:col-start-3">
+                    <div className="bg-white/80 backdrop-blur-2xl rounded-[40px] p-8 border border-white/40 shadow-2xl shadow-gray-200/50 relative overflow-hidden group transition-all duration-500 hover:shadow-rubber-500/10">
+                        {/* Decorative background elements */}
+                        <div className="absolute -top-24 -right-24 w-64 h-64 bg-rubber-500/10 rounded-full blur-[80px] group-hover:bg-rubber-500/20 transition-all duration-700"></div>
+                        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-teal-500/10 rounded-full blur-[80px] group-hover:bg-teal-500/20 transition-all duration-700"></div>
+                        
+                        <div className="relative z-10 flex flex-col md:flex-row items-center gap-10">
+                            {/* Left: Progress/Status Circle */}
+                            <div className="relative w-40 h-40 flex-shrink-0">
+                                <svg className="w-full h-full transform -rotate-90">
+                                    <circle cx="80" cy="80" r="70" className="stroke-gray-100 fill-none" strokeWidth="12" />
+                                    <circle 
+                                        cx="80" cy="80" r="70" 
+                                        className={`${isExpired ? 'stroke-red-500' : 'stroke-rubber-500'} fill-none transition-all duration-1000 ease-out`}
+                                        strokeWidth="12" 
+                                        strokeDasharray={440} 
+                                        strokeDashoffset={440 - (440 * (isExpired ? 100 : progressPercent)) / 100}
+                                        strokeLinecap="round"
+                                    />
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                                    {isExpired ? (
+                                        <AlertCircle size={32} className="text-red-500 animate-pulse" />
+                                    ) : (
+                                        <>
+                                            <span className="text-3xl font-black text-gray-900 leading-none">{daysLeft}</span>
+                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Days Left</span>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Right: Info details */}
+                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6 w-full text-center md:text-left">
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Current Plan</p>
+                                    <div className="text-2xl font-black text-gray-900 flex items-center justify-center md:justify-start">
+                                        {user?.role === 'super_admin' ? 'Super User' : (subData?.subscription?.subscription_status === 'trial' ? 'FREE TRIAL' : 'PREMIUM')}
+                                        <Sparkles className="ml-2 text-amber-400" size={20} />
+                                    </div>
+                                    <div className="flex items-center justify-center md:justify-start text-sm font-bold text-rubber-600 bg-rubber-50 w-fit px-3 py-1 rounded-full mx-auto md:mx-0">
+                                        <User size={14} className="mr-1.5" />
+                                        Max Staff: {subData?.subscription?.maxStaffLimit || 1}
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Expiration Date</p>
+                                    <div className={`text-2xl font-black ${isExpired ? 'text-red-500' : 'text-gray-900'}`}>
+                                        {expiryDate ? format(expiryDate, 'd MMM yyyy', { locale: th }) : 'ไม่ระบุ'}
+                                    </div>
+                                    <p className="text-xs font-bold text-gray-400">
+                                        {isExpired ? 'หมดอายุการใช้งานแล้ว' : `สิทธิ์การใช้งานพรีเมียมจนถึงวันที่สิ้นสุด`}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Status Card */}
-                <div className="lg:col-span-2 space-y-8">
-                    <div className="bg-white rounded-[32px] p-8 border border-gray-100 shadow-xl shadow-gray-200/50 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-8 opacity-[0.03]">
-                            <CreditCard size={200} />
-                        </div>
-                        <div className="relative z-10">
-                            <h2 className="text-xl font-black text-gray-800 mb-6 flex items-center">
-                                <Clock className="mr-3 text-rubber-500" size={24} />
-                                รายละเอียดการใช้งาน
-                            </h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100">
-                                    <div className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">แพ็กเกจปัจจุบัน</div>
-                                    <div className="text-2xl font-black text-rubber-700">{user?.role === 'super_admin' ? 'Super User' : (subData?.subscription?.subscription_status === 'trial' ? 'ฟรีทดลองใช้งาน' : 'สมาชิกรายเดือน')}</div>
-                                </div>
-                                <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100">
-                                    <div className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">วันหมดอายุ</div>
-                                    <div className={`text-2xl font-black ${isExpired ? 'text-red-500' : 'text-gray-800'}`}>
-                                        {expiryDate ? format(expiryDate, 'd MMMM yyyy', { locale: th }) : 'ไม่ระบุ'}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {isExpired && (
-                                <div className="mt-8 p-6 bg-red-50 border border-red-100 rounded-3xl flex items-start space-x-4">
-                                    <div className="p-3 bg-red-100 rounded-2xl text-red-600">
-                                        <AlertCircle size={24} />
-                                    </div>
-                                    <div>
-                                        <h4 className="font-black text-red-900 text-lg">การใช้งานของคุณสิ้นสุดแล้ว</h4>
-                                        <p className="text-red-700 font-medium">คุณยังสามารถดูข้อมูลเดิมได้ แต่จะไม่สามารถบันทึกรายการใหม่หรือส่งออกข้อมูลได้ กรุณาชำระเงินเพื่อเปิดใช้งานเต็มรูปแบบ</p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {!isExpired && expiryDate && (
-                                <div className="mt-8 p-6 bg-amber-50 border border-amber-100 rounded-3xl flex items-center space-x-4">
-                                    <div className="p-3 bg-amber-100 rounded-2xl text-amber-600">
-                                        <Clock size={24} />
-                                    </div>
-                                    <div>
-                                        <p className="text-amber-800 font-bold">คงเหลือเวลาใช้งานอีก {Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24))} วัน</p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* History Table */}
-                    <div className="bg-white rounded-[32px] overflow-hidden border border-gray-100 shadow-sm">
-                        <div className="p-8 border-b border-gray-50 flex items-center justify-between">
-                            <h2 className="text-xl font-black text-gray-800 flex items-center">
-                                <History className="mr-3 text-rubber-500" size={24} />
-                                ประวัติการชำระเงิน
-                            </h2>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead className="bg-gray-50/50 text-[10px] uppercase font-black tracking-widest text-gray-400">
-                                    <tr>
-                                        <th className="px-8 py-4">วันที่แจ้ง</th>
-                                        <th className="px-8 py-4">จำนวนเงิน</th>
-                                        <th className="px-8 py-4">หลักฐาน</th>
-                                        <th className="px-8 py-4">สถานะ</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                    {subData?.requests?.map(req => (
-                                        <tr key={req.id} className="hover:bg-gray-50/50 transition-colors">
-                                            <td className="px-8 py-5">
-                                                <div className="font-bold text-gray-700">
-                                                    {req.package_name ? `${req.package_name} ` : ''}
-                                                    <span className="text-gray-400 text-xs">({format(new Date(req.requestedAt), 'HH:mm dd/MM/yy', { locale: th })})</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-5">
-                                                <div className="font-black text-gray-900">฿{req.amount}</div>
-                                            </td>
-                                            <td className="px-8 py-5">
-                                                <a href={req.slipUrl} target="_blank" rel="noreferrer" className="inline-flex items-center text-rubber-600 hover:text-rubber-700 font-bold text-sm">
-                                                    <ExternalLink size={14} className="mr-1" /> ดูรูปสลิป
-                                                </a>
-                                            </td>
-                                            <td className="px-8 py-5">
-                                                <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider border ${
-                                                    req.status === 'approved' ? 'bg-green-50 text-green-600 border-green-100' :
-                                                    req.status === 'rejected' ? 'bg-red-50 text-red-600 border-red-100' :
-                                                    'bg-amber-50 text-amber-600 border-amber-100'
-                                                }`}>
-                                                    {req.status === 'approved' ? 'อนุมัติแล้ว' : req.status === 'rejected' ? 'ปฏิเสธ' : 'รอการตรวจสอบ'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {(!subData?.requests || subData.requests.length === 0) && (
-                                        <tr>
-                                            <td colSpan="4" className="px-8 py-12 text-center text-gray-400 font-medium">ยังไม่เคยมีประวัติการแจ้งชำระเงิน</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+            {/* Pricing Section - SaaS Style */}
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
+                <div className="text-center mb-10">
+                    <h2 className="text-2xl font-black text-gray-900 flex items-center justify-center">
+                        <Package className="mr-3 text-rubber-500" />
+                        เลือกแพ็กเกจที่คุณต้องการ
+                    </h2>
                 </div>
 
-                {/* Payment Form */}
-                <div className="space-y-6">
-                    <div className="bg-[#111827] text-white rounded-[32px] p-8 shadow-2xl relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-500">
-                            <DollarSign size={100} />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {packages.map(pkg => (
+                        <div 
+                            key={pkg.id} 
+                            onClick={() => setSelectedPackage(pkg)}
+                            className={`relative bg-white rounded-[32px] p-8 border-2 transition-all duration-500 cursor-pointer group ${
+                                selectedPackage?.id === pkg.id 
+                                ? 'border-rubber-500 shadow-2xl shadow-rubber-500/20 scale-[1.05] z-10' 
+                                : 'border-gray-100 shadow-xl hover:border-gray-200 hover:scale-[1.02]'
+                            }`}
+                        >
+                            {selectedPackage?.id === pkg.id && (
+                                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-rubber-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg">
+                                    Selected Plan
+                                </div>
+                            )}
+                            
+                            <div className="space-y-6">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h3 className="text-xl font-black text-gray-900">{pkg.name}</h3>
+                                        <p className="text-sm font-bold text-gray-400 italic">ใช้งานได้ {pkg.days} วัน</p>
+                                    </div>
+                                    <div className={`p-3 rounded-2xl transition-colors ${selectedPackage?.id === pkg.id ? 'bg-rubber-100 text-rubber-600' : 'bg-gray-50 text-gray-400'}`}>
+                                        <Zap size={24} />
+                                    </div>
+                                </div>
+
+                                <div className="flex items-baseline">
+                                    <span className="text-4xl font-black text-gray-900">฿{pkg.price}</span>
+                                    <span className="text-gray-400 font-bold ml-1 text-sm">/ {pkg.days} days</span>
+                                </div>
+
+                                <div className="space-y-4 pt-4">
+                                    <div className="flex items-center text-sm font-bold text-gray-600">
+                                        <div className="w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center mr-3 flex-shrink-0">
+                                            <Check size={12} strokeWidth={4} />
+                                        </div>
+                                        เพิ่มพนักงานสูงสุด {pkg.maxStaff || 1} คน
+                                    </div>
+                                    <div className="flex items-center text-sm font-bold text-gray-600">
+                                        <div className="w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center mr-3 flex-shrink-0">
+                                            <Check size={12} strokeWidth={4} />
+                                        </div>
+                                        ปลดล็อกรายงานภาพรวมธุรกิจ
+                                    </div>
+                                    <div className="flex items-center text-sm font-bold text-gray-600">
+                                        <div className="w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center mr-3 flex-shrink-0">
+                                            <Check size={12} strokeWidth={4} />
+                                        </div>
+                                        ส่งออกข้อมูลเป็น CSV / JSON
+                                    </div>
+                                </div>
+
+                                <button className={`w-full py-4 rounded-2xl font-black transition-all ${
+                                    selectedPackage?.id === pkg.id 
+                                    ? 'bg-rubber-600 text-white shadow-xl shadow-rubber-500/30' 
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}>
+                                    {selectedPackage?.id === pkg.id ? 'ดำเนินการชำระเงิน' : 'เลือกแพ็กเกจนี้'}
+                                </button>
+                            </div>
                         </div>
-                        <h3 className="text-xl font-black mb-6 flex items-center">
-                            <CreditCard className="mr-3" size={24} />
-                            แจ้งชำระเงิน (ต่ออายุ)
-                        </h3>
-                        
-                        {/* Bank Details Section */}
-                        {subData?.payment_info && (
-                            <div className="mb-8 p-6 bg-white/5 rounded-2xl border border-white/10 space-y-4">
-                                <div className="text-[10px] font-black text-white/50 uppercase tracking-widest border-b border-white/10 pb-2 mb-2">ช่องทางชำระเงิน</div>
-                                <div className="flex items-center space-x-4">
-                                    <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center text-blue-400">
-                                        <Building2 size={24} />
-                                    </div>
-                                    <div>
-                                        <div className="text-xs text-white/50">ธนาคาร</div>
-                                        <div className="font-bold text-white">{subData.payment_info.bank_name || '-'}</div>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-4">
-                                    <div className="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center text-green-400">
-                                        <CreditCard size={24} />
-                                    </div>
-                                    <div>
-                                        <div className="text-xs text-white/50">เลขที่บัญชี</div>
-                                        <div className="font-black text-white text-lg tracking-wider">{subData.payment_info.bank_account || '-'}</div>
-                                    </div>
-                                </div>
-                                <div className="flex items-center space-x-4">
-                                    <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center text-purple-400">
-                                        <User size={24} />
-                                    </div>
-                                    <div>
-                                        <div className="text-xs text-white/50">ชื่อบัญชี</div>
-                                        <div className="font-bold text-white">{subData.payment_info.bank_owner || '-'}</div>
-                                    </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Payment Section - Modern & Split */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+                {/* Left: Bank details & QR */}
+                <div className="lg:col-span-12">
+                    <div className="bg-[#0f172a] rounded-[40px] p-8 md:p-12 shadow-2xl relative overflow-hidden text-white">
+                        <div className="absolute top-0 right-0 p-12 opacity-[0.05] pointer-events-none">
+                            <QrCode size={300} />
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center relative z-10">
+                            <div className="space-y-8">
+                                <div>
+                                    <h2 className="text-3xl font-black mb-2 flex items-center">
+                                        <CreditCard className="mr-4 text-rubber-400" size={32} />
+                                        ช่องทางการชำระเงิน
+                                    </h2>
+                                    <p className="text-gray-400 font-medium">โอนเงินผ่านธนาคารหรือสแกน QR Code แล้วแนบสลิปด้านขวา</p>
                                 </div>
 
-                                {subData.payment_info.promptpay_id && selectedPackage && (
-                                    <div className="pt-4 border-t border-white/10">
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setShowQr(!showQr)}
-                                            className="w-full py-3 px-4 bg-rubber-500/20 hover:bg-rubber-500/30 border border-rubber-500/40 rounded-xl flex items-center justify-center gap-2 text-rubber-300 font-black text-xs uppercase tracking-widest transition-all"
-                                        >
-                                            <QrCode size={16} />
-                                            {showQr ? 'ซ่อน QR Code' : 'สแกนชำระเงิน (QR Code)'}
-                                        </button>
+                                {subData?.payment_info && (
+                                    <div className="space-y-6">
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                            <div className="bg-white/5 border border-white/10 rounded-3xl p-6 hover:bg-white/10 transition-colors group">
+                                                <Building2 className="text-rubber-400 mb-4 group-hover:scale-110 transition-transform" size={24} />
+                                                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Bank Name</p>
+                                                <p className="font-black text-lg">{subData.payment_info.bank_name || '-'}</p>
+                                            </div>
+                                            <div className="bg-white/5 border border-white/10 rounded-3xl p-6 hover:bg-white/10 transition-colors group">
+                                                <User className="text-rubber-400 mb-4 group-hover:scale-110 transition-transform" size={24} />
+                                                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Account Owner</p>
+                                                <p className="font-black text-lg">{subData.payment_info.bank_owner || '-'}</p>
+                                            </div>
+                                            <div className="bg-white/5 border border-white/10 rounded-3xl p-6 hover:bg-white/10 transition-colors group relative overflow-hidden">
+                                                <CreditCard className="text-rubber-400 mb-4 group-hover:scale-110 transition-transform" size={24} />
+                                                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Account No.</p>
+                                                <p className="font-black text-xl tracking-tighter">{subData.payment_info.bank_account || '-'}</p>
+                                                <button 
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(subData.payment_info.bank_account);
+                                                        toast.success('คัดลอกเลขบัญชีแล้ว');
+                                                    }}
+                                                    className="absolute top-4 right-4 text-white/20 hover:text-white transition-colors"
+                                                >
+                                                    <ExternalLink size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
 
-                                        {showQr && (
-                                            <div className="mt-4 p-4 bg-white rounded-2xl flex flex-col items-center animate-in zoom-in-95 duration-300">
-                                                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">PromptPay QR Code</div>
-                                                <div className="text-sm font-black text-gray-900 mb-3 border-b border-gray-100 w-full text-center pb-2">฿{selectedPackage.price.toLocaleString()}</div>
-                                                <img 
-                                                    src={`https://promptpay.io/${subData.payment_info.promptpay_id}/${selectedPackage.price}.png`} 
-                                                    alt="PromptPay QR Code" 
-                                                    className="w-full max-w-[200px] aspect-square object-contain"
-                                                />
-                                                <p className="text-[9px] text-gray-400 mt-2 italic text-center leading-tight px-4">สแกนชำระด้วยแอปธนาคารใดก็ได้<br/>เงินโอนเข้าบัญชี PromptPay โดยตรง</p>
+                                        {subData.payment_info.promptpay_id && selectedPackage && (
+                                            <div className="flex flex-col sm:flex-row items-center gap-8 bg-rubber-600/10 border border-rubber-500/20 rounded-[32px] p-8">
+                                                <div className="bg-white p-4 rounded-3xl shadow-lg transform hover:scale-105 transition-transform duration-500">
+                                                    <img 
+                                                        src={`https://promptpay.io/${subData.payment_info.promptpay_id}/${selectedPackage.price}.png`} 
+                                                        alt="PromptPay QR Code" 
+                                                        className="w-40 h-40 object-contain"
+                                                    />
+                                                    <div className="text-center mt-3 border-t border-gray-100 pt-2">
+                                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">PromptPay</p>
+                                                        <p className="text-sm font-black text-rubber-600">฿{selectedPackage.price.toLocaleString()}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex-1 space-y-4">
+                                                    <div className="inline-flex items-center px-3 py-1 bg-rubber-500 rounded-full text-white font-black text-[9px] uppercase tracking-widest">
+                                                        Fast Payment
+                                                    </div>
+                                                    <h4 className="text-2xl font-black">สแกนชำระเงินทันที</h4>
+                                                    <p className="text-gray-400 text-sm leading-relaxed">
+                                                        แอปธนาคารทุกแอปสามารถสแกน QR นี้เพื่อโอนเงินเข้าบัญชี PromptPay ของเจ้าของระบบได้โดยตรง พร้อมระบุยอดเงินที่ถูกต้องให้ทันที
+                                                    </p>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
                                 )}
                             </div>
-                        )}
 
-                        <div className="space-y-6">
-                            
-                            <div className="space-y-3">
-                                <label className="text-xs font-black text-white/50 uppercase tracking-widest block">เลือกแพ็กเกจต่ออายุ</label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {packages.map(pkg => (
-                                        <div 
-                                            key={pkg.id} 
-                                            onClick={() => setSelectedPackage(pkg)}
-                                            className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
-                                                selectedPackage?.id === pkg.id 
-                                                    ? 'border-rubber-500 bg-rubber-500/10' 
-                                                    : 'border-white/10 bg-white/5 hover:border-white/20'
-                                            }`}
-                                        >
-                                            <div className="text-sm font-bold text-white/90">{pkg.name}</div>
-                                            <div className="text-xl font-black mt-1">฿{pkg.price}</div>
+                            {/* Payment Form - Inner Card */}
+                            <div className="bg-white rounded-[32px] p-8 text-gray-900 shadow-2xl space-y-8 animate-in slide-in-from-right-8 duration-700">
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center bg-gray-50 rounded-2xl p-6 border border-gray-100">
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total to Pay</p>
+                                            <div className="text-3xl font-black text-gray-900">฿{selectedPackage?.price.toFixed(2) || '0.00'}</div>
                                         </div>
-                                    ))}
-                                </div>
-                                {packages.length === 0 && (
-                                    <div className="text-sm text-white/50 italic py-2">ไม่มีแพ็กเกจแสดง กรุณาติดต่อผู้ดูแลระบบ</div>
-                                )}
-                            </div>
-
-                            {selectedPackage && (
-                                <div className="p-5 bg-rubber-500/20 rounded-2xl border border-rubber-500/30 flex justify-between items-center">
-                                    <div>
-                                        <p className="text-[10px] font-black text-rubber-300 uppercase tracking-[0.2em] mb-1">ยอดที่ต้องโอน</p>
-                                        <div className="text-3xl font-black text-white">{selectedPackage.price.toFixed(2)}</div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Plan</p>
+                                            <div className="text-lg font-black text-rubber-600">{selectedPackage?.name || 'Please select'}</div>
+                                        </div>
                                     </div>
-                                    <Package size={40} className="text-rubber-400 opacity-50" />
-                                </div>
-                            )}
 
-                            <form onSubmit={handleSubmit} className="space-y-6">
-                                <div className="space-y-2">
-                                    <label className="text-xs font-black text-white/50 uppercase tracking-widest block">แนบหลักฐานการโอนเงิน (สลิป)</label>
-                                    <div className="relative">
-                                        <input 
-                                            type="file" 
-                                            accept="image/*" 
-                                            onChange={handleFileChange}
-                                            className="hidden" 
-                                            id="slip-upload"
-                                        />
-                                        <label 
-                                            htmlFor="slip-upload" 
-                                            className="w-full py-4 px-6 bg-white/10 hover:bg-white/20 border-2 border-dashed border-white/20 hover:border-white/40 rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all gap-2"
+                                    <form onSubmit={handleSubmit} className="space-y-6">
+                                        <div className="space-y-3">
+                                            <label className="text-xs font-black text-gray-500 uppercase tracking-widest block px-1">แนบหลักฐานการโอนเงิน (สลิป)</label>
+                                            <div className="relative group">
+                                                <input 
+                                                    type="file" 
+                                                    accept="image/*" 
+                                                    onChange={handleFileChange}
+                                                    className="hidden" 
+                                                    id="slip-upload-premium"
+                                                />
+                                                <label 
+                                                    htmlFor="slip-upload-premium" 
+                                                    className="w-full py-8 px-6 bg-gray-50 hover:bg-gray-100 border-2 border-dashed border-gray-200 hover:border-rubber-400 rounded-3xl flex flex-col items-center justify-center cursor-pointer transition-all gap-3 group"
+                                                >
+                                                    {filename ? (
+                                                        <>
+                                                            <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center">
+                                                                <CheckCircle size={24} />
+                                                            </div>
+                                                            <div className="text-center">
+                                                                <span className="font-black text-sm text-gray-900 block">
+                                                                    {filename.length > 30 ? filename.substring(0, 27) + '...' : filename}
+                                                                </span>
+                                                                <span className="text-[10px] font-bold text-gray-400 uppercase">File Attached</span>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div className="w-12 h-12 bg-white text-gray-400 rounded-full flex items-center justify-center shadow-sm group-hover:text-rubber-500 group-hover:scale-110 transition-all">
+                                                                <Upload size={24} />
+                                                            </div>
+                                                            <div className="text-center">
+                                                                <span className="font-black text-sm text-gray-600 block">เลือกไฟล์รูปภาพหลักฐาน</span>
+                                                                <span className="text-[10px] font-bold text-gray-400 uppercase">Max size: 2MB</span>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <button 
+                                            type="submit" 
+                                            disabled={isSubmitting || !slip64}
+                                            className="w-full bg-rubber-600 hover:bg-rubber-700 disabled:opacity-50 disabled:bg-gray-400 text-white p-5 rounded-3xl font-black text-xl shadow-xl shadow-rubber-500/20 hover:shadow-rubber-500/40 transform hover:translate-y-[-2px] transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
                                         >
-                                            {filename ? (
-                                                <div className="flex items-center text-rubber-400 font-bold">
-                                                    <CheckCircle size={20} className="mr-2" />
-                                                    {filename.length > 20 ? filename.substring(0, 17) + '...' : filename}
-                                                </div>
+                                            {isSubmitting ? (
+                                                <div className="w-6 h-6 border-b-2 border-white rounded-full animate-spin"></div>
                                             ) : (
                                                 <>
-                                                    <Upload size={24} className="text-white/40" />
-                                                    <span className="font-bold text-sm text-white/60">คลิกเพื่อเลือกไฟล์รูปภาพ</span>
+                                                    <span>ยืนยันการแจ้งชำระเงิน</span>
+                                                    <ChevronRight size={24} />
                                                 </>
                                             )}
-                                        </label>
+                                        </button>
+                                    </form>
+                                    
+                                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start space-x-3">
+                                        <AlertCircle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                                        <p className="text-[10px] text-amber-800 font-medium leading-relaxed">
+                                            กรุณาตรวจสอบยอดเงินและบัญชีปลายทางให้ถูกต้องก่อนโอน เจ้าหน้าที่จะตรวจสอบสลิปภายใน 2-4 ชั่วโมงทำการ
+                                        </p>
                                     </div>
                                 </div>
-
-                                <button 
-                                    type="submit" 
-                                    disabled={isSubmitting || !slip64}
-                                    className="w-full bg-rubber-500 hover:bg-rubber-400 disabled:opacity-50 disabled:bg-gray-700 text-white py-5 rounded-2xl font-black text-lg shadow-xl shadow-rubber-500/20 hover:shadow-rubber-500/40 transition-all flex items-center justify-center gap-3"
-                                >
-                                    {isSubmitting ? (
-                                        <div className="w-6 h-6 border-b-2 border-white rounded-full animate-spin"></div>
-                                    ) : (
-                                        <>
-                                            <span>ยืนยันสลิปเงิน</span>
-                                            <ExternalLink size={20} />
-                                        </>
-                                    )}
-                                </button>
-                            </form>
-
-                            <div className="pt-4 border-t border-white/10 opacity-60 text-[11px] font-medium leading-relaxed">
-                                เมื่อส่งสลิปแล้ว เจ้าหน้าที่จะใช้เวลาตรวจสอบภายใน 2-4 ชั่วโมง หากมีปัญหาติดต่อ Line: @rubbertrade
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
+
+            {/* History Table - Polished */}
+            <div className="animate-in fade-in duration-1000 delay-500">
+                <div className="bg-white rounded-[40px] overflow-hidden border border-gray-100 shadow-xl shadow-gray-200/30">
+                    <div className="p-10 border-b border-gray-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center">
+                            <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-400 mr-4">
+                                <History size={24} />
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-black text-gray-900 tracking-tight">ประวัติการแจ้งชำระ</h2>
+                                <p className="text-gray-400 text-sm font-medium">รายการย้อนหลังทั้งหมดของคุณ</p>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={loadStatus} 
+                            className="bg-gray-50 hover:bg-gray-100 text-gray-500 p-3 rounded-2xl transition-colors"
+                            title="Refresh Data"
+                        >
+                            <Zap size={20} className={loading ? 'animate-spin' : ''} />
+                        </button>
+                    </div>
+                    
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-gray-50/50 text-[11px] uppercase font-black tracking-[0.2em] text-gray-400">
+                                <tr>
+                                    <th className="px-10 py-6">รายการ / วันเวลา</th>
+                                    <th className="px-10 py-6">ยอดเงิน</th>
+                                    <th className="px-10 py-6">หลักฐาน</th>
+                                    <th className="px-10 py-6">สถานะการตรวจสอบ</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {subData?.requests?.map(req => (
+                                    <tr key={req.id} className="hover:bg-gray-50/70 transition-colors group">
+                                        <td className="px-10 py-7">
+                                            <div className="flex items-center group-hover:translate-x-1 transition-transform">
+                                                <div className="w-2 h-2 rounded-full bg-rubber-500 mr-4"></div>
+                                                <div>
+                                                    <div className="font-black text-gray-900">
+                                                        {req.package_name || 'สมัครสมาชิก'}
+                                                    </div>
+                                                    <div className="text-xs text-gray-400 font-bold mt-0.5">
+                                                        {format(new Date(req.requestedAt), 'HH:mm • dd MMMM yyyy', { locale: th })}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-10 py-7">
+                                            <div className="text-xl font-black text-gray-900 tracking-tighter">฿{req.amount}</div>
+                                        </td>
+                                        <td className="px-10 py-7">
+                                            <a 
+                                                href={req.slipUrl} 
+                                                target="_blank" 
+                                                rel="noreferrer" 
+                                                className="inline-flex items-center h-10 px-4 rounded-xl bg-gray-50 text-rubber-600 hover:bg-rubber-50 font-black text-xs uppercase tracking-widest transition-all"
+                                            >
+                                                <ExternalLink size={14} className="mr-2" /> 
+                                                View Slip
+                                            </a>
+                                        </td>
+                                        <td className="px-10 py-7">
+                                            <div className="flex items-center">
+                                                {req.status === 'approved' ? (
+                                                    <div className="flex items-center px-4 py-2 bg-green-50 text-green-600 rounded-2xl border border-green-100/50 shadow-sm text-xs font-black uppercase tracking-widest">
+                                                        <CheckCircle size={14} className="mr-2" />
+                                                        Approved
+                                                    </div>
+                                                ) : req.status === 'rejected' ? (
+                                                    <div className="flex items-center px-4 py-2 bg-red-50 text-red-600 rounded-2xl border border-red-100/50 shadow-sm text-xs font-black uppercase tracking-widest">
+                                                        <XCircle size={14} className="mr-2" />
+                                                        Rejected
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center px-4 py-2 bg-amber-50 text-amber-600 rounded-2xl border border-amber-100/50 shadow-sm text-xs font-black uppercase tracking-widest">
+                                                        <Clock size={14} className="mr-2" />
+                                                        Pending
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {(!subData?.requests || subData.requests.length === 0) && (
+                                    <tr>
+                                        <td colSpan="4" className="px-10 py-20 text-center">
+                                            <div className="bg-gray-50/50 rounded-3xl p-10 max-w-sm mx-auto border border-dashed border-gray-200">
+                                                <History size={40} className="text-gray-300 mx-auto mb-4" />
+                                                <p className="text-gray-400 font-bold">ยังไม่มีประวัติการแจ้งชำระเงินในระบบ</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <div className="text-center text-gray-300 font-bold text-xs uppercase tracking-[0.3em] py-8">
+                Powered by Rubber Trade AI Engine
             </div>
         </div>
     );

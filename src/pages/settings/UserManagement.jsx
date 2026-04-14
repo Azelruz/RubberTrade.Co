@@ -123,7 +123,12 @@ export const UserManagement = ({
                             <form onSubmit={farmerForm.handleSubmit(onSubmitFarmer)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
-                                    <input {...farmerForm.register('name', { required: true })} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="นายสมชาย ใจดี" />
+                                    <input 
+                                        {...farmerForm.register('name', { required: 'กรุณาระบุชื่อ-นามสกุล' })} 
+                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-rubber-500 ${farmerForm.formState.errors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} 
+                                        placeholder="นายสมชาย ใจดี" 
+                                    />
+                                    {farmerForm.formState.errors.name && <p className="text-red-500 text-[10px] mt-1 font-medium">{farmerForm.formState.errors.name.message}</p>}
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">เบอร์โทรศัพท์</label>
@@ -307,7 +312,12 @@ export const UserManagement = ({
                             <form onSubmit={employeeForm.handleSubmit(onSubmitEmployee)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 <div className="space-y-1">
                                     <label className={`text-xs font-bold uppercase ${editingEmployee ? 'text-amber-600' : 'text-blue-600'}`}>ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
-                                    <input {...employeeForm.register('name', { required: true })} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" placeholder="ชื่อลูกจ้าง" />
+                                    <input 
+                                        {...employeeForm.register('name', { required: 'กรุณาระบุชื่อลูกจ้าง' })} 
+                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-blue-500 ${employeeForm.formState.errors.name ? 'border-red-500 bg-red-50' : 'border-gray-200'}`} 
+                                        placeholder="ชื่อลูกจ้าง" 
+                                    />
+                                    {employeeForm.formState.errors.name && <p className="text-red-500 text-[10px] mt-1 font-medium">{employeeForm.formState.errors.name.message}</p>}
                                 </div>
                                 <div className="space-y-1">
                                     <label className={`text-xs font-bold uppercase ${editingEmployee ? 'text-amber-600' : 'text-blue-600'}`}>สังกัดเกษตรกร <span className="text-red-500">*</span></label>
@@ -320,7 +330,18 @@ export const UserManagement = ({
                                     <label className={`text-xs font-bold uppercase flex items-center ${editingEmployee ? 'text-amber-600' : 'text-blue-600'}`}>
                                         ส่วนแบ่งกำไร (%) <Percent size={12} className="ml-1" />
                                     </label>
-                                    <input type="number" step="0.01" {...employeeForm.register('profitSharePct', { required: true })} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" placeholder="เช่น 10" />
+                                    <input 
+                                        type="number" 
+                                        step="0.01" 
+                                        {...employeeForm.register('profitSharePct', { 
+                                            required: 'กรุณาระบุส่วนแบ่งกำไร',
+                                            min: { value: 0, message: 'ห้ามต่ำกว่า 0%' },
+                                            max: { value: 100, message: 'ห้ามเกิน 100%' }
+                                        })} 
+                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-blue-500 ${employeeForm.formState.errors.profitSharePct ? 'border-red-500 bg-red-50' : 'border-gray-200'}`} 
+                                        placeholder="เช่น 10" 
+                                    />
+                                    {employeeForm.formState.errors.profitSharePct && <p className="text-red-500 text-[10px] mt-1 font-medium">{employeeForm.formState.errors.profitSharePct.message}</p>}
                                 </div>
                                 <div className="space-y-1">
                                     <label className={`text-xs font-bold uppercase ${editingEmployee ? 'text-amber-600' : 'text-blue-600'}`}>เบอร์โทรศัพท์</label>

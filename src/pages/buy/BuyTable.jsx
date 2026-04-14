@@ -1,9 +1,9 @@
 import React from 'react';
-import { FileText, Search, Printer, Trash2, Eye, User, Image as ImageIcon } from 'lucide-react';
+import { FileText, Search, Printer, Trash2, Eye, User, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format, addYears } from 'date-fns';
 import { th } from 'date-fns/locale';
 
-const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearchTerm, selectedDate, setSelectedDate, handlePrintReceipt, handleDelete, setViewingEslip, user }) => {
+const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearchTerm, selectedDate, setSelectedDate, handlePrintReceipt, handleDelete, setViewingEslip, user, pagination, onPageChange }) => {
     return (
         <div className="lg:col-span-2">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -53,112 +53,143 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto overflow-y-hidden">
                     {loading ? (
                         <div className="flex justify-center items-center h-64">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-rubber-600"></div>
                         </div>
-                    ) : filteredRecords.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">
-                            <FileText className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-                            <p>ไม่พบประวัติการรับซื้อ</p>
-                        </div>
                     ) : (
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50/80">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">วันที่/เวลา</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">เกษตรกร</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">น้ำหนัก (กก.)</th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">% DRC</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">ราคา/กก.</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">ยอดรวม (฿)</th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {filteredRecords.map((record) => (
-                                    <tr key={record.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {record.date ? format(addYears(new Date(record.date), 543), 'dd MMM yyyy', { locale: th }) : '-'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-bold text-gray-900 flex items-center">
-                                                <User size={14} className="mr-1.5 text-gray-400" />
-                                                <span className="flex items-center gap-2">
-                                                    {record.farmerName}
-                                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${
-                                                        (record.rubberType === 'cup_lump' || record.rubber_type === 'cup_lump') 
-                                                            ? 'bg-amber-100 text-amber-700 border border-amber-200' 
-                                                            : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                                                    }`}>
-                                                        {(record.rubberType === 'cup_lump' || record.rubber_type === 'cup_lump') ? 'ขี้ยาง' : 'น้ำยาง'}
-                                                    </span>
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                                            <div className="flex flex-col items-end">
-                                                <span>{Number(record.weight).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
-                                                {record.bucketWeight > 0 && (
-                                                    <span className="text-[10px] text-red-400 font-normal">-{Number(record.bucketWeight).toLocaleString(undefined, { minimumFractionDigits: 1 })} (ถัง)</span>
-                                                )}
-                                                {record.bucketWeight > 0 && (
-                                                    <span className="text-[11px] text-gray-400 font-bold border-t border-gray-100 mt-0.5">{(Number(record.weight) - Number(record.bucketWeight)).toLocaleString(undefined, { minimumFractionDigits: 1 })} สุทธิ</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center font-medium">
-                                            {record.drc ? `${record.drc}%` : '-'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                                            {Number(record.pricePerKg || record.actualPrice).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-black text-rubber-600 text-right bg-rubber-50/30">
-                                            {Number(record.total).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                                            <div className="flex justify-center space-x-1">
-                                                <button
-                                                    onClick={() => handlePrintReceipt(record)}
-                                                    className="p-1.5 text-gray-400 hover:text-rubber-600 hover:bg-rubber-50 rounded-lg transition-all"
-                                                    title="พิมพ์ Paper-slip"
-                                                >
-                                                    <Printer size={18} />
-                                                </button>
-                                                {user?.role === 'owner' && (
-                                                    <button
-                                                        onClick={() => handleDelete(record.id)}
-                                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                                        title="ลบรายการ"
-                                                    >
-                                                        <Trash2 size={18} />
-                                                    </button>
-                                                )}
-                                                <button
-                                                    onClick={() => setViewingEslip(record)}
-                                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                    title="ดู E-Slip"
-                                                >
-                                                    <Eye size={18} />
-                                                </button>
-                                                {(record.receiptUrl || record.receipt_url) && !String(record.receiptUrl || record.receipt_url).startsWith('offline_queue') && (
-                                                    <a
-                                                        href={record.receiptUrl || record.receipt_url}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all"
-                                                        title="ดูรูปที่บันทึกไว้ใน Cloud"
-                                                    >
-                                                        <ImageIcon size={18} />
-                                                    </a>
-                                                )}
-                                            </div>
-                                        </td>
+                        <>
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50/80">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-[11px] font-black text-gray-400 uppercase tracking-widest">วันที่/เวลา</th>
+                                        <th className="px-6 py-3 text-left text-[11px] font-black text-gray-400 uppercase tracking-widest">เกษตรกร</th>
+                                        <th className="px-6 py-3 text-right text-[11px] font-black text-gray-400 uppercase tracking-widest">น้ำหนัก (กก.)</th>
+                                        <th className="px-6 py-3 text-center text-[11px] font-black text-gray-400 uppercase tracking-widest">% DRC</th>
+                                        <th className="px-6 py-3 text-right text-[11px] font-black text-gray-400 uppercase tracking-widest">ราคา/กก.</th>
+                                        <th className="px-6 py-3 text-right text-[11px] font-black text-gray-400 uppercase tracking-widest">ยอดรวม (฿)</th>
+                                        <th className="px-6 py-3 text-center text-[11px] font-black text-gray-400 uppercase tracking-widest">จัดการ</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {filteredRecords.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="7" className="text-center py-12 text-gray-500">
+                                                <FileText className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                                                <p className="font-bold">ไม่พบประวัติการรับซื้อ</p>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredRecords.map((record) => (
+                                            <tr key={record.id} className="hover:bg-gray-50 transition-colors">
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {record.date ? format(addYears(new Date(record.date), 543), 'dd MMM yyyy', { locale: th }) : '-'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm font-bold text-gray-900 flex items-center">
+                                                        <User size={14} className="mr-1.5 text-gray-400" />
+                                                        <span className="flex items-center gap-2">
+                                                            {record.farmerName}
+                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${
+                                                                (record.rubberType === 'cup_lump' || record.rubber_type === 'cup_lump') 
+                                                                    ? 'bg-amber-100 text-amber-700 border border-amber-200' 
+                                                                    : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                                            }`}>
+                                                                {(record.rubberType === 'cup_lump' || record.rubber_type === 'cup_lump') ? 'ขี้ยาง' : 'น้ำยาง'}
+                                                            </span>
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
+                                                    <div className="flex flex-col items-end">
+                                                        <span>{Number(record.weight).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
+                                                        {record.bucketWeight > 0 && (
+                                                            <span className="text-[10px] text-red-400 font-normal">-{Number(record.bucketWeight).toLocaleString(undefined, { minimumFractionDigits: 1 })} (ถัง)</span>
+                                                        )}
+                                                        {record.bucketWeight > 0 && (
+                                                            <span className="text-[11px] text-gray-400 font-bold border-t border-gray-100 mt-0.5">{(Number(record.weight) - Number(record.bucketWeight)).toLocaleString(undefined, { minimumFractionDigits: 1 })} สุทธิ</span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center font-medium">
+                                                    {record.drc ? `${record.drc}%` : '-'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                                    {Number(record.pricePerKg || record.actualPrice).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-black text-rubber-600 text-right bg-rubber-50/30">
+                                                    {Number(record.total).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                                                    <div className="flex justify-center space-x-1">
+                                                        <button
+                                                            onClick={() => handlePrintReceipt(record)}
+                                                            className="p-1.5 text-gray-400 hover:text-rubber-600 hover:bg-rubber-50 rounded-lg transition-all"
+                                                            title="พิมพ์ Paper-slip"
+                                                        >
+                                                            <Printer size={18} />
+                                                        </button>
+                                                        {user?.role === 'owner' && (
+                                                            <button
+                                                                onClick={() => handleDelete(record.id)}
+                                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                                title="ลบรายการ"
+                                                            >
+                                                                <Trash2 size={18} />
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => setViewingEslip(record)}
+                                                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                            title="ดู E-Slip"
+                                                        >
+                                                            <Eye size={18} />
+                                                        </button>
+                                                        {(record.receiptUrl || record.receipt_url) && !String(record.receiptUrl || record.receipt_url).startsWith('offline_queue') && (
+                                                            <a
+                                                                href={record.receiptUrl || record.receipt_url}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all"
+                                                                title="ดูรูปที่บันทึกไว้ใน Cloud"
+                                                            >
+                                                                <ImageIcon size={18} />
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+
+                            {/* Pagination Controls */}
+                            {pagination && pagination.totalPages > 1 && (
+                                <div className="p-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
+                                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                        หน้า {pagination.currentPage} / {pagination.totalPages}
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <button
+                                            onClick={() => onPageChange(pagination.currentPage - 1)}
+                                            disabled={pagination.currentPage === 1}
+                                            className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                        >
+                                            <ChevronLeft size={16} />
+                                        </button>
+                                        <button
+                                            onClick={() => onPageChange(pagination.currentPage + 1)}
+                                            disabled={pagination.currentPage === pagination.totalPages}
+                                            className="p-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                        >
+                                            <ChevronRight size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             </div>

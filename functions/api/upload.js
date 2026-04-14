@@ -17,6 +17,12 @@ async function handlePost(context) {
             bytes[i] = binaryString.charCodeAt(i);
         }
 
+        // --- NEW: Size Validation (2MB Limit) ---
+        const MAX_SIZE = 2 * 1024 * 1024; // 2MB in bytes
+        if (bytes.length > MAX_SIZE) {
+            return errorResponse(`ขนาดไฟล์ใหญ่เกินกว่า 2MB ที่กำหนด (ขนาดจริง: ${(bytes.length / 1024 / 1024).toFixed(2)}MB)`, 400);
+        }
+
         const bucket = context.env.BUCKET;
         if (!bucket) {
             console.error("[Upload Error] R2 BUCKET binding not found");

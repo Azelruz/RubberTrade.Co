@@ -43,8 +43,16 @@ const SellForm = ({
                     <input type="hidden" {...register('rubberType')} />
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">วันที่</label>
-                        <input type="date" {...register('date', { required: true })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500" />
+                        <label className="block text-sm font-medium text-gray-700 mb-1">วันที่ <span className="text-red-500">*</span></label>
+                        <input 
+                            type="date" 
+                            {...register('date', { 
+                                required: 'กรุณาระบุวันที่ขาย',
+                                validate: (val) => new Date(val) <= new Date() || 'ห้ามระบุวันที่ในอนาคต'
+                            })} 
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-orange-500 focus:border-orange-500 ${errors.date ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} 
+                        />
+                        {errors.date && <p className="text-red-500 text-xs mt-1 font-medium">{errors.date.message}</p>}
                     </div>
 
                     <div>
@@ -216,7 +224,16 @@ const SellForm = ({
                                     คงเหลือ: {(watchRubberType === 'cup_lump' ? stockMetrics.cupLumpStock : stockMetrics.currentStock).toLocaleString()} กก.
                                 </button>
                             </div>
-                            <input type="number" step="0.1" {...register('weight', { required: true })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 font-bold" />
+                            <input 
+                                type="number" 
+                                step="0.1" 
+                                {...register('weight', { 
+                                    required: 'กรุณาระบุน้ำหนักที่ขาย',
+                                    min: { value: 0.1, message: 'น้ำหนักต้องมากกว่า 0' }
+                                })} 
+                                className={`w-full px-3 py-2 border rounded-lg focus:ring-orange-500 focus:border-orange-500 font-bold ${errors.weight ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} 
+                            />
+                            {errors.weight && <p className="text-red-500 text-[10px] mt-1 font-medium">{errors.weight.message}</p>}
                         </div>
                         {watchRubberType === 'latex' && (
                             <div>
@@ -231,7 +248,17 @@ const SellForm = ({
                                         เฉลี่ย: {stockMetrics.avgDrc.toFixed(2)}%
                                     </button>
                                 </div>
-                                <input type="number" step="0.01" {...register('drc', { required: true })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500" />
+                                <input 
+                                    type="number" 
+                                    step="0.01" 
+                                    {...register('drc', { 
+                                        required: 'กรุณาระบุเปอร์เซ็นต์ DRC',
+                                        min: { value: 1, message: 'DRC ขั้นต่ำ 1%' },
+                                        max: { value: 100, message: 'DRC สูงสุด 100%' }
+                                    })} 
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-orange-500 focus:border-orange-500 ${errors.drc ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} 
+                                />
+                                {errors.drc && <p className="text-red-500 text-[10px] mt-1 font-medium">{errors.drc.message}</p>}
                             </div>
                         )}
                     </div>
@@ -291,8 +318,17 @@ const SellForm = ({
                     )}
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">{watchRubberType === 'cup_lump' ? 'ราคาขายขี้ยาง (บาท/กก.)' : 'ราคาขายน้ำยาง (บาท/กก. ยางแห้ง)'}</label>
-                        <input type="number" step="0.01" {...register('pricePerKg', { required: true })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500" />
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{watchRubberType === 'cup_lump' ? 'ราคาขายขี้ยาง (บาท/กก.)' : 'ราคาขายน้ำยาง (บาท/กก. ยางแห้ง)'} <span className="text-red-500">*</span></label>
+                        <input 
+                            type="number" 
+                            step="0.01" 
+                            {...register('pricePerKg', { 
+                                required: 'กรุณาระบุราคาขาย',
+                                min: { value: 0.1, message: 'ราคาต้องมากกว่า 0' }
+                            })} 
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-orange-500 focus:border-orange-500 ${errors.pricePerKg ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} 
+                        />
+                        {errors.pricePerKg && <p className="text-red-500 text-xs mt-1 font-medium">{errors.pricePerKg.message}</p>}
                     </div>
 
                     <div>

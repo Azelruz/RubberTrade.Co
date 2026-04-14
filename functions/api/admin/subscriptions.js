@@ -8,7 +8,7 @@ async function handleGet(context) {
 
         if (type === 'members') {
             const users = await db.prepare(`
-                SELECT id, username, email, store_name, subscription_status, subscription_expiry 
+                SELECT id, username, email, store_name, subscription_status, subscription_expiry, maxStaffLimit 
                 FROM users 
                 ORDER BY username ASC
             `).all();
@@ -85,8 +85,15 @@ async function handleAction(context) {
             const newExpiry = new Date(currentExpiry.getTime() + addedDays * 24 * 60 * 60 * 1000);
             const newExpiryStr = newExpiry.toISOString().replace('T', ' ').substring(0, 19);
 
+            // Get staff limit from package if name provided
+            let maxStaff = 1;
+            if (request.package_name) {
+                const pkg = await db.prepare("SELECT maxStaff FROM subscription_packages WHERE name = ?").bind(request.package_name).first();
+                if (pkg) maxStaff = pkg.maxStaff;
+            }
+
             await db.batch([
-                db.prepare("UPDATE users SET subscription_status = 'active', subscription_expiry = ? WHERE id = ?").bind(newExpiryStr, request.userId),
+                db.prepare("UPDATE users SET subscription_status = 'active', subscription_expiry = ?, maxStaffLimit = ? WHERE id = ?").bind(newExpiryStr, maxStaff, request.userId),
                 db.prepare("UPDATE subscription_requests SET status = 'approved', approvedAt = CURRENT_TIMESTAMP WHERE id = ?").bind(requestId)
             ]);
 
@@ -125,6 +132,10 @@ async function handleUpdateOverride(context) {
         if (subscription_expiry !== undefined) {
             updates.push("subscription_expiry = ?");
             params.push(subscription_expiry);
+        }
+        if (body.maxStaffLimit !== undefined) {
+            updates.push("maxStaffLimit = ?");
+            params.push(parseInt(body.maxStaffLimit));
         }
 
         if (updates.length === 0) return errorResponse('Nothing to update', 400);

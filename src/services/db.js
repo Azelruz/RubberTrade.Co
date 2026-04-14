@@ -6,7 +6,7 @@ export const db = new Dexie('RubertradeOfflineDB');
 // Define the database schema
 // ++id means auto-incremented primary key for local queue
 // Other id fields (like farmer's id) are standard keys because they are UUIDs from backend.
-db.version(1).stores({
+db.version(2).stores({
     // Core Data
     farmers: 'id, name, fscId, phone, userId, updated_at',
     staff: 'id, name, phone, userId',
@@ -28,7 +28,7 @@ db.version(1).stores({
     dashboard_cache: 'id', // Just holds { id: 'latest', data: { ... } }
 
     // Sync Queue - The most important table for offline writes
-    sync_queue: '++uuid, type, action, payload, status, createdAt'
+    sync_queue: '++uuid, type, action, payload, status, retryCount, createdAt'
 });
 
 export default db;

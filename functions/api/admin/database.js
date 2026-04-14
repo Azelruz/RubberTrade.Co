@@ -95,7 +95,17 @@ async function handlePost(context) {
             // 2. Process Import (Detect columns from whitelist)
             const colNames = [...validCols, 'userId'].join(', ');
             const placeholders = new Array(validCols.length + 1).fill('?').join(', ');
-            const query = `INSERT OR REPLACE INTO ${table} (${colNames}) VALUES (${placeholders})`;
+            
+            let query = `INSERT INTO ${table} (${colNames}) VALUES (${placeholders})`;
+            
+            // Dynamic ON CONFLICT clause
+            if (table === 'settings') {
+                const updateCols = validCols.filter(c => c !== 'key').map(c => `${c} = excluded.${c}`).join(', ');
+                query += ` ON CONFLICT(key, userId) DO UPDATE SET ${updateCols}`;
+            } else {
+                const updateCols = validCols.filter(c => c !== 'id').map(c => `${c} = excluded.${c}`).join(', ');
+                query += ` ON CONFLICT(id) DO UPDATE SET ${updateCols}`;
+            }
 
             const BATCH_SIZE = 50;
             let totalImported = 0;

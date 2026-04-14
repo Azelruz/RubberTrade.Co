@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
-import { Settings as SettingsIcon, Save, Link, Building2, UserCircle, Leaf, Users, Trash2, DollarSign, RefreshCw, Truck, Database } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Link, Building2, UserCircle, Leaf, Users, Trash2, DollarSign, RefreshCw, Truck, Database, Shield } from 'lucide-react';
 
 import toast from 'react-hot-toast';
 
@@ -47,9 +47,11 @@ import { PriceSettings } from './settings/PriceSettings';
 import { UserManagement } from './settings/UserManagement';
 import { LineIntegration } from './settings/LineIntegration';
 import { StaffManagement } from './settings/StaffManagement';
+import { TeamManagement } from './settings/TeamManagement';
 import { FactoryManagement } from './settings/FactoryManagement';
 import { TruckManagement } from './settings/TruckManagement';
 import { ChemicalManagement } from './settings/ChemicalManagement';
+
 
 export const Settings = () => {
     const { user } = useAuth();
@@ -757,6 +759,7 @@ export const Settings = () => {
                         { id: 'price', icon: <DollarSign size={18} />, label: 'ราคากลางวันนี้' },
                         { id: 'farmers_employees', icon: <Users size={18} />, label: 'เกษตรกรและลูกจ้าง' },
                         { id: 'staff', icon: <UserCircle size={18} />, label: 'พนักงานประจำ' },
+                        { id: 'team', icon: <Shield size={18} />, label: 'จัดการทีม' },
                         { id: 'factories', icon: <Building2 size={18} />, label: 'โรงงานที่ส่งขาย' },
                         { id: 'trucks', icon: <Truck size={18} />, label: 'รถส่งน้ำยาง' },
                         { id: 'chemicals', icon: <span className="text-lg">🧪</span>, label: 'สารเคมี' },
@@ -852,6 +855,10 @@ export const Settings = () => {
                         />
                     )}
 
+                    {activeTab === 'team' && (
+                        <TeamManagement user={user} />
+                    )}
+
                     {activeTab === 'factories' && (
                         <FactoryManagement
                             factories={factories}
@@ -897,6 +904,8 @@ export const Settings = () => {
                             user={user}
                         />
                     )}
+
+
                 </div>
             </div>
         </div>

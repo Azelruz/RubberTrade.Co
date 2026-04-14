@@ -4,7 +4,7 @@ async function handleGet(context) {
     try {
         const { results } = await context.env.DB.prepare(`
             SELECT * FROM farmer_types WHERE userId = ? ORDER BY name ASC
-        `).bind(context.user.id).all();
+        `).bind(context.user.storeId).all();
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);
@@ -30,7 +30,7 @@ async function handlePost(context) {
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 bonus = excluded.bonus
-        `).bind(id, name, Number(bonus) || 0, userId).run();
+        `).bind(id, name, Number(bonus) || 0, context.user.storeId).run();
         
         return jsonResponse({ status: 'success', id });
     } catch (e) {
@@ -49,7 +49,7 @@ async function handleDelete(context) {
         if (!id) return errorResponse("Missing ID");
 
         await context.env.DB.prepare("DELETE FROM farmer_types WHERE id = ? AND userId = ?")
-            .bind(id, context.user.id)
+            .bind(id, context.user.storeId)
             .run();
             
         return jsonResponse({ status: 'success' });

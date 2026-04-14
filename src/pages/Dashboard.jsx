@@ -73,13 +73,15 @@ export const Dashboard = () => {
                 fetchChemicalUsage()
             ]);
 
+            // dashData now contains pre-calculated stats and aggregated charts
             const buys = Array.isArray(dashData?.buys) ? dashData.buys : [];
             const sells = Array.isArray(dashData?.sells) ? dashData.sells : [];
-            const expenses = Array.isArray(dashData?.expenses) ? dashData.expenses : [];
             const wages = Array.isArray(dashData?.wages) ? dashData.wages : [];
             const staff = Array.isArray(dashData?.staff) ? dashData.staff : [];
             const farmerArr = Array.isArray(farmers) ? farmers : [];
             
+            // For features like Lucky Draw that still need buy list,
+            // we'll rely on what the server sent (limited) or fetch more later.
             setAllBuys(buys);
             setAllWages(wages);
             setAllStaff(staff);
@@ -89,23 +91,81 @@ export const Dashboard = () => {
             const showPrize = settings.showPrizeDraw === undefined ? true : (settings.showPrizeDraw === 'true' || settings.showPrizeDraw === true);
             setShowPrizeDrawBtn(showPrize);
 
-            calculateStats(buys, sells, expenses, wages, dashData, farmerArr);
-            generateChartData(buys, sells);
-            generatePriceChartData(buys, sells);
+            // Use server-side stats if available, otherwise fallback to local calc
+            if (dashData?.stats) {
+                const s = dashData.stats;
+                setStats({
+                    ...s,
+                    // Ensure monthProfit is calculated if missing or use server value
+                    monthProfit: s.monthProfit !== undefined ? s.monthProfit : truncateOneDecimal((s.monthIncome || 0) - (s.monthCost || 0))
+                });
+                calculateChemicals(s.todayLatexWeight, settings.chemicalSettings);
+            } else {
+                calculateStats(buys, sells, dashData?.expenses || [], wages, dashData, farmerArr);
+            }
 
-            const recent = [
-                ...buys.map(b => ({ ...b, type: 'buy' })),
-                ...sells.map(s => ({ ...s, type: 'sell' }))
-            ]
-                .sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date))
-                .slice(0, 5);
+            // Use server-side chart data if available
+            if (dashData?.charts) {
+                processServerCharts(dashData.charts);
+            } else {
+                generateChartData(buys, sells);
+                generatePriceChartData(buys, sells);
+            }
 
-            setRecentTransactions(recent);
+            // Use server-side recent transactions
+            if (dashData?.recentTransactions) {
+                setRecentTransactions(dashData.recentTransactions);
+            } else {
+                const recent = [
+                    ...buys.map(b => ({ ...b, type: 'buy' })),
+                    ...sells.map(s => ({ ...s, type: 'sell' }))
+                ]
+                    .sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date))
+                    .slice(0, 5);
+                setRecentTransactions(recent);
+            }
         } catch (error) {
             console.error("Dashboard error:", error);
         } finally {
             setLoading(false);
         }
+    };
+
+    const processServerCharts = (charts) => {
+        const buysRaw = charts.buys || [];
+        const sellsRaw = charts.sells || [];
+
+        // 7-day Activity Chart
+        const activityData = [];
+        for (let i = 6; i >= 0; i--) {
+            const dateStr = format(subDays(new Date(), i), 'yyyy-MM-dd');
+            const dBuys = buysRaw.filter(b => b.date === dateStr);
+            const dSells = sellsRaw.filter(s => s.date === dateStr);
+            activityData.push({
+                name: format(subDays(new Date(), i), 'dd MMM', { locale: th }),
+                'ซื้อ': dBuys.reduce((sum, b) => sum + Number(b.total || 0), 0),
+                'ขาย': dSells.reduce((sum, s) => sum + Number(s.total || 0), 0)
+            });
+        }
+        setChartData(activityData);
+
+        // 30-day Price Chart
+        const priceData = [];
+        for (let i = 29; i >= 0; i--) {
+            const dateStr = format(subDays(new Date(), i), 'yyyy-MM-dd');
+            const dBuys = buysRaw.filter(b => b.date === dateStr && (b.rubberType === 'latex' || !b.rubberType));
+            const dSells = sellsRaw.filter(s => s.date === dateStr && (s.rubberType === 'latex' || !s.rubberType));
+            
+            const buyAvg = dBuys.length > 0 ? dBuys[0].avgPrice : null;
+            const sellAvg = dSells.length > 0 ? dSells[0].avgPrice : null;
+
+            priceData.push({
+                date: format(subDays(new Date(), i), 'dd MMM', { locale: th }),
+                'ราคาซื้อ': buyAvg ? truncateOneDecimal(buyAvg) : null,
+                'ราคาขาย': sellAvg ? truncateOneDecimal(sellAvg) : null
+            });
+        }
+        setPriceChartData(priceData);
     };
 
     const calculateStats = (buys, sells, expenses, wages, dashData, farmers) => {
@@ -290,21 +350,44 @@ export const Dashboard = () => {
         finally { setIsAutoRecording(false); }
     };
 
-    const startLuckyDraw = () => {
+    const startLuckyDraw = async () => {
         const start = startOfDay(new Date(luckyStartDate));
         const end = endOfDay(new Date(luckyEndDate));
         if (start > end) { toast.error('วันที่เริ่มต้นไม่ควรมากกว่าวันที่สิ้นสุด'); return; }
-        const dateBuys = allBuys.filter(b => isWithinInterval(new Date(b.date), { start, end }));
-        if (dateBuys.length === 0) { toast.error('ไม่มีรายการรับซื้อในวันที่เลือก'); return; }
+        
         setIsSpinning(true); setWinner(null); setRewardName('');
-        let counter = 0;
-        const spinInterval = setInterval(() => {
-            setWinner(dateBuys[Math.floor(Math.random() * dateBuys.length)]);
-            if (++counter >= 20) {
-                clearInterval(spinInterval); setIsSpinning(false);
-                setWinner(dateBuys[Math.floor(Math.random() * dateBuys.length)]);
+        
+        try {
+            // Check if we already have the data in allBuys, otherwise fetch for this range
+            let dateBuys = allBuys.filter(b => isWithinInterval(new Date(b.date), { start, end }));
+            
+            // If allBuys is currently limited/empty from dashboard load, fetch full list for range
+            if (dateBuys.length === 0 || allBuys.length < 50) {
+                const toastId = toast.loading('กำลังโหลดข้อมูลย้อนหลัง...');
+                const fullBuys = await fetchBuyRecords(); // Fetches from API or LocalDB
+                setAllBuys(fullBuys);
+                dateBuys = fullBuys.filter(b => isWithinInterval(new Date(b.date), { start, end }));
+                toast.dismiss(toastId);
             }
-        }, 100);
+
+            if (dateBuys.length === 0) { 
+                toast.error('ไม่มีรายการรับซื้อในวันที่เลือก'); 
+                setIsSpinning(false);
+                return; 
+            }
+
+            let counter = 0;
+            const spinInterval = setInterval(() => {
+                setWinner(dateBuys[Math.floor(Math.random() * dateBuys.length)]);
+                if (++counter >= 20) {
+                    clearInterval(spinInterval); setIsSpinning(false);
+                    setWinner(dateBuys[Math.floor(Math.random() * dateBuys.length)]);
+                }
+            }, 100);
+        } catch (e) {
+            toast.error('ไม่สามารถโหลดข้อมูลสุ่มรางวัลได้');
+            setIsSpinning(false);
+        }
     };
 
     const handleSaveWinner = async () => {

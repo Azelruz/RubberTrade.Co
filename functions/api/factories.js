@@ -4,7 +4,7 @@ async function handleGet(context) {
     try {
         const { results } = await context.env.DB.prepare(`
             SELECT * FROM factories WHERE userId = ? OR userId IS NULL ORDER BY name ASC
-        `).bind(context.user.id).all();
+        `).bind(context.user.storeId).all();
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);
@@ -24,9 +24,15 @@ async function handlePost(context) {
                 const id = p.id || crypto.randomUUID();
                 const { name, code, shortName, taxId, address } = p;
                 return context.env.DB.prepare(`
-                    INSERT OR REPLACE INTO factories (id, name, code, shortName, taxId, address, userId)
+                    INSERT INTO factories (id, name, code, shortName, taxId, address, userId)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                `).bind(id, name, code, shortName, taxId || null, address || null, userId);
+                    ON CONFLICT(id) DO UPDATE SET
+                        name = excluded.name,
+                        code = excluded.code,
+                        shortName = excluded.shortName,
+                        taxId = excluded.taxId,
+                        address = excluded.address
+                `).bind(id, name, code, shortName, taxId || null, address || null, context.user.storeId);
             });
             await context.env.DB.batch(stmts);
             return jsonResponse({ status: 'success', count: stmts.length });
@@ -37,9 +43,15 @@ async function handlePost(context) {
         const { name, code, shortName, taxId, address } = payload;
         
         await context.env.DB.prepare(`
-            INSERT OR REPLACE INTO factories (id, name, code, shortName, taxId, address, userId)
+            INSERT INTO factories (id, name, code, shortName, taxId, address, userId)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).bind(id, name, code, shortName, taxId || null, address || null, userId).run();
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                code = excluded.code,
+                shortName = excluded.shortName,
+                taxId = excluded.taxId,
+                address = excluded.address
+        `).bind(id, name, code, shortName, taxId || null, address || null, context.user.storeId).run();
         
         return jsonResponse({ status: 'success', id });
     } catch (e) {

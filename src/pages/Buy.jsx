@@ -47,6 +47,10 @@ export const Buy = () => {
     const [calcItems, setCalcItems] = useState([]);
     const [calcInput, setCalcInput] = useState('');
 
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 15;
+
     const { register, handleSubmit, watch, setValue, reset, formState: { errors, dirtyFields } } = useForm({
         defaultValues: {
             date: format(new Date(), 'yyyy-MM-dd'),
@@ -119,6 +123,11 @@ export const Buy = () => {
             window.removeEventListener('dashboard-refresh', handleRefresh);
         };
     }, []);
+
+    // Reset pagination on filter change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, selectedDate]);
 
     const loadLocalSettings = async () => {
         try {
@@ -435,6 +444,12 @@ export const Buy = () => {
         return matchesSearch && matchesDate;
     });
 
+    const totalPages = Math.ceil(filteredRecords.length / ITEMS_PER_PAGE);
+    const paginatedRecords = filteredRecords.slice(
+        (currentPage - 1) * ITEMS_PER_PAGE,
+        currentPage * ITEMS_PER_PAGE
+    );
+
     const addCalcItem = (e) => {
         if (e) e.preventDefault();
         if (calcInput && !isNaN(calcInput)) {
@@ -504,11 +519,18 @@ export const Buy = () => {
 
                     {/* Records Table */}
                     <BuyTable
-                        filteredRecords={filteredRecords} dailySummary={dailySummary}
+                        filteredRecords={paginatedRecords} dailySummary={dailySummary}
                         loading={loading} searchTerm={searchTerm} setSearchTerm={setSearchTerm}
                         selectedDate={selectedDate} setSelectedDate={setSelectedDate}
                         handlePrintReceipt={handlePrintReceipt} handleDelete={handleDelete}
                         setViewingEslip={setViewingEslip} user={user}
+                        pagination={{
+                            currentPage,
+                            totalPages,
+                            totalCount: filteredRecords.length,
+                            pageSize: ITEMS_PER_PAGE
+                        }}
+                        onPageChange={setCurrentPage}
                     />
                 </div>
 

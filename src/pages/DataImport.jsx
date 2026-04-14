@@ -13,7 +13,7 @@ const DataImport = () => {
                 <p className="text-gray-500 text-sm">นำเข้าหรือส่งออกข้อมูลกิจการของคุณผ่านไฟล์ CSV หรือ JSON</p>
             </header>
 
-            <DatabaseManagement isAdminMode={false} />
+            <DatabaseManagement isAdminMode={false} hideTabs={['backups']} />
         </div>
     );
 };

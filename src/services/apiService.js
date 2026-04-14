@@ -9,7 +9,13 @@ export const getScriptUrl = () => 'cloudflare-d1';
 export const updateScriptUrl = (url) => {};
 
 // --- Simple in-session cache ---
-const CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+const TTL_SHORT = 3 * 60 * 1000;  // 3 minutes (Dashboard, Transactions)
+const TTL_LONG = 10 * 60 * 1000; // 10 minutes (Farmers, Factories, Employees, Staff, Trucks)
+
+const getTTL = (key) => {
+    const longTTLKeys = ['farmers', 'employees', 'staff', 'factories', 'trucks', 'settings', 'farmer_types'];
+    return longTTLKeys.includes(key) ? TTL_LONG : TTL_SHORT;
+};
 
 const getCache = (key) => {
     try {
@@ -23,7 +29,8 @@ const getCache = (key) => {
 
 const setCache = (key, data) => {
     try {
-        sessionStorage.setItem('gc_' + key, JSON.stringify({ data, expires: Date.now() + CACHE_TTL }));
+        const ttl = getTTL(key);
+        sessionStorage.setItem('gc_' + key, JSON.stringify({ data, expires: Date.now() + ttl }));
     } catch {}
 };
 
@@ -129,7 +136,10 @@ const offlineRead = async (table, fallbackEndpoint) => {
 
         try {
             const res = await fetchAPI(fallbackEndpoint);
-            const data = Array.isArray(res) ? res : (res?.data ? res.data : []);
+            // Handle both legacy array response and new paginated object response
+            const data = Array.isArray(res) 
+                ? res 
+                : (res?.results ? res.results : (res?.data ? res.data : []));
             
             // Save to IndexedDB in background for offline use
             try {
@@ -207,6 +217,7 @@ const offlineWrite = async (table, endpoint, payload, action = 'POST') => {
             action,
             payload: { payload: finalPayload },
             status: 'pending',
+            retryCount: 0,
             createdAt: Date.now(),
             uuid: crypto.randomUUID()
         });
@@ -262,6 +273,25 @@ export const fetchFarmers = async () => await offlineRead('farmers', '/farmers')
 export const fetchBuys = async () => await offlineRead('buys', '/buys'); // legacy or internal usage
 export const fetchBuyRecords = async () => await offlineRead('buys', '/buys');
 export const fetchSellRecords = async () => await offlineRead('sells', '/sells');
+
+// --- New Paginated History fetchers ---
+export const fetchBuyHistory = async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetchAPI(`/buys?${query}`);
+    return res; // Returns { results, pagination, summary }
+};
+
+export const fetchSellHistory = async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetchAPI(`/sells?${query}`);
+    return res; // Returns { results, pagination, summary }
+};
+
+export const fetchGlobalSearch = async (query) => {
+    if (!query || query.length < 2) return { results: {} };
+    return await fetchAPI(`/global-search?q=${encodeURIComponent(query)}`);
+};
+
 export const fetchEmployees = async () => await offlineRead('employees', '/employees');
 export const fetchStaff = async () => await offlineRead('staff', '/staff');
 export const fetchFactories = async () => await offlineRead('factories', '/factories');
@@ -271,6 +301,19 @@ export const fetchWages = async () => await offlineRead('wages', '/wages');
 export const fetchPromotions = async () => await offlineRead('promotions', '/promotions');
 export const fetchChemicalUsage = async () => await offlineRead('chemicals', '/chemicals');
 export const fetchMemberTypes = async () => await offlineRead('farmer_types', '/member-types');
+
+// --- Backup Management ---
+export const fetchBackupHistory = async () => {
+    return await fetchAPI('/backup');
+};
+
+export const triggerBackup = async () => {
+    return await fetchAPI('/backup', { method: 'POST' });
+};
+
+export const deleteBackup = async (id) => {
+    return await fetchAPI(`/backup?id=${id}`, { method: 'DELETE' });
+};
 
 export const getSettings = async () => {
     try {
@@ -311,7 +354,7 @@ export const deleteMemberType = async (id) => {
         return res;
     }
     // Offline delete
-    await db.sync_queue.put({ type: 'farmer_types', action: 'DELETE', payload: { id }, status: 'pending', createdAt: Date.now(), uuid: crypto.randomUUID() });
+    await db.sync_queue.put({ type: 'farmer_types', action: 'DELETE', payload: { id }, status: 'pending', retryCount: 0, createdAt: Date.now(), uuid: crypto.randomUUID() });
     try { await db.farmer_types.delete(id); } catch {}
     triggerDataRefresh();
     return { status: 'success' };
@@ -347,6 +390,7 @@ export const deleteRecord = async (sheetName, id) => {
         action: 'POST',
         payload: { sheetName, id },
         status: 'pending',
+        retryCount: 0,
         createdAt: Date.now(),
         uuid: crypto.randomUUID()
     });
@@ -377,6 +421,7 @@ export const updateRecord = async (sheetName, id, updates) => {
         action: 'POST',
         payload: { sheetName, id, updates },
         status: 'pending',
+        retryCount: 0,
         createdAt: Date.now(),
         uuid: crypto.randomUUID()
     });
@@ -476,10 +521,10 @@ export const adminFetchAllMembers = async () => {
     return await fetchAPI('/admin/subscriptions?type=members');
 };
 
-export const adminUpdateUserSubscription = async (userId, status, expiry) => {
+export const adminUpdateUserSubscription = async (userId, status, expiry, maxStaffLimit) => {
     return await fetchAPI('/admin/subscriptions', { 
         method: 'PATCH', 
-        body: { userId, subscription_status: status, subscription_expiry: expiry } 
+        body: { userId, subscription_status: status, subscription_expiry: expiry, maxStaffLimit } 
     });
 };
 
@@ -524,6 +569,28 @@ export const adminImportTable = async (userId, table, data, purge = false) => {
         method: 'POST',
         body: data
     });
+};
+
+export const fetchNotificationStats = async () => {
+    return await fetchAPI('/notifications');
+};
+
+export const fetchActivityLogs = async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return await fetchAPI(`/audit-logs?${query}`);
+};
+
+// --- Team Management API ---
+export const fetchTeamMembers = async () => {
+    return await fetchAPI('/team');
+};
+
+export const inviteTeamMember = async (email) => {
+    return await fetchAPI('/team', { method: 'POST', body: { action: 'invite', email } });
+};
+
+export const removeTeamMember = async (userId) => {
+    return await fetchAPI('/team', { method: 'POST', body: { action: 'remove', userId } });
 };
 
 

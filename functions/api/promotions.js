@@ -4,7 +4,7 @@ async function handleGet(context) {
     try {
         const { results } = await context.env.DB.prepare(
             "SELECT * FROM promotions WHERE userId = ? ORDER BY date DESC, created_at DESC"
-        ).bind(context.user.id).all();
+        ).bind(context.user.storeId).all();
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);
@@ -23,7 +23,7 @@ async function handlePost(context) {
         
         await context.env.DB.prepare(
             "INSERT INTO promotions (id, date, farmerId, farmerName, pointsUsed, rewardName, userId) VALUES (?, ?, ?, ?, ?, ?, ?)"
-        ).bind(id, date, farmerId, farmerName, pointsUsed, rewardName, userId).run();
+        ).bind(id, date, farmerId, farmerName, pointsUsed, rewardName, context.user.storeId).run();
         
         return jsonResponse({ status: 'success', id });
     } catch (e) {

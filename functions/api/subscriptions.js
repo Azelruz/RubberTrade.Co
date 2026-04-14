@@ -5,9 +5,10 @@ async function handleGet(context) {
         const db = context.env.DB;
         const userId = context.user.id;
         
-        const [user, requests, bankSettings] = await Promise.all([
-            db.prepare("SELECT subscription_status, subscription_expiry FROM users WHERE id = ?").bind(userId).first(),
-            db.prepare("SELECT * FROM subscription_requests WHERE userId = ? ORDER BY requestedAt DESC").bind(userId).all(),
+        const [user, store, requests, bankSettings] = await Promise.all([
+            db.prepare("SELECT id, username, email, role FROM users WHERE id = ?").bind(userId).first(),
+            db.prepare("SELECT subscription_status, subscription_expiry FROM users WHERE id = ?").bind(context.user.storeId).first(),
+            db.prepare("SELECT * FROM subscription_requests WHERE userId = ? ORDER BY requestedAt DESC").bind(context.user.storeId).all(),
             db.prepare("SELECT key, value FROM settings WHERE userId = 'SYSTEM' AND key IN ('bank_name', 'bank_account', 'bank_owner', 'promptpay_id')").all()
         ]);
 
@@ -18,7 +19,10 @@ async function handleGet(context) {
         
         return jsonResponse({
             status: 'success',
-            subscription: user,
+            subscription: {
+                ...store,
+                role: user?.role
+            },
             requests: requests?.results || [],
             payment_info: settingsObj
         });
@@ -64,7 +68,7 @@ async function handlePost(context) {
         const requestId = 'sr_' + Date.now();
 
         await db.prepare("INSERT INTO subscription_requests (id, userId, slipUrl, amount, status, package_name, requested_days) VALUES (?, ?, ?, ?, ?, ?, ?)")
-            .bind(requestId, userId, slipUrl, amount || 0, 'pending', packageName || null, requestedDays || null)
+            .bind(requestId, context.user.storeId, slipUrl, amount || 0, 'pending', packageName || null, requestedDays || null)
             .run();
 
         return jsonResponse({

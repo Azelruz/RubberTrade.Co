@@ -352,8 +352,13 @@ export const Expenses = () => {
                                     <form onSubmit={expenseForm.handleSubmit(onAddExpense)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-xs font-medium text-gray-700 mb-1">วันที่ *</label>
-                                            <input type="date" {...expenseForm.register('date', { required: true })}
-                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rubber-500" />
+                                            <input type="date" 
+                                                {...expenseForm.register('date', { 
+                                                    required: 'กรุณาระบุวันที่',
+                                                    validate: (val) => new Date(val) <= new Date() || 'ห้ามระบุวันที่ในอนาคต'
+                                                })}
+                                                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rubber-500 ${expenseForm.formState.errors.date ? 'border-red-500 bg-red-50' : 'border-gray-200'}`} />
+                                            {expenseForm.formState.errors.date && <p className="text-red-500 text-[10px] mt-1 font-medium">{expenseForm.formState.errors.date.message}</p>}
                                         </div>
                                         <div>
                                             <label className="block text-xs font-medium text-gray-700 mb-1">หมวดหมู่ *</label>
@@ -371,9 +376,14 @@ export const Expenses = () => {
                                         </div>
                                         <div>
                                             <label className="block text-xs font-medium text-gray-700 mb-1">จำนวนเงิน (บาท) *</label>
-                                            <input type="number" step="0.01" {...expenseForm.register('amount', { required: true, min: 0 })}
+                                            <input type="number" step="0.01" 
+                                                {...expenseForm.register('amount', { 
+                                                    required: 'กรุณาระบุจำนวนเงิน', 
+                                                    min: { value: 0.01, message: 'จำนวนเงินต้องมากกว่า 0' } 
+                                                })}
                                                 placeholder="0.00"
-                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rubber-500" />
+                                                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rubber-500 ${expenseForm.formState.errors.amount ? 'border-red-500 bg-red-50' : 'border-gray-200'}`} />
+                                            {expenseForm.formState.errors.amount && <p className="text-red-500 text-[10px] mt-1 font-medium">{expenseForm.formState.errors.amount.message}</p>}
                                         </div>
                                         <div>
                                             <label className="block text-xs font-medium text-gray-700 mb-1">หมายเหตุ</label>
@@ -496,8 +506,13 @@ export const Expenses = () => {
                                     <form onSubmit={wageForm.handleSubmit(onAddWage)} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-xs font-medium text-gray-700 mb-1">วันที่ *</label>
-                                            <input type="date" {...wageForm.register('date', { required: true })}
-                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                                            <input type="date" 
+                                                {...wageForm.register('date', { 
+                                                    required: 'กรุณาระบุวันที่',
+                                                    validate: (val) => new Date(val) <= new Date() || 'ห้ามระบุวันที่ในอนาคต'
+                                                })}
+                                                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${wageForm.formState.errors.date ? 'border-red-500 bg-red-50' : 'border-gray-200'}`} />
+                                            {wageForm.formState.errors.date && <p className="text-red-500 text-[10px] mt-1 font-medium">{wageForm.formState.errors.date.message}</p>}
                                         </div>
                                         <div>
                                             <label className="block text-xs font-medium text-gray-700 mb-1">พนักงาน *</label>
@@ -517,8 +532,13 @@ export const Expenses = () => {
                                         </div>
                                         <div>
                                             <label className="block text-xs font-medium text-gray-700 mb-1">จำนวนวันทำงาน *</label>
-                                            <input type="number" step="0.5" min="0.5" {...wageForm.register('workDays', { required: true, min: 0.5 })}
-                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                                            <input type="number" step="0.5" 
+                                                {...wageForm.register('workDays', { 
+                                                    required: 'กรุณาระบุจำนวนวัน', 
+                                                    min: { value: 0.1, message: 'ขั้นต่ำ 0.1 วัน' } 
+                                                })}
+                                                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${wageForm.formState.errors.workDays ? 'border-red-500 bg-red-50' : 'border-gray-200'}`} />
+                                            {wageForm.formState.errors.workDays && <p className="text-red-500 text-[10px] mt-1 font-medium">{wageForm.formState.errors.workDays.message}</p>}
                                         </div>
                                         <div>
                                             <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -530,8 +550,12 @@ export const Expenses = () => {
                                                     </span>
                                                 )}
                                             </label>
-                                            <input type="number" step="1" {...wageForm.register('bonus')}
-                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                                            <input type="number" step="1" 
+                                                {...wageForm.register('bonus', { 
+                                                    min: { value: 0, message: 'โบนัสห้ามติดลบ' } 
+                                                })}
+                                                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${wageForm.formState.errors.bonus ? 'border-red-500 bg-red-50' : 'border-gray-200'}`} />
+                                            {wageForm.formState.errors.bonus && <p className="text-red-500 text-[10px] mt-1 font-medium">{wageForm.formState.errors.bonus.message}</p>}
                                             <p className="text-xs text-gray-400 mt-1"><span className="font-medium">สูตร:</span> ทุก 1,000 กก. ได้โบนัส +10 บ. (แก้ไขได้)</p>
                                         </div>
                                         <div>

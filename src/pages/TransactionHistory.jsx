@@ -3,11 +3,12 @@ import { format, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { 
-    fetchBuyRecords, 
-    fetchSellRecords, 
+    fetchBuyHistory, 
+    fetchSellHistory, 
     getSettings,
     fetchFarmers,
-    fetchMemberTypes
+    fetchMemberTypes,
+    fetchFactories
 } from '../services/apiService';
 import { calculateDrcBonus } from '../utils/calculations';
 import { printRecord } from '../utils/PrintService';
@@ -23,19 +24,44 @@ export const TransactionHistory = () => {
     const [activeTab, setActiveTab] = useState('buy'); // 'buy' or 'sell'
     const [loading, setLoading] = useState(true);
     const [records, setRecords] = useState([]);
+    const [pagination, setPagination] = useState({
+        page: 1,
+        pageSize: 50,
+        totalCount: 0,
+        totalPages: 0
+    });
+    const [summary, setSummary] = useState({
+        totalBills: 0,
+        totalWeight: 0,
+        totalAmount: 0
+    });
+    
     const [settings, setSettings] = useState({});
     const [drcBonuses, setDrcBonuses] = useState([]);
     
     const [filters, setFilters] = useState({
         startDate: format(new Date(), 'yyyy-MM-dd'),
         endDate: format(new Date(), 'yyyy-MM-dd'),
-        searchTerm: ''
+        searchTerm: '',
+        rubberType: '',
+        minWeight: '',
+        maxWeight: '',
+        minTotal: '',
+        maxTotal: '',
+        farmerId: '',
+        factoryId: '',
+        farmerStatus: '',
+        employeeStatus: ''
     });
+
+    // Debounced search term
+    const [debouncedSearch, setDebouncedSearch] = useState('');
 
     const [printingReceipt, setPrintingReceipt] = useState(null);
     const [printingSellRecord, setPrintingSellRecord] = useState(null);
     const [viewingEslip, setViewingEslip] = useState(null);
     const [farmers, setFarmers] = useState([]);
+    const [factories, setFactories] = useState([]);
     const [memberTypes, setMemberTypes] = useState([]);
     const buyPrintRef = useRef(null);
     const sellPrintRef = useRef(null);
@@ -44,20 +70,36 @@ export const TransactionHistory = () => {
         return Math.trunc(num * 10) / 10;
     };
 
+    // Load initial lookup data
     useEffect(() => {
         loadInitialData();
     }, []);
 
+    // Debounce search term
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(filters.searchTerm);
+            setPagination(prev => ({ ...prev, page: 1 })); // Reset to page 1 on search
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [filters.searchTerm]);
+
+    // Load records when dependencies change
     useEffect(() => {
         loadRecords();
-    }, [activeTab, filters.startDate, filters.endDate]);
+    }, [
+        activeTab, filters.startDate, filters.endDate, debouncedSearch, pagination.page,
+        filters.rubberType, filters.minWeight, filters.maxWeight, filters.minTotal, filters.maxTotal,
+        filters.farmerId, filters.factoryId, filters.farmerStatus, filters.employeeStatus
+    ]);
 
     const loadInitialData = async () => {
         try {
-            const [settingsRes, farmersRes, mtRes] = await Promise.all([
+            const [settingsRes, farmersRes, mtRes, factoriesRes] = await Promise.all([
                 getSettings(),
                 fetchFarmers(),
-                fetchMemberTypes()
+                fetchMemberTypes(),
+                fetchFactories()
             ]);
 
             if (settingsRes.status === 'success') {
@@ -71,6 +113,7 @@ export const TransactionHistory = () => {
 
             if (farmersRes) setFarmers(farmersRes);
             if (mtRes) setMemberTypes(mtRes);
+            if (factoriesRes) setFactories(factoriesRes);
         } catch (error) {
             console.error('Error loading initial data:', error);
         }
@@ -79,20 +122,37 @@ export const TransactionHistory = () => {
     const loadRecords = async () => {
         setLoading(true);
         try {
-            let data = [];
-            if (activeTab === 'buy') {
-                data = await fetchBuyRecords();
-            } else {
-                data = await fetchSellRecords();
-            }
+            const params = {
+                startDate: filters.startDate,
+                endDate: filters.endDate,
+                search: debouncedSearch,
+                page: pagination.page,
+                pageSize: pagination.pageSize,
+                rubberType: filters.rubberType,
+                minWeight: filters.minWeight,
+                maxWeight: filters.maxWeight,
+                minTotal: filters.minTotal,
+                maxTotal: filters.maxTotal,
+                farmerId: filters.farmerId,
+                factoryId: filters.factoryId,
+                farmerStatus: filters.farmerStatus,
+                employeeStatus: filters.employeeStatus
+            };
+
+            const res = activeTab === 'buy' 
+                ? await fetchBuyHistory(params)
+                : await fetchSellHistory(params);
             
-            const filteredByDate = (data || []).filter(r => {
-                const recordDate = (r.date || '').split('T')[0];
-                return recordDate >= filters.startDate && recordDate <= filters.endDate;
-            });
-            setRecords(filteredByDate);
+            if (res.results) {
+                setRecords(res.results);
+                if (res.pagination) setPagination(res.pagination);
+                if (res.summary) setSummary(res.summary);
+            } else {
+                setRecords([]);
+            }
         } catch (error) {
             toast.error('โหลดข้อมูลล้มเหลว');
+            setRecords([]);
         } finally {
             setLoading(false);
         }
@@ -101,31 +161,17 @@ export const TransactionHistory = () => {
     const handleFilterChange = (e) => {
         const { name, value } = e.target;
         setFilters(prev => ({ ...prev, [name]: value }));
+        if (name === 'startDate' || name === 'endDate') {
+            setPagination(prev => ({ ...prev, page: 1 }));
+        }
     };
 
-    const filteredRecords = useMemo(() => {
-        const term = filters.searchTerm.toLowerCase();
-        return records.filter(r => {
-            const name = activeTab === 'buy' ? (r.farmerName || 'ลูกค้าทั่วไป') : (r.buyerName || '');
-            const id = activeTab === 'buy' ? (r.farmerId || '') : (r.id || '');
-            const billId = r.id || '';
-            
-            return !term || 
-                name.toLowerCase().includes(term) || 
-                id.toLowerCase().includes(term) || 
-                billId.toLowerCase().includes(term);
-        });
-    }, [records, filters.searchTerm, activeTab]);
-
-    const totals = useMemo(() => {
-        const totalBills = filteredRecords.length;
-        const totalWeight = filteredRecords.reduce((sum, r) => {
-            const bucket = Number(r.bucket_weight ?? r.bucketWeight ?? 0);
-            return sum + (Number(r.weight || 0) - bucket);
-        }, 0);
-        const totalAmount = filteredRecords.reduce((sum, r) => sum + Number(r.total || 0), 0);
-        return { totalBills, totalWeight, totalAmount };
-    }, [filteredRecords]);
+    const handlePageChange = (newPage) => {
+        if (newPage >= 1 && newPage <= pagination.totalPages) {
+            setPagination(prev => ({ ...prev, page: newPage }));
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
 
     const handleCloseEslip = () => setViewingEslip(null);
 
@@ -179,17 +225,22 @@ export const TransactionHistory = () => {
                 setActiveTab={setActiveTab} 
                 filters={filters} 
                 handleFilterChange={handleFilterChange} 
+                farmers={farmers}
+                factories={factories}
+                setFilters={setFilters}
             />
 
-            <HistorySummary totals={totals} />
+            <HistorySummary totals={summary} />
 
             <HistoryTable 
                 loading={loading} 
-                filteredRecords={filteredRecords} 
+                filteredRecords={records} 
                 activeTab={activeTab} 
                 handlePrintBuy={handlePrintBuy} 
                 handlePrintSell={handlePrintSell} 
                 setViewingEslip={setViewingEslip} 
+                pagination={pagination}
+                handlePageChange={handlePageChange}
             />
 
             <HistoryPrintTemplates 

@@ -1,6 +1,6 @@
-import { jsonResponse, errorResponse } from './_utils.js';
+import { jsonResponse, errorResponse, withRateLimit } from './_utils.js';
 
-export async function onRequestPost(context) {
+async function handlePost(context) {
     try {
         const body = await context.request.json();
         const { username, password } = body;
@@ -34,3 +34,5 @@ export async function onRequestPost(context) {
         return errorResponse(e.message);
     }
 }
+
+export const onRequestPost = withRateLimit(handlePost, 10); // Tight limit for login

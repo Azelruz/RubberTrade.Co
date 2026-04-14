@@ -29,17 +29,40 @@ export const ProtectedRoute = ({ children }) => {
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
-    // If we have no user but we ARE authenticating (token is in URL), 
-    // we show the loader while Supabase processes the hash
-    if (!user && isAuthenticating) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="w-12 h-12 text-rubber-600 animate-spin" />
-                    <p className="text-gray-500 font-medium">กำลังยืนยันตัวตน...</p>
-                </div>
-            </div>
-        );
+    // Skip lock checks for subscription page so they can renew
+    const isSubscriptionPage = location.pathname === '/subscription';
+
+    if (user && !isSubscriptionPage) {
+        const now = Date.now();
+        const expiryStr = localStorage.getItem('rt_subscription_expiry');
+        const lastSyncStr = localStorage.getItem('rt_last_sync');
+        
+        // 1. Check Expiry
+        if (expiryStr) {
+            const expiry = new Date(expiryStr).getTime();
+            if (now > expiry) {
+                return <Navigate to="/sync-required" replace />;
+            }
+        }
+
+        // 2. Check Heartbeat (3 days = 72 hours)
+        if (lastSyncStr) {
+            const lastSync = new Date(lastSyncStr).getTime();
+            const threeDaysMs = 72 * 60 * 60 * 1000;
+            
+            // Over 3 days offline
+            if (now - lastSync > threeDaysMs) {
+                return <Navigate to="/sync-required" replace />;
+            }
+
+            // Anti-Clock-Tampering (Now is before last sync)
+            if (now < lastSync - (5 * 60 * 1000)) { // 5 min buffer for slight clock drifts
+                return <Navigate to="/sync-required" replace />;
+            }
+        } else if (user) {
+            // If logged in but no sync record (shouldn't happen with updated AuthContext),
+            // we let it pass for the first time but it will be set on next successful sync.
+        }
     }
 
     return children;

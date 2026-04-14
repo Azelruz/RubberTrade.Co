@@ -14,7 +14,10 @@ import {
     Edit3,
     FileJson,
     Save,
-    RefreshCw
+    RefreshCw,
+    History,
+    Plus,
+    Clock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { 
@@ -28,7 +31,11 @@ import {
     getSettings,
     adminExportTable,
     adminImportTable,
-    adminFetchReportData
+    adminFetchReportData,
+    fetchBackupHistory,
+    triggerBackup,
+    deleteBackup,
+    clearAllCache
 } from '../../services/apiService';
 import { useAuth } from '../../context/AuthContext';
 
@@ -168,9 +175,9 @@ const FIELD_MAPPINGS = {
     }
 };
 
-const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
+const DatabaseManagement = ({ isAdminMode = false, targetUserId = null, hideTabs = [], initialTab = 'import' }) => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState('import');
+    const [activeTab, setActiveTab] = useState(initialTab);
     const [importMode, setImportMode] = useState('csv');
     const [selectedType, setSelectedType] = useState('farmers');
     const [csvData, setCsvData] = useState([]);
@@ -188,6 +195,14 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
     const [importProgress, setImportProgress] = useState({ current: 0, total: 0, label: '' });
     const [tableStates, setTableStates] = useState({}); // { tableName: 'waiting' | 'processing' | 'completed' | 'error' }
     const [purgeExisting, setPurgeExisting] = useState(true);
+    const [backups, setBackups] = useState([]);
+    const [isLoadingBackups, setIsLoadingBackups] = useState(false);
+    const [isTriggeringBackup, setIsTriggeringBackup] = useState(false);
+    
+    // --- Subscription Check ---
+    const isExpired = user?.subscription_expiry && new Date(user.subscription_expiry) < new Date();
+    const isSuperAdminFallback = user?.email === 'narapong.an@gmail.com' || user?.username === 'narapong.an';
+    const canUseManagement = !isExpired || isSuperAdminFallback;
 
     // Load settings for ID remapping
     useEffect(() => {
@@ -219,6 +234,56 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
         };
         loadSettings();
     }, [isAdminMode, targetUserId]);
+
+    const loadBackups = async () => {
+        if (!canUseManagement) return;
+        setIsLoadingBackups(true);
+        try {
+            const res = await fetchBackupHistory();
+            setBackups(res);
+        } catch (error) {
+            console.error("Failed to load backups:", error);
+        } finally {
+            setIsLoadingBackups(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'backups') {
+            loadBackups();
+        }
+    }, [activeTab]);
+
+    const handleManualBackup = async () => {
+        setIsTriggeringBackup(true);
+        const toastId = toast.loading('กำลังสร้างข้อมูลสำรอง (Snapshot)...');
+        try {
+            const res = await triggerBackup();
+            if (res.status === 'success') {
+                toast.success('สร้างข้อมูลสำรองสำเร็จ!', { id: toastId });
+                loadBackups();
+            } else {
+                toast.error('ล้มเหลว: ' + res.message, { id: toastId });
+            }
+        } catch (error) {
+            toast.error('เกิดข้อผิดพลาด: ' + error.message, { id: toastId });
+        } finally {
+            setIsTriggeringBackup(false);
+        }
+    };
+
+    const handleDeleteBackup = async (id) => {
+        if (!window.confirm('ยืนยันการลบไฟล์สำรองข้อมูล?')) return;
+        try {
+            const res = await deleteBackup(id);
+            if (res.status === 'success') {
+                toast.success('ลบข้อมูลสำรองเรียบร้อย');
+                loadBackups();
+            }
+        } catch (error) {
+            toast.error('ลบไม่สำเร็จ: ' + error.message);
+        }
+    };
 
     const remapId = (oldId, type, currentSettings) => {
         if (!oldId || !currentSettings) return oldId;
@@ -303,9 +368,6 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
 
         setIsConverting(true);
         const toastId = toast.loading('กำลังแปลงข้อมูลและปรับรหัส (IDs)...');
-        console.log("Starting conversion with settings:", settings);
-        console.log("Raw JSON Keys:", Object.keys(rawJsonData));
-
         try {
             const mappedIds = { farmers: {}, employees: {}, factories: {}, staff: {}, trucks: {}, buys: {}, sells: {} };
             const processedData = {};
@@ -346,7 +408,6 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                 const sourceData = sourceKey ? rawJsonData[sourceKey] : null;
 
                 if (Array.isArray(sourceData)) {
-                    console.log(`Processing table: ${type} (${sourceData.length} records)`);
                     processedData[type] = sourceData.map(rawItem => {
                         const item = normalizeRecord(rawItem, type);
                         if (item.id) {
@@ -373,9 +434,6 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                 }
             });
 
-            console.log("Conversion complete. Mapped IDs count:", 
-                Object.keys(mappedIds).reduce((acc, k) => acc + Object.keys(mappedIds[k]).length, 0));
-            
             setStagedData(processedData);
             setIdMapping(mappedIds);
             setValidationErrors(validateData(processedData));
@@ -490,7 +548,6 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                 
                 toast.success(`ดำเนินการเสร็จสิ้น (สำเร็จ ${successCount} ตาราง)`, { id: toastId });
                 
-                // Clear all local cache to force fresh data display
                 clearAllCache();
                 toast.success('ล้าง Cache ในเครื่องเรียบร้อยแล้ว');
             }
@@ -549,25 +606,48 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
     return (
         <div className="space-y-6">
             <div className="flex space-x-1 bg-gray-100 p-1 rounded-xl w-fit">
-                <button
-                    onClick={() => setActiveTab('import')}
-                    className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'import' ? 'bg-white text-rubber-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50'}`}
-                >
-                    <Upload size={16} className="inline mr-2" />
-                    นำเข้าข้อมูล (Import)
-                </button>
-                <button
-                    onClick={() => setActiveTab('export')}
-                    className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'export' ? 'bg-white text-rubber-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50'}`}
-                >
-                    <Download size={16} className="inline mr-2" />
-                    ส่งออกข้อมูล (Export)
-                </button>
+                {!hideTabs.includes('import') && (
+                    <button
+                        onClick={() => setActiveTab('import')}
+                        className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'import' ? 'bg-white text-rubber-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50'}`}
+                    >
+                        <Upload size={16} className="inline mr-2" />
+                        นำเข้าข้อมูล (Import)
+                    </button>
+                )}
+                {!hideTabs.includes('backups') && (
+                    <button
+                        onClick={() => setActiveTab('backups')}
+                        className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'backups' ? 'bg-white text-rubber-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50'}`}
+                    >
+                        <History size={16} className="inline mr-2" />
+                        ประวัติการสำรอง (Backups)
+                    </button>
+                )}
             </div>
+
+            {isExpired && !isSuperAdminFallback && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-6 flex items-start space-x-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="bg-red-100 p-3 rounded-full text-red-600">
+                        <AlertCircle size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-red-900 font-black mb-1">ฟังก์ชันการจัดการข้อมูลถูกระงับ</h3>
+                        <p className="text-red-700 text-sm leading-relaxed">
+                            อายุการใช้งานของคุณสิ้นสุดแล้ว (Expired) กรุณาต่ออายุสมาชิกเพื่อเปิดใช้งานการนำเข้า (Import) และส่งออก (Export) ข้อมูลกิจการของคุณ
+                        </p>
+                        <button 
+                            onClick={() => window.location.href = '/subscription'}
+                            className="mt-3 px-4 py-2 bg-red-600 text-white text-xs font-black rounded-lg hover:bg-red-700 transition-all shadow-sm"
+                        >
+                            ชำระเงินต่ออายุสมาชิก
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {activeTab === 'import' ? (
                 <div className="space-y-6">
-                    {/* Stepper */}
                     <div className="flex items-center space-x-4 bg-white p-4 rounded-xl border border-gray-100">
                         {[1, 2, 3].map(s => (
                             <div key={s} className={`flex items-center space-x-2 ${step >= s ? 'text-rubber-600' : 'text-gray-400'}`}>
@@ -583,11 +663,19 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <h3 className="text-sm font-black text-gray-400 uppercase tracking-wider mb-4">1. เลือกประเภทการนำเข้า</h3>
                                 <div className="grid grid-cols-2 gap-3 mb-6">
-                                    <button onClick={() => setImportMode('csv')} className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center space-y-2 ${importMode === 'csv' ? 'border-rubber-500 bg-rubber-50 text-rubber-700' : 'border-gray-100 text-gray-400'}`}>
+                                    <button 
+                                        disabled={!canUseManagement}
+                                        onClick={() => setImportMode('csv')} 
+                                        className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center space-y-2 transition-all ${importMode === 'csv' ? 'border-rubber-500 bg-rubber-50 text-rubber-700' : 'border-gray-100 text-gray-400'} ${!canUseManagement ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:border-rubber-200'}`}
+                                    >
                                         <FileSpreadsheet />
                                         <span className="text-xs font-bold">รายตาราง (CSV)</span>
                                     </button>
-                                    <button onClick={() => setImportMode('json')} className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center space-y-2 ${importMode === 'json' ? 'border-rubber-500 bg-rubber-50 text-rubber-700' : 'border-gray-100 text-gray-400'}`}>
+                                    <button 
+                                        disabled={!canUseManagement}
+                                        onClick={() => setImportMode('json')} 
+                                        className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center space-y-2 transition-all ${importMode === 'json' ? 'border-rubber-500 bg-rubber-50 text-rubber-700' : 'border-gray-100 text-gray-400'} ${!canUseManagement ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:border-rubber-200'}`}
+                                    >
                                         <FileJson />
                                         <span className="text-xs font-bold">ฐานข้อมูลทั้งหมด (JSON)</span>
                                     </button>
@@ -598,13 +686,20 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                                     </select>
                                 )}
                             </div>
-                            <div className="bg-white p-6 rounded-2xl border border-dashed border-gray-300 flex flex-col items-center justify-center text-center relative overflow-hidden group">
-                                <input type="file" accept={importMode === 'csv' ? '.csv' : '.json'} onClick={(e) => { e.target.value = null; }} onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
-                                <div className="p-4 bg-rubber-50 rounded-full text-rubber-600 mb-2 group-hover:scale-110 transition-transform">
+                            <div className={`bg-white p-6 rounded-2xl border border-dashed flex flex-col items-center justify-center text-center relative overflow-hidden group transition-all ${!canUseManagement ? 'bg-gray-50 border-gray-200 cursor-not-allowed' : 'border-gray-300 hover:border-rubber-300'}`}>
+                                <input 
+                                    type="file" 
+                                    disabled={!canUseManagement}
+                                    accept={importMode === 'csv' ? '.csv' : '.json'} 
+                                    onClick={(e) => { if (!canUseManagement) return e.preventDefault(); e.target.value = null; }} 
+                                    onChange={handleFileUpload} 
+                                    className={`absolute inset-0 opacity-0 z-10 ${canUseManagement ? 'cursor-pointer' : 'cursor-not-allowed'}`} 
+                                />
+                                <div className={`p-4 rounded-full mb-2 transition-transform ${!canUseManagement ? 'bg-gray-100 text-gray-300' : 'bg-rubber-50 text-rubber-600 group-hover:scale-110'}`}>
                                     <Upload size={32} />
                                 </div>
-                                <p className="font-bold text-gray-900 text-sm">คลิกเพื่ออัปโหลดไฟล์</p>
-                                <p className="text-[10px] text-gray-500 mt-1">ไฟล์นำเข้าจะต้องเป็นนามสกุล .{importMode}</p>
+                                <p className={`font-bold text-sm ${!canUseManagement ? 'text-gray-300' : 'text-gray-900'}`}>{!canUseManagement ? 'นำเข้าข้อมูลถูกระงับ' : 'คลิกเพื่ออัปโหลดไฟล์'}</p>
+                                <p className="text-[10px] text-gray-500 mt-1">{!canUseManagement ? 'กรุณาต่ออายุสมาชิก' : `ไฟล์นำเข้าจะต้องเป็นนามสกุล .${importMode}`}</p>
                             </div>
                         </div>
                     )}
@@ -641,13 +736,16 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                                                 </button>
                                             ))}
                                         </div>
-                                        <button onClick={handleConvert} disabled={isConverting} className="px-4 py-2 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-700 transition-all flex items-center">
+                                        <button 
+                                            onClick={handleConvert} 
+                                            disabled={isConverting || !canUseManagement} 
+                                            className={`px-4 py-2 text-white text-[10px] font-bold rounded-lg transition-all flex items-center ${!canUseManagement ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                                        >
                                             {isConverting ? <RefreshCw className="animate-spin mr-2" size={12} /> : <RefreshCw className="mr-2" size={12} />}
                                             Convert & Adjust IDs
                                         </button>
                                     </div>
                                     <div className="flex flex-col space-y-8 p-4 bg-gray-50/20 overflow-hidden">
-                                        {/* Raw Data Preview (Top) */}
                                         <div className="space-y-2">
                                             <div className="flex items-center justify-between">
                                                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">1. ข้อมูลต้นฉบับ (Raw JSON Source)</h4>
@@ -690,7 +788,6 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                                             </div>
                                         </div>
 
-                                        {/* Divider with label */}
                                         <div className="relative py-4 flex items-center">
                                             <div className="flex-grow border-t border-dashed border-gray-200"></div>
                                             <span className="flex-shrink mx-4 text-[9px] font-black text-indigo-400 uppercase tracking-widest bg-white px-3 py-1 rounded-full border border-indigo-50 shadow-sm">
@@ -699,7 +796,6 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                                             <div className="flex-grow border-t border-dashed border-gray-200"></div>
                                         </div>
 
-                                        {/* Converted Data Preview (Bottom) */}
                                         <div className="space-y-2">
                                             <div className="flex items-center justify-between">
                                                 <h4 className="text-[10px] font-black text-green-600 uppercase tracking-[0.2em]">2. ข้อมูลที่แปลงแล้ว (Ready for Import)</h4>
@@ -740,7 +836,13 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                                         </div>
                                     </div>
                                     <div className="p-4 flex justify-end">
-                                        <button onClick={() => setStep(3)} disabled={Object.keys(stagedData).length === 0} className="px-8 py-2 bg-rubber-600 text-white font-bold rounded-lg shadow-md hover:bg-rubber-700 transition-all flex items-center text-sm disabled:opacity-50">ยืนยันข้อมูล <ArrowRight size={16} className="ml-2" /></button>
+                                        <button 
+                                            onClick={() => setStep(3)} 
+                                            disabled={Object.keys(stagedData).length === 0 || !canUseManagement} 
+                                            className={`px-8 py-2 text-white font-bold rounded-lg shadow-md transition-all flex items-center text-sm ${!canUseManagement ? 'bg-gray-400 cursor-not-allowed' : 'bg-rubber-600 hover:bg-rubber-700'}`}
+                                        >
+                                            ยืนยันข้อมูล <ArrowRight size={16} className="ml-2" />
+                                        </button>
                                     </div>
                                 </div>
                             )}
@@ -775,7 +877,6 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                                     )}
                                 </div>
 
-                                {/* Purge Option */}
                                 <div className="mt-6 w-full max-w-md">
                                     <label className="flex items-center p-4 bg-red-50 border border-red-100 rounded-xl cursor-pointer hover:bg-red-100 transition-colors">
                                         <input 
@@ -813,11 +914,11 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                                                         
                                                         <button 
                                                             onClick={() => handleImportTable(tableName)}
-                                                            disabled={state === 'completed' || state === 'processing'}
-                                                            className={`px-3 py-1.5 rounded-lg text-[10px] font-black shadow-sm transition-all flex items-center ${state === 'completed' ? 'bg-green-100 text-green-700 cursor-default' : 'bg-rubber-600 text-white hover:bg-rubber-700 active:scale-95 disabled:opacity-50'}`}
+                                                            disabled={state === 'completed' || state === 'processing' || !canUseManagement}
+                                                            className={`px-3 py-1.5 rounded-lg text-[10px] font-black shadow-sm transition-all flex items-center ${state === 'completed' ? 'bg-green-100 text-green-700 cursor-default' : !canUseManagement ? 'bg-gray-300 text-white cursor-not-allowed' : 'bg-rubber-600 text-white hover:bg-rubber-700 active:scale-95 disabled:opacity-50'}`}
                                                         >
-                                                            {state === 'completed' ? 'สำเร็จแล้ว' : state === 'processing' ? 'กำลังบันทึก...' : 'กดเพื่อยืนยัน'}
-                                                            {state === 'waiting' && <ArrowRight size={12} className="ml-1.5" />}
+                                                            {state === 'completed' ? 'สำเร็จแล้ว' : state === 'processing' ? 'กำลังบันทึก...' : !canUseManagement ? 'ถูกระงับ' : 'กดเพื่อยืนยัน'}
+                                                            {(state === 'waiting' && canUseManagement) && <ArrowRight size={12} className="ml-1.5" />}
                                                         </button>
                                                     </div>
                                                 );
@@ -828,8 +929,8 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                                             <button onClick={() => setStep(2)} className="flex-1 px-6 py-3 border border-gray-200 text-gray-400 font-bold rounded-xl hover:bg-gray-50 transition-all lowercase">back</button>
                                             <button 
                                                 onClick={handleImport} 
-                                                disabled={isProcessing || Object.values(tableStates).every(s => s === 'completed')} 
-                                                className="flex-[2] px-6 py-3 bg-rubber-600 text-white font-black rounded-xl shadow-lg hover:bg-rubber-700 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center border-2 border-rubber-100"
+                                                disabled={isProcessing || Object.values(tableStates).every(s => s === 'completed') || !canUseManagement} 
+                                                className={`flex-[2] px-6 py-3 text-white font-black rounded-xl shadow-lg transition-all flex items-center justify-center border-2 ${!canUseManagement ? 'bg-gray-400 border-gray-300 cursor-not-allowed' : 'bg-rubber-600 border-rubber-100 hover:bg-rubber-700 hover:scale-[1.02] active:scale-[0.98]'}`}
                                             >
                                                 {isProcessing ? <Loader2 size={18} className="animate-spin mr-2" /> : <Save size={18} className="mr-2" />}
                                                 บันทึกตารางที่เหลือทั้งหมด
@@ -852,9 +953,9 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
 
                                         <div className="flex space-x-4 mt-8 w-full max-w-sm mx-auto">
                                             <button onClick={() => setStep(2)} className="flex-1 px-6 py-3 border border-gray-200 text-gray-400 font-bold rounded-xl hover:bg-gray-50 transition-all lowercase">back</button>
-                                            <button onClick={handleImport} disabled={isProcessing} className="flex-[2] px-6 py-3 bg-rubber-600 text-white font-black rounded-xl shadow-lg hover:bg-rubber-700 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center">
+                                            <button onClick={handleImport} disabled={isProcessing || !canUseManagement} className={`flex-[2] px-6 py-3 text-white font-black rounded-xl shadow-lg transition-all flex items-center justify-center ${!canUseManagement ? 'bg-gray-400 cursor-not-allowed' : 'bg-rubber-600 hover:bg-rubber-700 hover:scale-[1.02] active:scale-[0.98]'}`}>
                                                 {isProcessing ? <Loader2 size={18} className="animate-spin mr-2" /> : <Save size={18} className="mr-2" />}
-                                                เริ่มการบันทึกข้อมูล
+                                                {!canUseManagement ? 'การบันทึกถูกระงับ' : 'เริ่มการบันทึกข้อมูล'}
                                             </button>
                                         </div>
                                     </div>
@@ -862,6 +963,107 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                             </div>
                         </div>
                     )}
+                </div>
+            ) : activeTab === 'backups' ? (
+                /* Backup History Tab */
+                <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="flex items-center justify-between mb-2">
+                        <div>
+                            <h3 className="text-lg font-black text-gray-900">ประวัติการสำรองข้อมูลอัตโนมัติ</h3>
+                            <p className="text-xs text-gray-500">ระบบจะสำรองข้อมูล JSON ทุกๆ 24 ชม. และเก็บไว้ย้อนหลัง 3 เดือน</p>
+                        </div>
+                        <button
+                            onClick={handleManualBackup}
+                            disabled={isTriggeringBackup || !canUseManagement}
+                            className={`px-4 py-2 rounded-xl text-white font-bold text-xs flex items-center transition-all shadow-lg ${!canUseManagement ? 'bg-gray-400 cursor-not-allowed' : 'bg-rubber-600 hover:bg-rubber-700 active:scale-95'}`}
+                        >
+                            {isTriggeringBackup ? <RefreshCw className="animate-spin mr-2" size={14} /> : <Plus className="mr-2" size={14} />}
+                            สำรองข้อมูลตอนนี้ (Manual)
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                        <table className="min-w-full text-left">
+                            <thead className="bg-gray-50 border-b border-gray-100">
+                                <tr>
+                                    <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest">วันที่และเวลา</th>
+                                    <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest">ไฟล์สำรอง</th>
+                                    <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest">ประเภท</th>
+                                    <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest text-right">ขนาด</th>
+                                    <th className="px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest text-center">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {isLoadingBackups ? (
+                                    <tr>
+                                        <td colSpan="5" className="px-6 py-12 text-center text-gray-400">
+                                            <Loader2 className="animate-spin mx-auto mb-2" size={24} />
+                                            <p className="text-xs font-bold">กำลังโหลดข้อมูลประวัติ...</p>
+                                        </td>
+                                    </tr>
+                                ) : backups.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="5" className="px-6 py-12 text-center text-gray-400">
+                                            <Database size={32} className="mx-auto mb-2 opacity-20" />
+                                            <p className="text-xs font-bold">ยังไม่มีประวัติการสำรองข้อมูล</p>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    backups.map((backup) => (
+                                        <tr key={backup.id} className="hover:bg-gray-50 transition-colors group">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center text-sm">
+                                                    <Clock size={14} className="text-gray-400 mr-2" />
+                                                    <span className="font-bold text-gray-700">
+                                                        {new Date(backup.createdAt).toLocaleString('th-TH')}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center">
+                                                    <div className="p-2 bg-indigo-50 rounded-lg mr-3">
+                                                        <FileJson size={16} className="text-indigo-600" />
+                                                    </div>
+                                                    <span className="text-xs font-bold text-gray-500 truncate max-w-[200px]" title={backup.filename}>
+                                                        {backup.filename}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${backup.type === 'auto' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                    {backup.type === 'auto' ? 'อัตโนมัติ' : 'จัดการเอง'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <span className="text-xs font-mono text-gray-400">
+                                                    {(backup.fileSize / 1024).toFixed(2)} KB
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center justify-center space-x-2">
+                                                    <a
+                                                        href={`/api/files/${backup.r2Key}`}
+                                                        download={backup.filename}
+                                                        className="p-2 bg-gray-50 text-gray-600 rounded-lg hover:bg-rubber-50 hover:text-rubber-600 transition-all shadow-sm"
+                                                        title="ดาวน์โหลด"
+                                                    >
+                                                        <Download size={14} />
+                                                    </a>
+                                                    <button
+                                                        onClick={() => handleDeleteBackup(backup.id)}
+                                                        className="p-2 bg-gray-50 text-gray-400 rounded-lg hover:bg-red-50 hover:text-red-500 transition-all shadow-sm"
+                                                        title="ลบ"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             ) : (
                 /* Export Section */
@@ -881,7 +1083,13 @@ const DatabaseManagement = ({ isAdminMode = false, targetUserId = null }) => {
                             </div>
                             <h4 className="font-bold text-gray-900 group-hover:text-rubber-700 transition-colors">{type.label}</h4>
                             <p className="text-xs text-gray-500 mb-4">{type.desc}</p>
-                            <button onClick={() => handleExport(type.id)} className="w-full text-xs font-black py-2.5 rounded-lg border-2 border-gray-100 text-gray-400 hover:border-rubber-600 hover:text-rubber-600 transition-all uppercase tracking-wider">Export CSV</button>
+                            <button 
+                                disabled={!canUseManagement}
+                                onClick={() => handleExport(type.id)} 
+                                className={`w-full text-xs font-black py-2.5 rounded-lg border-2 transition-all uppercase tracking-wider ${!canUseManagement ? 'border-gray-100 text-gray-200 cursor-not-allowed' : 'border-gray-100 text-gray-400 hover:border-rubber-600 hover:text-rubber-600'}`}
+                            >
+                                {!canUseManagement ? 'Restricted' : 'Export CSV'}
+                            </button>
                         </div>
                     ))}
                 </div>

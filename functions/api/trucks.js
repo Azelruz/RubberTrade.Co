@@ -3,7 +3,7 @@ import { jsonResponse, errorResponse, withAuth } from './_utils.js';
 async function handleGet(context) {
     const { env } = context;
     try {
-        const { results } = await env.DB.prepare('SELECT * FROM trucks WHERE userId = ? ORDER BY created_at DESC').bind(context.user.id).all();
+        const { results } = await env.DB.prepare('SELECT * FROM trucks WHERE userId = ? ORDER BY created_at DESC').bind(context.user.storeId).all();
         return jsonResponse(results);
     } catch (error) {
         return errorResponse(error.message);
@@ -21,9 +21,15 @@ async function handlePost(context) {
         const userId = context.user.id;
 
         await env.DB.prepare(`
-            INSERT OR REPLACE INTO trucks (id, licensePlate, chassisNumber, brand, model, prbExpiry, userId)
+            INSERT INTO trucks (id, licensePlate, chassisNumber, brand, model, prbExpiry, userId)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).bind(id, licensePlate, chassisNumber, brand, model, prbExpiry, userId).run();
+            ON CONFLICT(id) DO UPDATE SET
+                licensePlate = excluded.licensePlate,
+                chassisNumber = excluded.chassisNumber,
+                brand = excluded.brand,
+                model = excluded.model,
+                prbExpiry = excluded.prbExpiry
+        `).bind(id, licensePlate, chassisNumber, brand, model, prbExpiry, context.user.storeId).run();
 
         return jsonResponse({ status: 'success', id });
     } catch (error) {

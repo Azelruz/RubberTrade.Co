@@ -4,7 +4,7 @@ async function handleGet(context) {
     try {
         const { results } = await context.env.DB.prepare(
             "SELECT * FROM chemical_usage WHERE userId = ? ORDER BY date DESC, created_at DESC"
-        ).bind(context.user.id).all();
+        ).bind(context.user.storeId).all();
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);
@@ -23,9 +23,15 @@ async function handlePost(context) {
             if (payloads.length === 0) return jsonResponse({ status: 'success', message: 'No payloads' });
 
             const stmts = payloads.map(p => {
-                return context.env.DB.prepare(
-                    "INSERT OR REPLACE INTO chemical_usage (id, date, chemicalId, amount, unit, userId) VALUES (?, ?, ?, ?, ?, ?)"
-                ).bind(p.id || crypto.randomUUID(), p.date, p.chemicalId, p.amount, p.unit || 'กก.', userId);
+                return context.env.DB.prepare(`
+                    INSERT INTO chemical_usage (id, date, chemicalId, amount, unit, userId) 
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        date = excluded.date,
+                        chemicalId = excluded.chemicalId,
+                        amount = excluded.amount,
+                        unit = excluded.unit
+                `).bind(p.id || crypto.randomUUID(), p.date, p.chemicalId, p.amount, p.unit || 'กก.', context.user.storeId);
             });
 
             await context.env.DB.batch(stmts);
@@ -39,18 +45,18 @@ async function handlePost(context) {
         // Find existing record for same date and chemical
         const existing = await context.env.DB.prepare(
             "SELECT id FROM chemical_usage WHERE date = ? AND chemicalId = ? AND userId = ?"
-        ).bind(date, chemicalId, userId).first();
+        ).bind(date, chemicalId, context.user.storeId).first();
 
         if (existing) {
             await context.env.DB.prepare(
                 "UPDATE chemical_usage SET amount = ?, unit = ? WHERE id = ? AND userId = ?"
-            ).bind(amount, unit || 'กก.', existing.id, userId).run();
+            ).bind(amount, unit || 'กก.', existing.id, context.user.storeId).run();
             return jsonResponse({ status: 'success', action: 'updated', id: existing.id });
         } else {
             const id = payload.id || crypto.randomUUID();
             await context.env.DB.prepare(
                 "INSERT INTO chemical_usage (id, date, chemicalId, amount, unit, userId) VALUES (?, ?, ?, ?, ?, ?)"
-            ).bind(id, date, chemicalId, amount, unit || 'กก.', userId).run();
+            ).bind(id, date, chemicalId, amount, unit || 'กก.', context.user.storeId).run();
             return jsonResponse({ status: 'success', action: 'inserted', id });
         }
     } catch (e) {
@@ -68,7 +74,7 @@ async function handleDelete(context) {
         const userId = context.user.id;
         if (!id) return errorResponse("Missing ID");
 
-        await context.env.DB.prepare("DELETE FROM chemical_usage WHERE id = ? AND userId = ?").bind(id, userId).run();
+        await context.env.DB.prepare("DELETE FROM chemical_usage WHERE id = ? AND userId = ?").bind(id, context.user.storeId).run();
         return jsonResponse({ status: 'success', message: 'Record deleted' });
     } catch (e) {
         return errorResponse(e.message);

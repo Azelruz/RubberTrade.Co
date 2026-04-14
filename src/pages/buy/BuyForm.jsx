@@ -19,8 +19,16 @@ const BuyForm = ({
 
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">วันที่</label>
-                        <input type="date" {...register('date', { required: true })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500" />
+                        <label className="block text-sm font-medium text-gray-700 mb-1">วันที่ <span className="text-red-500">*</span></label>
+                        <input 
+                            type="date" 
+                            {...register('date', { 
+                                required: 'กรุณาระบุวันที่',
+                                validate: (val) => new Date(val) <= new Date() || 'ห้ามระบุวันที่ในอนาคต'
+                            })} 
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-rubber-500 focus:border-rubber-500 ${errors.date ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} 
+                        />
+                        {errors.date && <p className="text-red-500 text-xs mt-1 font-medium">{errors.date.message || 'กรุณาระบุวันที่ให้ถูกต้อง'}</p>}
                     </div>
 
                     <div className="relative" ref={farmerDropdownRef}>
@@ -129,11 +137,31 @@ const BuyForm = ({
                                     <Calculator size={16} />
                                 </button>
                             </label>
-                            <input type="number" step="0.01" min="0" placeholder="0.00" {...register('weight', { required: true })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500" />
+                            <input 
+                                type="number" 
+                                step="0.01" 
+                                placeholder="0.00" 
+                                {...register('weight', { 
+                                    required: 'กรุณาระบุน้ำหนัก', 
+                                    min: { value: 0.1, message: 'น้ำหนักต้องมากกว่า 0' } 
+                                })} 
+                                className={`w-full px-3 py-2 border rounded-lg focus:ring-rubber-500 focus:border-rubber-500 ${errors.weight ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} 
+                            />
+                            {errors.weight && <p className="text-red-500 text-[10px] mt-1 font-medium">{errors.weight.message}</p>}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">น้ำหนักถัง (กก.)</label>
-                            <input type="number" step="0.01" min="0" placeholder="0.00" {...register('bucketWeight')} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500" />
+                            <input 
+                                type="number" 
+                                step="0.01" 
+                                placeholder="0.00" 
+                                {...register('bucketWeight', { 
+                                    min: { value: 0, message: 'น้ำหนักถังต้องไม่ติดลบ' },
+                                    validate: (val) => Number(val || 0) < Number(watchWeight || 0) || 'น้ำหนักถังต้องน้อยกว่าน้ำหนักรวม'
+                                })} 
+                                className={`w-full px-3 py-2 border rounded-lg focus:ring-rubber-500 focus:border-rubber-500 ${errors.bucketWeight ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} 
+                            />
+                            {errors.bucketWeight && <p className="text-red-500 text-[10px] mt-1 font-medium">{errors.bucketWeight.message}</p>}
                         </div>
                     </div>
 
@@ -141,7 +169,17 @@ const BuyForm = ({
                         <div className="grid grid-cols-2 gap-4">
                             <div className="col-span-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">% DRC</label>
-                                <input type="number" step="0.01" min="0" max="100" placeholder="0.00" {...register('drc')} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500" />
+                                <input 
+                                    type="number" 
+                                    step="0.01" 
+                                    placeholder="0.00" 
+                                    {...register('drc', { 
+                                        min: { value: 1, message: 'DRC ขั้นต่ำ 1%' }, 
+                                        max: { value: 100, message: 'DRC สูงสุด 100%' } 
+                                    })} 
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-rubber-500 focus:border-rubber-500 ${errors.drc ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} 
+                                />
+                                {errors.drc && <p className="text-red-500 text-xs mt-1 font-medium">{errors.drc.message}</p>}
                             </div>
                         </div>
                     )}
@@ -155,11 +193,14 @@ const BuyForm = ({
                             <input
                                 type="number"
                                 step="0.1"
-                                min="0"
                                 placeholder="0.0"
-                                {...register('basePrice', { required: true })}
-                                className="w-full px-3 py-2 border border-blue-100 bg-blue-50/30 rounded-lg focus:ring-rubber-500 focus:border-rubber-500 font-bold"
+                                {...register('basePrice', { 
+                                    required: 'กรุณาระบุราคา', 
+                                    min: { value: 0.1, message: 'ราคาต้องมากกว่า 0' } 
+                                })}
+                                className={`w-full px-3 py-2 border rounded-lg focus:ring-rubber-500 focus:border-rubber-500 font-bold ${errors.basePrice ? 'border-red-500 bg-red-50' : 'border-blue-100 bg-blue-50/30'}`}
                             />
+                            {errors.basePrice && <p className="text-red-500 text-[10px] mt-1 font-medium">{errors.basePrice.message}</p>}
                         </div>
                         {watchRubberType !== 'cup_lump' && (
                             <div>

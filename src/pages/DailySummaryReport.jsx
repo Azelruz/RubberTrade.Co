@@ -4,7 +4,7 @@ import { th } from 'date-fns/locale';
 import { 
     Calendar, Droplets, Truck, Wallet, Filter, 
     Download, ChevronRight, Calculator, PieChart, 
-    Target, User, Users, FileText
+    Target, User, Users, FileText, ChevronLeft
 } from 'lucide-react';
 import { 
     fetchBuyRecords, 
@@ -20,6 +20,15 @@ const DailySummaryReport = () => {
     const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [activeTab, setActiveTab] = useState('buys_latex'); // buys_latex, buys_cup_lump, sells, expenses
+    
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 15;
+
+    // Reset page on tab/date change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeTab, startDate, endDate]);
     
     const [buys, setBuys] = useState([]);
     const [sells, setSells] = useState([]);
@@ -188,6 +197,42 @@ const DailySummaryReport = () => {
         document.body.removeChild(link);
     };
 
+    const PaginationFooter = ({ totalCount, currentPage, setCurrentPage }) => {
+        const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+        if (totalPages <= 1) return null;
+
+        return (
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                    แสดง {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} จาก {totalCount} รายการ
+                </div>
+                <div className="flex items-center space-x-2">
+                    <button
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className="p-1.5 rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    >
+                        <ChevronLeft size={16} />
+                    </button>
+                    
+                    <div className="bg-white border border-gray-200 rounded-xl px-3 py-1.5 flex items-center space-x-2">
+                        <span className="text-xs font-black text-gray-900">{currentPage}</span>
+                        <span className="text-[10px] font-bold text-gray-300">/</span>
+                        <span className="text-xs font-black text-gray-400">{totalPages}</span>
+                    </div>
+
+                    <button
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                        className="p-1.5 rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    >
+                        <ChevronRight size={16} />
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
     const tabs = [
         { id: 'buys_latex', name: 'น้ำยางสด', icon: <Droplets size={18} /> },
         { id: 'buys_cup_lump', name: 'ขี้ยาง', icon: <Droplets size={18} className="text-orange-500" /> },
@@ -288,6 +333,8 @@ const DailySummaryReport = () => {
                             <tbody className="divide-y divide-gray-100">
                                 {(() => {
                                     const filtered = dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex');
+                                    const paginated = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
                                     if (filtered.length === 0) {
                                         return (
                                             <tr>
@@ -295,7 +342,7 @@ const DailySummaryReport = () => {
                                             </tr>
                                         );
                                     }
-                                    return filtered.map((b, idx) => {
+                                    return paginated.map((b, idx) => {
                                         const netWeight = Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0)));
                                         const farmerPct = 100 - (Number(b.empPct) || 0);
                                         return (
@@ -365,6 +412,7 @@ const DailySummaryReport = () => {
                                 })()}
                             </tfoot>
                         </table>
+                        <PaginationFooter totalCount={dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex').length} currentPage={currentPage} setCurrentPage={setCurrentPage} />
                     </div>
                 )}
 
@@ -388,6 +436,8 @@ const DailySummaryReport = () => {
                             <tbody className="divide-y divide-gray-100">
                                 {(() => {
                                     const filtered = dailyData.buys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง');
+                                    const paginated = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
                                     if (filtered.length === 0) {
                                         return (
                                             <tr>
@@ -395,7 +445,7 @@ const DailySummaryReport = () => {
                                             </tr>
                                         );
                                     }
-                                    return filtered.map((b, idx) => {
+                                    return paginated.map((b, idx) => {
                                         const netWeight = Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0)));
                                         const farmerPct = 100 - (Number(b.empPct) || 0);
                                         return (
@@ -446,6 +496,7 @@ const DailySummaryReport = () => {
                                 })()}
                             </tfoot>
                         </table>
+                        <PaginationFooter totalCount={dailyData.buys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง').length} currentPage={currentPage} setCurrentPage={setCurrentPage} />
                     </div>
                 )}
 
@@ -464,12 +515,17 @@ const DailySummaryReport = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {dailyData.sells.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="7" className="px-8 py-20 text-center text-gray-400 font-medium">ไม่พบข้อมูลการขายในวันที่เลือก</td>
-                                    </tr>
-                                ) : (
-                                    dailyData.sells.map((s, idx) => (
+                                {(() => {
+                                    const paginated = dailyData.sells.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+                                    if (dailyData.sells.length === 0) {
+                                        return (
+                                            <tr>
+                                                <td colSpan="7" className="px-8 py-20 text-center text-gray-400 font-medium">ไม่พบข้อมูลการขายในวันที่เลือก</td>
+                                            </tr>
+                                        );
+                                    }
+                                    return paginated.map((s, idx) => (
                                         <tr key={s.id || idx} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-8 py-5">
                                                 <div className="font-black text-gray-900">{s.buyerName}</div>
@@ -486,8 +542,8 @@ const DailySummaryReport = () => {
                                             <td className="px-8 py-5 text-right text-gray-500 font-mono font-bold">฿{Number(s.pricePerKg || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
                                             <td className="px-8 py-5 text-right font-black text-gray-900 font-mono bg-rubber-50/30">฿{Number(s.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
                                         </tr>
-                                    ))
-                                )}
+                                    ));
+                                })()}
                             </tbody>
                             {dailyData.sells.length > 0 && (
                                 <tfoot className="bg-gray-900 text-white font-black border-t-4 border-rubber-600">
@@ -506,77 +562,88 @@ const DailySummaryReport = () => {
                                 </tfoot>
                             )}
                         </table>
+                        <PaginationFooter totalCount={dailyData.sells.length} currentPage={currentPage} setCurrentPage={setCurrentPage} />
                     </div>
                 )}
 
                 {activeTab === 'expenses' && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-gray-100">
                         {/* General Expenses */}
-                        <div className="p-0">
+                        <div className="p-0 flex flex-col h-full border-r border-gray-100">
                             <div className="bg-[#1e293b] px-8 py-5 flex justify-between items-center text-white">
                                 <h3 className="font-black flex items-center tracking-tight">
                                     <Wallet size={20} className="mr-3 text-red-400" />
                                     ค่าใช้จ่ายทั่วไป
                                 </h3>
                                 <span className="bg-red-500/20 text-red-400 px-5 py-2 rounded-2xl text-base font-black shadow-inner border border-red-500/20">
-                                    รวม: ฿{dailyData.expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}
+                                    ฿{dailyData.expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}
                                 </span>
                             </div>
-                            <div className="overflow-x-auto">
+                            <div className="overflow-x-auto flex-1">
                                 <table className="w-full text-sm text-left">
                                     <tbody className="divide-y divide-gray-100">
-                                        {dailyData.expenses.length === 0 ? (
-                                            <tr>
-                                                <td className="px-8 py-20 text-center text-gray-400 font-medium italic">ไม่มีข้อมูลค่าใช้จ่ายทั่วไป</td>
-                                            </tr>
-                                        ) : (
-                                            dailyData.expenses.map((e, idx) => (
-                                                <tr key={e.id || idx} className="hover:bg-red-50/30 transition-colors group">
+                                        {(() => {
+                                            const paginated = dailyData.expenses.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+                                            if (dailyData.expenses.length === 0) {
+                                                return (
+                                                    <tr>
+                                                        <td className="px-8 py-20 text-center text-gray-400 font-medium italic">ไม่มีข้อมูลค่าใช้จ่ายทั่วไป</td>
+                                                    </tr>
+                                                );
+                                            }
+                                            return paginated.map((e, idx) => (
+                                                <tr key={e.id || idx} className="hover:bg-red-50/30 transition-colors group text-sm">
                                                     <td className="px-8 py-5">
                                                         <div className="font-black text-gray-900 group-hover:text-red-700 transition-colors">{e.title}</div>
                                                         <div className="text-xs text-gray-400 font-bold uppercase tracking-tighter">{e.category || 'ทั่วไป'}</div>
                                                     </td>
-                                                    <td className="px-8 py-5 text-right font-black text-red-600 font-mono text-base">฿{Number(e.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                    <td className="px-8 py-5 text-right font-black text-red-600 font-mono text-base whitespace-nowrap">฿{Number(e.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
                                                 </tr>
-                                            ))
-                                        )}
+                                            ));
+                                        })()}
                                     </tbody>
                                 </table>
                             </div>
+                            <PaginationFooter totalCount={dailyData.expenses.length} currentPage={currentPage} setCurrentPage={setCurrentPage} />
                         </div>
 
                         {/* Wages */}
-                        <div className="p-0">
+                        <div className="p-0 flex flex-col h-full">
                             <div className="bg-[#1e293b] px-8 py-5 flex justify-between items-center text-white border-l border-white/10">
                                 <h3 className="font-black flex items-center tracking-tight">
                                     <Users size={20} className="mr-3 text-orange-400" />
                                     ค่าจ้างพนักงาน
                                 </h3>
                                 <span className="bg-orange-500/20 text-orange-400 px-5 py-2 rounded-2xl text-base font-black shadow-inner border border-orange-500/20">
-                                    รวม: ฿{dailyData.wages.reduce((sum, w) => sum + Number(w.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}
+                                    ฿{dailyData.wages.reduce((sum, w) => sum + Number(w.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}
                                 </span>
                             </div>
-                            <div className="overflow-x-auto">
+                            <div className="overflow-x-auto flex-1">
                                 <table className="w-full text-sm text-left">
                                     <tbody className="divide-y divide-gray-100">
-                                        {dailyData.wages.length === 0 ? (
-                                            <tr>
-                                                <td className="px-8 py-20 text-center text-gray-400 font-medium italic">ไม่มีข้อมูลค่าจ้างพนักงาน</td>
-                                            </tr>
-                                        ) : (
-                                            dailyData.wages.map((w, idx) => (
-                                                <tr key={w.id || idx} className="hover:bg-orange-50/30 transition-colors group">
+                                        {(() => {
+                                            const paginated = dailyData.wages.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+                                            if (dailyData.wages.length === 0) {
+                                                return (
+                                                    <tr>
+                                                        <td className="px-8 py-20 text-center text-gray-400 font-medium italic">ไม่มีข้อมูลค่าจ้างพนักงาน</td>
+                                                    </tr>
+                                                );
+                                            }
+                                            return paginated.map((w, idx) => (
+                                                <tr key={w.id || idx} className="hover:bg-orange-50/30 transition-colors group text-sm">
                                                     <td className="px-8 py-5">
                                                         <div className="font-black text-gray-900 group-hover:text-orange-700 transition-colors">{w.staffName || 'พนักงาน'}</div>
                                                         <div className="text-xs text-gray-400 font-bold uppercase tracking-tighter">{w.role || 'ลูกจ้าง'}</div>
                                                     </td>
-                                                    <td className="px-8 py-5 text-right font-black text-orange-600 font-mono text-base">฿{Number(w.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                    <td className="px-8 py-5 text-right font-black text-orange-600 font-mono text-base whitespace-nowrap">฿{Number(w.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
                                                 </tr>
-                                            ))
-                                        )}
+                                            ));
+                                        })()}
                                     </tbody>
                                 </table>
                             </div>
+                            <PaginationFooter totalCount={dailyData.wages.length} currentPage={currentPage} setCurrentPage={setCurrentPage} />
                         </div>
                     </div>
                 )}

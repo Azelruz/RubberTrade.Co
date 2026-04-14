@@ -20,15 +20,16 @@ async function handlePost(context) {
         const body = await context.request.json();
         
         if (body.action === 'create' || body.action === 'update') {
-            const { name, days, price } = body.payload;
+            const { name, days, price, maxStaff } = body.payload;
             if (!name || !days || price === undefined) {
                 return errorResponse('Missing package details', 400);
             }
             
             const id = body.payload.id || 'pkg_' + Date.now();
+            const staffLimit = parseInt(maxStaff) || 1;
             
-            await db.prepare("INSERT INTO subscription_packages (id, name, days, price) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, days=excluded.days, price=excluded.price")
-                .bind(id, name, parseInt(days), parseFloat(price))
+            await db.prepare("INSERT INTO subscription_packages (id, name, days, price, maxStaff) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, days=excluded.days, price=excluded.price, maxStaff=excluded.maxStaff")
+                .bind(id, name, parseInt(days), parseFloat(price), staffLimit)
                 .run();
                 
             return jsonResponse({ status: 'success', id });

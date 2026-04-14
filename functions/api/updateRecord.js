@@ -1,4 +1,4 @@
-import { jsonResponse, errorResponse, withAuth } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth, withRateLimit, recordAuditLog } from './_utils.js';
 
 /**
  * Column Whitelists for Standard Users
@@ -6,8 +6,8 @@ import { jsonResponse, errorResponse, withAuth } from './_utils.js';
  */
 const TABLE_WHITELISTS = {
     'farmers': ['name', 'fscId', 'phone', 'bankAccount', 'bankName', 'address', 'note', 'memberTypeId'],
-    'staff': ['name', 'phone'],
-    'employees': ['name', 'farmerId', 'phone'],
+    'staff': ['name', 'phone', 'address', 'salary', 'bonus', 'note'],
+    'employees': ['name', 'farmerId', 'phone', 'profitSharePct', 'bankAccount', 'bankName'],
     'buys': [
         'date', 'farmerId', 'farmerName', 'weight', 'drc', 'pricePerKg', 'total', 
         'dryRubber', 'empPct', 'employeeTotal', 'farmerTotal', 'note', 'status', 
@@ -82,16 +82,29 @@ async function handleUpdate(context) {
             // If they didn't, we still allow them to edit any ID globally.
             query = `UPDATE ${tableName} SET ${setClause} WHERE id = ?`;
         } else {
-            // Standard User: strictly restricted to their own data
+            // Standard User (Owner/Admin/Staff): strictly restricted to their store's data
             query = `UPDATE ${tableName} SET ${setClause} WHERE id = ? AND userId = ?`;
-            values.push(user.id);
+            values.push(user.storeId);
         }
 
         const res = await context.env.DB.prepare(query).bind(...values).run();
+        const rowsWritten = res.meta.rows_written || 0;
 
-        if (res.meta.rows_written === 0) {
+        if (rowsWritten === 0) {
             return errorResponse('Record not found or unauthorized', 404);
         }
+
+        // --- Audit Logging (Post-Update) ---
+        // Fetch the NEW state as well for comparison in the log
+        const newRecord = await context.env.DB.prepare(`SELECT * FROM ${tableName} WHERE id = ?`).bind(id).first();
+        
+        context.waitUntil?.(recordAuditLog(context, {
+            action: 'UPDATE',
+            entityType: tableName,
+            entityId: id,
+            oldData: body.updates, // We only log what was CHANGED to keep logs lean
+            newData: newRecord
+        }));
 
         return jsonResponse({ status: 'success' });
     } catch (e) {
@@ -100,4 +113,4 @@ async function handleUpdate(context) {
     }
 }
 
-export const onRequestPost = withAuth(handleUpdate);
+export const onRequestPost = withAuth(withRateLimit(handleUpdate));
