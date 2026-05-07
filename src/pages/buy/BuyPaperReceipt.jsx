@@ -2,12 +2,58 @@ import React from 'react';
 import { Printer, X, Leaf } from 'lucide-react';
 import { format, addYears } from 'date-fns';
 import { th } from 'date-fns/locale';
+import { formatReceiptDate } from '../../utils/dateUtils';
 import { truncateOneDecimal, calculateDrcBonus } from '../../utils/calculations';
 
-const BuyPaperReceipt = ({ printingReceipt, printRef, setPrintingReceipt, settings, drcBonuses, farmers, memberTypes }) => {
+const BuyPaperReceipt = ({ printingReceipt, printRef, setPrintingReceipt, settings, drcBonuses, farmers, memberTypes, paperSlipConfig, selectedTemplateId }) => {
     if (!printingReceipt) return null;
 
     const isCupLump = printingReceipt.rubberType === 'cup_lump' || printingReceipt.rubber_type === 'cup_lump';
+    
+    // Resolve configuration from Multi-Template / Multi-Platform schema
+    const resolveConfig = () => {
+        if (!paperSlipConfig || !paperSlipConfig.templates) return null;
+        
+        // Use user-selected template ID if provided, otherwise find assigned default for the rubber type
+        const templateId = selectedTemplateId || (isCupLump ? paperSlipConfig.defaultCupLumpId : paperSlipConfig.defaultLatexId);
+        const template = paperSlipConfig.templates.find(t => t.id === templateId) || paperSlipConfig.templates[0];
+        
+        if (!template) return null;
+
+        return {
+            ...(template.common || {}),
+            ...(template.paper || {}), // Specific configuration for thermal paper
+        };
+    };
+
+    const config = resolveConfig() || { 
+        showLogo: true, showStoreName: true, showAddress: true, showPhone: true, 
+        showBillType: true, showBillId: true, showDateTime: true, showFarmerName: true, 
+        showRawWeight: true, showBucketWeight: true, showNetWeight: true, showDrc: true, 
+        showDryWeight: true, showBasePrice: true, showBonusDrc: true, showBonusFsc: true, 
+        showBonusMember: true, showActualPrice: true, showSplits: true,
+        showPurchaseDetailsHeader: true,
+        footerText: '=== ขอบคุณที่ใช้บริการ ===',
+        headerTitle: isCupLump ? 'ใบรับซื้อขี้ยางพารา' : 'ใบรับซื้อน้ำยางพารา',
+        labels: {
+            rawWeight: isCupLump ? 'น้ำหนักขี้ยาง' : 'น้ำหนักยางดิบ',
+            bucketWeight: 'หักถังยาง',
+            netWeight: 'น้ำหนักสุทธิ',
+            drc: '% DRC',
+            dryWeight: 'ยางแห้ง',
+            basePrice: 'ราคากลาง',
+            bonusDrc: 'โบนัส DRC',
+            bonusFsc: 'โบนัส FSC',
+            bonusMember: 'โบนัสสมาชิก',
+            actualPrice: 'ราคาจริง (สุทธิ)',
+            farmerSplit: 'เกษตรกร',
+            employeeSplit: 'ลูกจ้าง'
+        }
+    };
+
+    const labels = config.labels;
+    const headerTitle = config.headerTitle;
+    const rawWeightLabel = labels.rawWeight;
 
     return (
         <div style={{ display: 'none' }}>
@@ -34,121 +80,179 @@ const BuyPaperReceipt = ({ printingReceipt, printRef, setPrintingReceipt, settin
                     </div>
 
                     <div className="receipt-content-inner">
+                        {/* Top Note */}
+                        {config.topNote && (
+                            <div style={{ fontSize: `${(config.fontSizeTopNote || 7) * 2}px` }} className="text-center italic border-b border-black mb-1 pb-1">
+                                {config.topNote}
+                            </div>
+                        )}
+
                         {/* Header - High Contrast for Thermal */}
                         <div className="text-center mb-4 border-b-2 border-black pb-2">
                             <div className="h-16 flex items-center justify-center mb-2">
-                                {settings.logoUrl && (
-                                    <img src={settings.logoUrl} alt="Logo" className="h-16 mx-auto object-contain" style={{ filter: 'grayscale(1) contrast(2)' }} />
+                                {(config.showLogo !== false && (settings.logoUrl || settings.logo_url || settings.logo_Url)) && (
+                                    <img src={settings.logoUrl || settings.logo_url || settings.logo_Url} alt="Logo" className="h-16 mx-auto object-contain" style={{ filter: 'grayscale(1) contrast(2)' }} />
                                 )}
                             </div>
-                            <h1 className="text-2xl font-bold leading-tight">{settings.factoryName || 'ร้านรับซื้อน้ำยางพารา'}</h1>
-                            <p className="text-[14px] font-medium">{settings.address || '-'}</p>
-                            <p className="text-lg font-bold">โทร: {settings.phone || '-'}</p>
-                            <div className="mt-2 font-bold border-2 border-black inline-block px-6 py-1 text-[16px]">
-                                {isCupLump ? 'ใบรับซื้อขี้ยางพารา' : 'ใบรับซื้อน้ำยางพารา'}
-                            </div>
+                            {config.showStoreName !== false && <h1 style={{ fontSize: `${(config.fontSizeStoreName || 12) * 2}px` }} className="font-bold leading-tight">{settings.factoryName || settings.factory_name || 'ร้านรับซื้อน้ำยางพารา'}</h1>}
+                            {(config.showAddress !== false || config.showPhone !== false) && (
+                                <div className="leading-tight">
+                                    {config.showAddress !== false && (
+                                        <p style={{ fontSize: `${(config.fontSizeAddress || 8) * 1.8}px` }}>
+                                            {settings.address || '-'}
+                                        </p>
+                                    )}
+                                    {config.showPhone !== false && (
+                                        <p style={{ fontSize: `${(config.fontSizePhone || 8) * 1.8}px` }} className="font-bold">
+                                            โทร: {settings.phone || '-'}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                            {config.showBillType !== false && (
+                                <div style={{ fontSize: `${(config.fontSizeHeaderTitle || 10) * 2}px` }} className="mt-2 font-bold border-2 border-black inline-block px-6 py-1">
+                                    {headerTitle}
+                                </div>
+                            )}
                         </div>
 
                         {/* Customer Info Section */}
                         <div className="mb-4">
-                            <div className="text-center text-[14px] font-bold border-y border-black py-0.5 mb-2 uppercase">=== ข้อมูลลูกค้า ===</div>
-                            <div className="flex justify-between text-[14px] mb-2 font-mono">
-                                <span>เลขที่: <span className="font-bold">{printingReceipt.id || '-'}</span></span>
-                                <span className="font-bold">{format(addYears(new Date(printingReceipt.timestamp || printingReceipt.date || new Date()), 543), 'dd/MM/yyyy HH:mm', { locale: th })}</span>
-                            </div>
-                            <h2 className="text-lg font-bold">{printingReceipt.farmerName || 'ลูกค้าทั่วไป'}</h2>
+                            {(config.showBillId !== false || config.showDateTime !== false) && (
+                                <div className="flex justify-between mb-2 font-mono border-b border-black pb-1">
+                                    {config.showBillId !== false && <span style={{ fontSize: `${(config.fontSizeBillIdValue || config.fontSizeBillId || 7) * 2}px` }}>
+                                        <span style={{ fontSize: `${(config.fontSizeBillIdLabel || config.fontSizeBillId || 7) * 2}px` }}>เลขที่: </span>
+                                        <span className="font-bold">{printingReceipt.id || '-'}</span>
+                                    </span>}
+                                    {config.showDateTime !== false && <span style={{ fontSize: `${(config.fontSizeDateTimeValue || config.fontSizeDateTime || 7) * 2}px` }} className="font-bold">
+                                        <span style={{ fontSize: `${(config.fontSizeDateTimeLabel || config.fontSizeDateTime || 7) * 2}px` }}></span>
+                                        {formatReceiptDate(printingReceipt, 'dd/MM/yyyy HH:mm')}
+                                    </span>}
+                                </div>
+                            )}
+                            {config.showFarmerName !== false && (
+                                <div className="flex items-baseline gap-1">
+                                    <span style={{ fontSize: `${(config.fontSizeFarmerNameLabel || 9) * 2}px` }}>ชื่อลูกค้า: </span>
+                                    <h2 style={{ fontSize: `${(config.fontSizeFarmerNameValue || config.fontSizeFarmerName || 10) * 2}px` }} className="font-bold">{printingReceipt.farmerName || 'ลูกค้าทั่วไป'}</h2>
+                                </div>
+                            )}
                         </div>
 
                         {/* Purchase Details Section */}
                         <div className="mb-4">
-                            <div className="text-center text-[14px] font-bold border-y border-black py-0.5 mb-2 uppercase">=== รายละเอียดรับซื้อ ===</div>
+                            {config.showPurchaseDetailsHeader !== false && (
+                                <div className="text-center text-[14px] font-bold border-y border-black py-0.5 mb-2 uppercase">=== รายละเอียดรับซื้อ ===</div>
+                            )}
                             
-                            <div className="flex justify-between items-center text-[15px] mt-2">
-                                <span>{isCupLump ? 'น้ำหนักขี้ยาง' : 'น้ำหนักยางดิบ'}</span>
-                                <span>{Number(printingReceipt.weight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
-                            </div>
-                            <div className="flex justify-between items-center text-[14px] text-black italic">
-                                <span>น้ำหนักถัง (หัก)</span>
-                                <span>-{Number(printingReceipt.bucketWeight || printingReceipt.bucket_weight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span>น้ำหนักสุทธิ</span>
-                                <span className="text-lg font-bold border-b-2 border-black">{(Number(printingReceipt.weight || 0) - Number(printingReceipt.bucketWeight || printingReceipt.bucket_weight || 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
-                            </div>
+                            {config.showRawWeight !== false && (
+                                <div style={{ fontSize: `${(config.fontSizeRawWeightLabel || config.fontSizeLabel || 9) * 2}px` }} className="flex justify-between items-center mt-2">
+                                    <span>{rawWeightLabel}</span>
+                                    <span style={{ fontSize: `${(config.fontSizeRawWeightValue || config.fontSizeValue || 10) * 2}px` }} className="font-bold">{Number(printingReceipt.weight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                                </div>
+                            )}
+                            {(config.showBucketWeight !== false && Number(printingReceipt.bucketWeight || printingReceipt.bucket_weight || 0) > 0) && (
+                                <div style={{ fontSize: `${(config.fontSizeBucketWeightLabel || config.fontSizeSubData || 8) * 2}px` }} className="flex justify-between items-center text-black italic">
+                                    <span>{labels.bucketWeight}</span>
+                                    <span style={{ fontSize: `${(config.fontSizeBucketWeightValue || config.fontSizeSubData || 8) * 2}px` }}>-{Number(printingReceipt.bucketWeight || printingReceipt.bucket_weight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                                </div>
+                            )}
+                            {config.showNetWeight !== false && (
+                                <div style={{ fontSize: `${(config.fontSizeNetWeightLabel || config.fontSizeLabel || 9) * 2}px` }} className="flex justify-between items-center">
+                                    <span>{labels.netWeight}</span>
+                                    <span style={{ fontSize: `${(config.fontSizeNetWeightValue || config.fontSizeValue || 11) * 2}px` }} className="font-bold border-b-2 border-black">{(Number(printingReceipt.weight || 0) - Number(printingReceipt.bucketWeight || printingReceipt.bucket_weight || 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                                </div>
+                            )}
                             
                             {!isCupLump && (
                                 <>
-                                    <div className="flex justify-between items-center mt-1">
-                                        <span>% DRC</span>
-                                        <span className="text-lg font-bold border-b border-black">{Number(printingReceipt.drc).toLocaleString(undefined, { minimumFractionDigits: 1 })}%</span>
-                                    </div>
-                                    <div className="flex justify-between items-center mt-1">
-                                        <span>ยางแห้ง</span>
-                                        <span className="text-lg font-bold border-b border-black">{Number(printingReceipt.dryWeight || printingReceipt.dryRubber || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
-                                    </div>
+                                    {config.showDrc !== false && (
+                                        <div style={{ fontSize: `${(config.fontSizeDrcLabel || config.fontSizeLabel || 9) * 2}px` }} className="flex justify-between items-center mt-1">
+                                            <span>{labels.drc}</span>
+                                            <span style={{ fontSize: `${(config.fontSizeDrcValue || config.fontSizeValue || 10) * 2}px` }} className="font-bold border-b border-black">{Number(printingReceipt.drc).toLocaleString(undefined, { minimumFractionDigits: 1 })}%</span>
+                                        </div>
+                                    )}
+                                    {config.showDryWeight !== false && (
+                                        <div style={{ fontSize: `${(config.fontSizeDryWeightLabel || config.fontSizeLabel || 9) * 2}px` }} className="flex justify-between items-center mt-1">
+                                            <span>{labels.dryWeight}</span>
+                                            <span style={{ fontSize: `${(config.fontSizeDryWeightValue || config.fontSizeValue || 11) * 2}px` }} className="font-bold border-b border-black">{Number(printingReceipt.dryWeight || printingReceipt.dryRubber || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                                        </div>
+                                    )}
                                 </>
                             )}
                             
                             <div className="my-2 border-t border-dashed border-black"></div>
 
-                            <div className="flex justify-between items-center text-[16px]">
-                                <span>ราคากลาง</span>
-                                <span>{Number(printingReceipt.basePrice || (Number(printingReceipt.actualPrice || printingReceipt.pricePerKg) - (printingReceipt.bonusDrc !== undefined ? Number(printingReceipt.bonusDrc) : calculateDrcBonus(printingReceipt.drc, drcBonuses)))).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
-                            </div>
+                            {config.showBasePrice !== false && (
+                                <div style={{ fontSize: `${(config.fontSizeBasePriceLabel || config.fontSizeLabel || 9) * 2}px` }} className="flex justify-between items-center">
+                                    <span>{labels.basePrice}</span>
+                                    <span style={{ fontSize: `${(config.fontSizeBasePriceValue || config.fontSizeValue || 10) * 2}px` }}>{Number(printingReceipt.basePrice || (Number(printingReceipt.actualPrice || printingReceipt.pricePerKg) - (printingReceipt.bonusDrc !== undefined ? Number(printingReceipt.bonusDrc) : calculateDrcBonus(printingReceipt.drc, drcBonuses)))).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                </div>
+                            )}
                             
                             {!isCupLump && (
                                 <>
-                                    <div className="flex justify-between items-center text-[16px] font-medium">
-                                        <span>โบนัส DRC</span>
-                                        <span>+{Number(printingReceipt.bonusDrc !== undefined ? printingReceipt.bonusDrc : calculateDrcBonus(printingReceipt.drc, drcBonuses)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
-                                    </div>
-                                    {Number(printingReceipt.fscBonus || (farmers.find(f => f.id === printingReceipt.farmerId)?.fscId ? (settings.fsc_bonus || 1) : 0)) > 0 && (
-                                        <div className="flex justify-between items-center text-[16px] font-medium text-black">
-                                            <span>โบนัส FSC</span>
-                                            <span>+{Number(printingReceipt.fscBonus || (farmers.find(f => f.id === printingReceipt.farmerId)?.fscId ? (settings.fsc_bonus || 1) : 0)).toLocaleString(undefined, { minimumFractionDigits: 0 })}/กก.</span>
+                                    {config.showBonusDrc !== false && (
+                                        <div style={{ fontSize: `${(config.fontSizeBonusDrcLabel || config.fontSizeSubData || 8) * 2}px` }} className="flex justify-between items-center font-medium">
+                                            <span>{labels.bonusDrc}</span>
+                                            <span style={{ fontSize: `${(config.fontSizeBonusDrcValue || config.fontSizeSubData || 8) * 2}px` }}>+{Number(printingReceipt.bonusDrc !== undefined ? printingReceipt.bonusDrc : calculateDrcBonus(printingReceipt.drc, drcBonuses)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
                                         </div>
                                     )}
-                                    {Number(printingReceipt.bonusMemberType || (farmers.find(f => f.id === printingReceipt.farmerId)?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === printingReceipt.farmerId).memberTypeId)?.bonus : 0)) > 0 && (
-                                        <div className="flex justify-between items-center text-[16px] font-black bg-gray-100 px-1 rounded">
-                                            <span>{memberTypes.find(mt => mt.id === (printingReceipt.memberTypeId || farmers.find(f => f.id === printingReceipt.farmerId)?.memberTypeId))?.name || 'โบนัสสมาชิก'}</span>
-                                            <span>+{Number(printingReceipt.bonusMemberType || (farmers.find(f => f.id === printingReceipt.farmerId)?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === printingReceipt.farmerId).memberTypeId)?.bonus : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                    {(config.showBonusFsc !== false && Number(printingReceipt.fscBonus || (farmers.find(f => f.id === printingReceipt.farmerId)?.fscId ? (settings.fscBonus || 1) : 0)) > 0) && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${(config.fontSizeBonusFscLabel || config.fontSizeSubData || 8) * 2}px`, fontFamily: 'monospace' }}>
+                                            <span>+ {labels.bonusFsc}</span>
+                                            <span style={{ fontSize: `${(config.fontSizeBonusFscValue || config.fontSizeSubData || 8) * 2}px` }}>+{Number(printingReceipt.fscBonus || (farmers.find(f => f.id === printingReceipt.farmerId)?.fscId ? (settings.fscBonus || 1) : 0)).toLocaleString(undefined, { minimumFractionDigits: 0 })}/กก.</span>
+                                        </div>
+                                    )}
+                                    {(config.showBonusMember !== false && Number(printingReceipt.memberTypeId || farmers.find(f => f.id === printingReceipt.farmerId)?.memberTypeId) > 0) && (
+                                        <div style={{ fontSize: `${(config.fontSizeBonusMemberLabel || config.fontSizeSubData || 8) * 2}px` }} className="flex justify-between items-center font-black bg-gray-100 px-1 rounded">
+                                            <span>{memberTypes.find(mt => mt.id === (printingReceipt.memberTypeId || farmers.find(f => f.id === printingReceipt.farmerId)?.memberTypeId))?.name || labels.bonusMember}</span>
+                                            <span style={{ fontSize: `${(config.fontSizeBonusMemberValue || config.fontSizeSubData || 8) * 2}px` }}>+{Number(printingReceipt.bonusMemberType || (farmers.find(f => f.id === printingReceipt.farmerId)?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === printingReceipt.farmerId).memberTypeId)?.bonus : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
                                         </div>
                                     )}
                                 </>
                             )}
-                            <div className="flex justify-between items-center font-bold border-t-2 border-black pt-2 mt-2">
-                                <span>ราคาจริง (สุทธิ)</span>
-                                <span className="text-lg font-bold border-b-2 border-black">{truncateOneDecimal(Number(printingReceipt.actualPrice || (Number(printingReceipt.pricePerKg) || (Number(printingReceipt.basePrice || 0) + Number(printingReceipt.bonusDrc || 0) + (Number(printingReceipt.fscBonus) || (farmers.find(f => f.id === printingReceipt.farmerId)?.fscId ? 1 : 0)))))).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
-                            </div>
+                            {config.showActualPrice !== false && (
+                                <div style={{ fontSize: `${(config.fontSizeActualPriceLabel || config.fontSizeLabel || 10) * 2}px` }} className="flex justify-between items-center font-bold border-t-2 border-black pt-2 mt-2">
+                                    <span>{labels.actualPrice}</span>
+                                    <span style={{ fontSize: `${(config.fontSizeActualPriceValue || config.fontSizeValue || 12) * 2}px` }} className="font-bold border-b-2 border-black">{truncateOneDecimal(Number(printingReceipt.actualPrice || printingReceipt.pricePerKg)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                </div>
+                            )}
                         </div>
 
                         {/* Splits */}
-                        {!isCupLump && (
+                        {(!isCupLump && config.showSplits !== false) && (
                             <div className="py-2 border-t-2 border-black my-2 space-y-2">
-                                <div className="flex justify-between items-center font-bold text-lg">
-                                    <span>เกษตรกร ({100 - (Number(printingReceipt.empPct) || 0)}%)</span>
-                                    <span className="font-bold text-2xl">{Math.floor(Number(printingReceipt.farmerTotal || printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                <div style={{ fontSize: `${(config.fontSizeFarmerSplitLabel || config.fontSizeSplit || 9) * 2}px` }} className="flex justify-between items-center font-bold">
+                                    <span>{labels.farmerSplit} ({100 - (Number(printingReceipt.empPct) || 0)}%)</span>
+                                    <span style={{ fontSize: `${(config.fontSizeFarmerSplitValue || config.fontSizeSplit + 2 || 11) * 2}px` }} className="font-bold">{Math.floor(Number(printingReceipt.farmerTotal)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
                                 </div>
                                 {Number(printingReceipt.empPct) > 0 && (
-                                    <div className="flex justify-between items-center text-lg">
-                                        <span>ลูกจ้าง ({Number(printingReceipt.empPct)}%)</span>
-                                        <span className="font-bold text-2xl">{Math.floor(Number(printingReceipt.employeeTotal || 0)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                    <div style={{ fontSize: `${(config.fontSizeEmployeeSplitLabel || config.fontSizeSplit - 1 || 8) * 2}px` }} className="flex justify-between items-center">
+                                        <span>{labels.employeeSplit} ({Number(printingReceipt.empPct)}%)</span>
+                                        <span style={{ fontSize: `${(config.fontSizeEmployeeSplitValue || config.fontSizeSplit || 9) * 2}px` }} className="font-bold">{Math.floor(Number(printingReceipt.employeeTotal)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {/* Extra Message Area */}
+                        {config.extraMessage && (
+                            <div style={{ fontSize: `${(config.fontSizeExtraMessage || 7) * 2}px` }} className="mt-2 p-2 border border-black italic leading-tight">
+                                {config.extraMessage}
                             </div>
                         )}
 
                         {/* Total Footer */}
                         <div className="border-t-4 border-double border-black py-3 mt-2">
                             <div className="flex justify-between items-center">
-                                <span className="font-bold text-sm uppercase">ยอดรวมสุทธิ</span>
-                                <span className="font-bold text-3xl">{Math.floor(Number(printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                <span style={{ fontSize: `${(config.fontSizeTotalLabel || 10) * 2}px` }} className="font-bold uppercase">ยอดรวมสุทธิ</span>
+                                <span style={{ fontSize: `${(config.fontSizeTotalValue || 16) * 2}px` }} className="font-bold">{Math.floor(Number(printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
                             </div>
                         </div>
 
                         {/* Footer Message */}
                         <div className="text-center mt-4 border-t border-black pt-2">
-                            <p className="text-[10px] font-bold">=== ขอบคุณที่ใช้บริการ ===</p>
+                            <p style={{ fontSize: `${(config.fontSizeFooterText || 8) * 2}px` }} className="font-bold">{config.footerText || '=== ขอบคุณที่ใช้บริการ ==='}</p>
                         </div>
                     </div>
                 </div>

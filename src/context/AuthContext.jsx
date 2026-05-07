@@ -9,6 +9,16 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [session, setSession] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [activeStoreId, setActiveStoreId] = useState(localStorage.getItem('rt_active_store_id') || null);
+
+    // PERSIST switched store ID
+    useEffect(() => {
+        if (activeStoreId) {
+            localStorage.setItem('rt_active_store_id', activeStoreId);
+        } else {
+            localStorage.removeItem('rt_active_store_id');
+        }
+    }, [activeStoreId]);
 
     const updateUser = async (sbUser) => {
         if (sbUser) {
@@ -99,6 +109,7 @@ export const AuthProvider = ({ children }) => {
         // Clear all IndexedDB and Session Storage caches upon logout to prevent multi-tenant data leakage
         try {
             clearAllCache();
+            localStorage.removeItem('rt_active_store_id');
             await db.delete(); // Delete the entire IndexedDB database safely
             
             // Reload the page to ensure all memory state is wiped and DB is re-initialized for the next login
@@ -113,7 +124,7 @@ export const AuthProvider = ({ children }) => {
     const getToken = () => session?.access_token;
 
     return (
-        <AuthContext.Provider value={{ user, session, loginWithGoogle, logout, isLoading, getToken }}>
+        <AuthContext.Provider value={{ user, session, loginWithGoogle, logout, isLoading, getToken, activeStoreId, setActiveStoreId }}>
             {children}
         </AuthContext.Provider>
     );

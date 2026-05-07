@@ -24,7 +24,7 @@ async function handlePost(context) {
         };
 
         try {
-            validatePayload(payload, expenseSchema);
+            validatePayload(payload, expenseSchema, context.user.timezone);
         } catch (valErr) {
             return errorResponse(`ข้อมูลไม่ถูกต้อง: ${valErr.message}`);
         }

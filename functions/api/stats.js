@@ -1,4 +1,4 @@
-import { jsonResponse, errorResponse, withAuth } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth, getTodayDateStr, getTimezoneOffset } from './_utils.js';
 
 /**
  * Enhanced Aggregated Statistics API
@@ -10,7 +10,9 @@ async function handleGet(context) {
         const storeId = context.user.storeId;
         const role = context.user.role;
         const url = new URL(context.request.url);
-        const dateParam = url.searchParams.get('date') || new Date().toISOString().split('T')[0];
+        const tz = context.user.timezone || 'Asia/Bangkok';
+        const dateParam = url.searchParams.get('date') || getTodayDateStr(tz);
+        const tzOffset = getTimezoneOffset(tz);
         
         const todayPattern = `${dateParam}%`;
         const monthPattern = `${dateParam.substring(0, 7)}%`;
@@ -55,8 +57,8 @@ async function handleGet(context) {
             db.prepare(`SELECT COUNT(*) as count FROM buys WHERE userId = ? AND (farmerStatus != 'Paid' OR employeeStatus != 'Paid')`).bind(storeId).first(),
             db.prepare("SELECT key, value FROM settings WHERE userId = ?").bind(storeId).all(),
             db.prepare("SELECT id, date, price, source FROM market_prices WHERE userId IS NULL OR userId = ? ORDER BY date DESC LIMIT 30").bind(storeId).all(),
-            db.prepare(`SELECT date, AVG(pricePerKg) as avgPrice FROM buys WHERE userId = ? AND date >= date('now', '-30 days') GROUP BY date ORDER BY date DESC`).bind(storeId).all(),
-            db.prepare(`SELECT date, AVG(pricePerKg) as avgPrice FROM sells WHERE userId = ? AND date >= date('now', '-30 days') GROUP BY date ORDER BY date DESC`).bind(storeId).all(),
+            db.prepare(`SELECT date, AVG(pricePerKg) as avgPrice FROM buys WHERE userId = ? AND date >= date('now', ?, '-30 days') GROUP BY date ORDER BY date DESC`).bind(storeId, tzOffset).all(),
+            db.prepare(`SELECT date, AVG(pricePerKg) as avgPrice FROM sells WHERE userId = ? AND date >= date('now', ?, '-30 days') GROUP BY date ORDER BY date DESC`).bind(storeId, tzOffset).all(),
             db.prepare(`
                 SELECT * FROM (
                     SELECT 'buy' as type, id, date, total, farmerName as name, farmerId as partyId, created_at

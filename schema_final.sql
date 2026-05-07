@@ -229,10 +229,13 @@ CREATE TABLE IF NOT EXISTS factories (
 CREATE TABLE IF NOT EXISTS trucks (
     id TEXT PRIMARY KEY,
     licensePlate TEXT NOT NULL,
+    driverName TEXT,
+    capacity REAL,
     chassisNumber TEXT,
     brand TEXT,
     model TEXT,
     prbExpiry TEXT,
+    note TEXT,
     userId TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

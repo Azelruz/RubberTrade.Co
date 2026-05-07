@@ -37,7 +37,7 @@ async function handlePost(context) {
             const stmts = body.payloads.map((p, idx) => {
                 // Server-side Validation
                 try {
-                    validatePayload(p, wageSchema);
+                    validatePayload(p, wageSchema, context.user.timezone);
                 } catch (valErr) {
                     throw new Error(`ข้อมูลรายการที่ ${idx + 1} ไม่ถูกต้อง: ${valErr.message}`);
                 }
@@ -76,7 +76,7 @@ async function handlePost(context) {
         };
 
         try {
-            validatePayload(payload, wageSchema);
+            validatePayload(payload, wageSchema, context.user.timezone);
         } catch (valErr) {
             return errorResponse(`ข้อมูลไม่ถูกต้อง: ${valErr.message}`);
         }

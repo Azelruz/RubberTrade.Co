@@ -1,28 +1,83 @@
-import React from 'react';
-import { Link, Info, Save, Database } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { Link, Info, Save, Database, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getSettings, updateSettingsAPI } from '../../services/apiService';
+import { useAuth } from '../../context/AuthContext';
 
-export const LineIntegration = ({ 
-    register, 
-    handleSubmit, 
-    onSubmit, 
-    saving, 
-    lineLogs, 
-    loadData,
-    user
-}) => {
+export const LineIntegration = () => {
+    const { user } = useAuth();
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [lineLogs, setLineLogs] = useState({ lastStatus: 'ยังไม่ได้รับข้อมูล', lastError: '-', lastEvent: '{}' });
+
+    const { register, handleSubmit, reset } = useForm({
+        defaultValues: {
+            lineChannelAccessToken: '',
+            lineChannelSecret: '',
+            lineLiffIdProfile: '',
+            lineLiffIdAddEmployee: ''
+        }
+    });
+
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            const settingsRes = await getSettings();
+            if (settingsRes.status === 'success' && settingsRes.data) {
+                const data = settingsRes.data;
+                reset({
+                    lineChannelAccessToken: data.lineChannelAccessToken || '',
+                    lineChannelSecret: data.lineChannelSecret || '',
+                    lineLiffIdProfile: data.lineLiffIdProfile || '',
+                    lineLiffIdAddEmployee: data.lineLiffIdAddEmployee || ''
+                });
+
+                setLineLogs({
+                    lastStatus: data.lineLastStatus || 'ยังไม่ได้รับข้อมูล',
+                    lastError: data.lineLastError || '-',
+                    lastEvent: data.lineLastEvent ? (typeof data.lineLastEvent === 'string' ? data.lineLastEvent : JSON.stringify(data.lineLastEvent, null, 2)) : '{}'
+                });
+            }
+        } catch (error) {
+            console.error('Load Line error:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const onSubmit = async (data) => {
+        setSaving(true);
+        try {
+            const res = await updateSettingsAPI(data);
+            if (res.status === 'success') {
+                toast.success('บันทึกค่า LINE API สำเร็จ');
+                loadData();
+            } else {
+                toast.error(res.message || 'บันทึกล้มเหลว');
+            }
+        } catch (error) {
+            toast.error('บันทึกล้มเหลว');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const webhookUrl = `${window.location.origin}/api/line-webhook${user?.id ? '?uid=' + user.id : ''}`;
 
     return (
-        <div className="max-w-2xl">
-            <div className="flex justify-between items-start mb-6">
-                <div>
-                    <h2 className="text-lg font-bold text-gray-900 flex items-center">
-                        <Link className="mr-2 text-green-600" size={20} />
-                        เชื่อมต่อ LINE Official Account
-                    </h2>
-                    <p className="text-gray-500 text-sm">ตั้งค่าเพื่อให้ระบบรับข้อมูลเพื่อนจาก LINE OA มาเป็นฐานข้อมูลเกษตรกร</p>
-                </div>
+        <div>
+            <div className="flex justify-end items-center mb-6">
+                <button
+                    onClick={loadData}
+                    className="p-2 text-gray-400 hover:text-rubber-600 transition-colors"
+                >
+                    <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+                </button>
             </div>
 
             <div className="space-y-6">
@@ -32,7 +87,7 @@ export const LineIntegration = ({
                         วิธีการตั้งค่า
                     </h3>
                     <ol className="text-xs text-green-700 space-y-2 list-decimal ml-4">
-                        <li>สร้าง Messaging API Channel ใน <a href="https://developers.line.biz/" target="_blank" className="underline font-bold">LINE Developers Console</a></li>
+                        <li>สร้าง Messaging API Channel ใน <a href="https://developers.line.biz/" target="_blank" rel="noopener noreferrer" className="underline font-bold">LINE Developers Console</a></li>
                         <li>คัดลอก **Channel Access Token** และ **Channel Secret** มาใส่ในฟิลด์ด้านล่าง</li>
                         <li>นำ Webhook URL ด้านล่างนี้ไปใส่ในหน้า Messaging API settings ใน LINE Developers</li>
                         <li>กดเปิดใช้งาน **Webhook** ใน LINE Developers</li>
@@ -115,7 +170,7 @@ export const LineIntegration = ({
                         <button
                             type="submit"
                             disabled={saving}
-                            className="bg-rubber-600 text-white rounded-lg px-6 py-2.5 font-medium hover:bg-rubber-700 disabled:opacity-50 transition-colors flex items-center"
+                            className="bg-rubber-600 text-white rounded-lg px-6 py-2.5 font-medium hover:bg-rubber-700 disabled:opacity-50 transition-colors flex items-center shadow-sm"
                         >
                             <Save size={18} className="mr-2" />
                             {saving ? 'กำลังบันทึก...' : 'บันทึกค่า LINE API'}
@@ -149,13 +204,6 @@ export const LineIntegration = ({
                             * หากข้อมูลด้านบนว่างเปล่า แสดงว่า Webhook ยังไม่ได้รับข้อมูลใดๆ จาก LINE เลย (ให้เช็คการกด Verify หรือการ Block/Unblock ใน LINE)
                         </p>
                     </div>
-                    
-                    <button 
-                        onClick={() => loadData()}
-                        className="mt-4 text-xs font-bold text-rubber-600 hover:text-rubber-700 underline"
-                    >
-                        กดเพื่อรีเฟรช Log ล่าสุด
-                    </button>
                 </div>
             </div>
         </div>

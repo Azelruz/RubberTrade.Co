@@ -1,35 +1,195 @@
-import React, { useState } from 'react';
-import { Leaf, RefreshCw, Plus, Phone, MapPin, Database, Edit2, Trash2, UserCircle, Percent, X, Save } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { 
+    Leaf, RefreshCw, Plus, Phone, MapPin, Database, Edit2, Trash2, 
+    UserCircle, Percent, X, Save, Search 
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import { 
+    fetchFarmers, 
+    fetchEmployees, 
+    fetchMemberTypes, 
+    addFarmer, 
+    addEmployee, 
+    deleteRecord,
+    updateRecord,
+    addMemberType as addMemberTypeAPI,
+    deleteMemberType as deleteMemberTypeAPI
+} from '../../services/apiService';
 
-export const UserManagement = ({ 
-    farmers, 
-    employees, 
-    loading, 
-    saving, 
-    loadData, 
-    showFarmerForm, 
-    setShowFarmerForm, 
-    editingFarmer, 
-    handleCancelFarmerEdit, 
-    farmerForm, 
-    onSubmitFarmer, 
-    handleEditFarmer, 
-    handleDelete, 
-    showEmployeeForm, 
-    setShowEmployeeForm, 
-    editingEmployee,
-    handleEditEmployee,
-    handleCancelEmployeeEdit,
-    employeeForm, 
-    onSubmitEmployee,
-    memberTypes,
-    addMemberType,
-    deleteMemberType
-}) => {
+export const UserManagement = () => {
     const [activeSubTab, setActiveSubTab] = useState('farmers');
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    
+    // Lists
+    const [farmers, setFarmers] = useState([]);
+    const [employees, setEmployees] = useState([]);
+    const [memberTypes, setMemberTypes] = useState([]);
+
+    // UI States
+    const [showFarmerForm, setShowFarmerForm] = useState(false);
+    const [editingFarmer, setEditingFarmer] = useState(null);
+    const [showEmployeeForm, setShowEmployeeForm] = useState(false);
+    const [editingEmployee, setEditingEmployee] = useState(null);
     const [showMemberTypeForm, setShowMemberTypeForm] = useState(false);
     const [editingMemberType, setEditingMemberType] = useState(null);
     const [mtFormData, setMtFormData] = useState({ name: '', bonus: '0' });
+
+    // Search States
+    const [farmerSearch, setFarmerSearch] = useState('');
+    const [employeeSearch, setEmployeeSearch] = useState('');
+
+    const farmerForm = useForm({
+        defaultValues: {
+            name: '', phone: '', bankAccount: '', bankName: '', address: '', note: '', fscId: '', memberTypeId: ''
+        }
+    });
+
+    const employeeForm = useForm({
+        defaultValues: {
+            name: '', farmerId: '', profitSharePct: 10, phone: '', bankAccount: '', bankName: ''
+        }
+    });
+
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            const [fRes, eRes, mtRes] = await Promise.all([
+                fetchFarmers(),
+                fetchEmployees(),
+                fetchMemberTypes()
+            ]);
+            setFarmers(Array.isArray(fRes) ? fRes : []);
+            setEmployees(Array.isArray(eRes) ? eRes : []);
+            setMemberTypes(Array.isArray(mtRes) ? mtRes : []);
+        } catch (error) {
+            toast.error('โหลดข้อมูลล้มเหลว');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Farmer Handlers
+    const onSubmitFarmer = async (data) => {
+        setSaving(true);
+        try {
+            let res;
+            if (editingFarmer) {
+                res = await updateRecord('farmers', editingFarmer.id, data);
+            } else {
+                res = await addFarmer(data);
+            }
+            
+            if (res.status === 'success') {
+                toast.success(editingFarmer ? 'แก้ไขข้อมูลเกษตรกรสำเร็จ' : 'เพิ่มข้อมูลเกษตรกรสำเร็จ');
+                setShowFarmerForm(false);
+                setEditingFarmer(null);
+                farmerForm.reset();
+                loadData();
+            }
+        } catch (err) {
+            toast.error('บันทึกล้มเหลว');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleEditFarmer = (farmer) => {
+        setEditingFarmer(farmer);
+        setShowFarmerForm(true);
+        farmerForm.reset({
+            name: farmer.name,
+            phone: farmer.phone,
+            bankAccount: farmer.bankAccount,
+            bankName: farmer.bankName,
+            address: farmer.address,
+            note: farmer.note,
+            fscId: farmer.fscId || '',
+            memberTypeId: farmer.memberTypeId || ''
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    // Employee Handlers
+    const onSubmitEmployee = async (data) => {
+        setSaving(true);
+        try {
+            let res;
+            if (editingEmployee) {
+                res = await updateRecord('employees', editingEmployee.id, data);
+            } else {
+                res = await addEmployee(data);
+            }
+            
+            if (res.status === 'success') {
+                toast.success(editingEmployee ? 'แก้ไขข้อมูลลูกจ้างสำเร็จ' : 'เพิ่มข้อมูลลูกจ้างสำเร็จ');
+                setShowEmployeeForm(false);
+                setEditingEmployee(null);
+                employeeForm.reset();
+                loadData();
+            }
+        } catch (err) {
+            toast.error('บันทึกล้มเหลว');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleEditEmployee = (emp) => {
+        setEditingEmployee(emp);
+        setShowEmployeeForm(true);
+        employeeForm.reset({
+            name: emp.name,
+            farmerId: emp.farmerId,
+            profitSharePct: emp.profitSharePct,
+            phone: emp.phone,
+            bankAccount: emp.bankAccount,
+            bankName: emp.bankName
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    // Member Type Handlers
+    const handleMemberTypeSubmit = async () => {
+        if (!mtFormData.name) return toast.error('กรุณาระบุชื่อประเภทสมาชิก');
+        setSaving(true);
+        try {
+            const res = await addMemberTypeAPI({
+                id: editingMemberType?.id,
+                name: mtFormData.name,
+                bonus: mtFormData.bonus
+            });
+            if (res.status === 'success') {
+                toast.success(editingMemberType ? 'แก้ไขสำเร็จ' : 'เพิ่มสำเร็จ');
+                setShowMemberTypeForm(false);
+                setEditingMemberType(null);
+                setMtFormData({ name: '', bonus: '0' });
+                loadData();
+            }
+        } catch (e) {
+            toast.error('ล้มเหลว');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDeleteRecord = async (sheetName, id) => {
+        if (!window.confirm('ยืนยันการลบข้อมูล?')) return;
+        try {
+            const res = await deleteRecord(sheetName, id);
+            if (res.status === 'success') {
+                toast.success('ลบข้อมูลสำเร็จ');
+                loadData();
+            }
+        } catch (err) {
+            toast.error('ลบล้มเหลว');
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -83,23 +243,41 @@ export const UserManagement = ({
             {/* ===================== FARMERS TAB ===================== */}
             {activeSubTab === 'farmers' && (
                 <section className="animate-in fade-in duration-300">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold text-gray-900 flex items-center">
-                            <Leaf className="mr-2 text-rubber-600" size={24} />
-                            จัดการข้อมูลเกษตรกร
-                        </h2>
-                        <div className="flex space-x-2">
+                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                        <div className="relative w-full md:w-72">
+                            <input
+                                type="text"
+                                placeholder="ค้นหาชื่อหรือเบอร์โทร..."
+                                value={farmerSearch}
+                                onChange={(e) => setFarmerSearch(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-rubber-500 focus:border-rubber-500 text-sm shadow-sm"
+                            />
+                            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                            {farmerSearch && (
+                                <button 
+                                    onClick={() => setFarmerSearch('')}
+                                    className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                                >
+                                    <X size={16} />
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex space-x-2 w-full md:w-auto">
                             <button
                                 onClick={() => loadData()}
-                                className="inline-flex items-center px-3 py-2 text-rubber-600 hover:bg-rubber-50 rounded-lg transition text-sm font-bold"
+                                className="flex-1 md:flex-none inline-flex items-center justify-center px-3 py-2 text-rubber-600 hover:bg-rubber-50 rounded-lg transition text-sm font-bold"
                             >
                                 <RefreshCw size={18} className={`mr-1 ${loading ? 'animate-spin' : ''}`} />
                                 รีเฟรช
                             </button>
                             {!showFarmerForm && (
                                 <button
-                                    onClick={() => setShowFarmerForm(true)}
-                                    className="inline-flex items-center px-4 py-2 bg-rubber-600 text-white rounded-lg hover:bg-rubber-700 transition shadow-sm font-medium"
+                                    onClick={() => {
+                                        setEditingFarmer(null);
+                                        farmerForm.reset();
+                                        setShowFarmerForm(true);
+                                    }}
+                                    className="flex-1 md:flex-none inline-flex items-center justify-center px-4 py-2 bg-rubber-600 text-white rounded-lg hover:bg-rubber-700 transition shadow-sm font-medium"
                                 >
                                     <Plus size={18} className="mr-1" />
                                     เพิ่มเกษตรกร
@@ -114,11 +292,9 @@ export const UserManagement = ({
                                 <h3 className={`font-bold ${editingFarmer ? 'text-amber-800' : 'text-gray-700'}`}>
                                     {editingFarmer ? `แก้ไขข้อมูล: ${editingFarmer.name}` : 'เพิ่มข้อมูลเกษตรกรใหม่'}
                                 </h3>
-                                {editingFarmer && (
-                                    <button onClick={handleCancelFarmerEdit} className="text-gray-400 hover:text-gray-600">
-                                        <X size={20} />
-                                    </button>
-                                )}
+                                <button onClick={() => { setShowFarmerForm(false); setEditingFarmer(null); farmerForm.reset(); }} className="text-gray-400 hover:text-gray-600">
+                                    <X size={20} />
+                                </button>
                             </div>
                             <form onSubmit={farmerForm.handleSubmit(onSubmitFarmer)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 <div className="space-y-1">
@@ -164,7 +340,7 @@ export const UserManagement = ({
                                     </select>
                                 </div>
                                 <div className="lg:col-span-3 flex justify-end space-x-2 pt-2">
-                                    <button type="button" onClick={handleCancelFarmerEdit} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button>
+                                    <button type="button" onClick={() => { setShowFarmerForm(false); setEditingFarmer(null); farmerForm.reset(); }} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button>
                                     <button type="submit" disabled={saving} className={`px-6 py-2 text-white rounded-lg disabled:opacity-50 transition-colors flex items-center space-x-2 ${editingFarmer ? 'bg-amber-600 hover:bg-amber-700' : 'bg-rubber-600 hover:bg-rubber-700'}`}>
                                         <Save size={18} />
                                         <span>{editingFarmer ? 'บันทึกการแก้ไข' : 'บันทึกเกษตรกร'}</span>
@@ -186,7 +362,13 @@ export const UserManagement = ({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 text-sm">
-                                {farmers.map(f => (
+                                {farmers
+                                    .filter(f => 
+                                        f.name?.toLowerCase().includes(farmerSearch.toLowerCase()) || 
+                                        f.phone?.includes(farmerSearch) ||
+                                        f.id?.toLowerCase().includes(farmerSearch.toLowerCase())
+                                    )
+                                    .map(f => (
                                     <tr key={f.id} className={`hover:bg-rubber-50/30 transition-colors group ${editingFarmer?.id === f.id ? 'bg-amber-50/30' : ''}`}>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center space-x-3">
@@ -252,7 +434,7 @@ export const UserManagement = ({
                                                     <Edit2 size={16} />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDelete('farmers', f.id)}
+                                                    onClick={() => handleDeleteRecord('farmers', f.id)}
                                                     className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                                                     title="ลบ"
                                                 >
@@ -281,15 +463,33 @@ export const UserManagement = ({
             {/* ===================== EMPLOYEES TAB ===================== */}
             {activeSubTab === 'employees' && (
                 <section className="animate-in fade-in duration-300">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold text-gray-900 flex items-center">
-                            <UserCircle className="mr-2 text-blue-600" size={24} />
-                            จัดการข้อมูลลูกจ้าง
-                        </h2>
+                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                        <div className="relative w-full md:w-72">
+                            <input
+                                type="text"
+                                placeholder="ค้นหาชื่อลูกจ้าง..."
+                                value={employeeSearch}
+                                onChange={(e) => setEmployeeSearch(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-blue-500 focus:border-blue-500 text-sm shadow-sm"
+                            />
+                            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                            {employeeSearch && (
+                                <button 
+                                    onClick={() => setEmployeeSearch('')}
+                                    className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                                >
+                                    <X size={16} />
+                                </button>
+                            )}
+                        </div>
                         {!showEmployeeForm && (
                             <button
-                                onClick={() => setShowEmployeeForm(true)}
-                                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm font-medium"
+                                onClick={() => {
+                                    setEditingEmployee(null);
+                                    employeeForm.reset();
+                                    setShowEmployeeForm(true);
+                                }}
+                                className="w-full md:w-auto inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm font-medium"
                             >
                                 <Plus size={18} className="mr-1" />
                                 เพิ่มลูกจ้าง
@@ -303,11 +503,9 @@ export const UserManagement = ({
                                 <h3 className={`font-bold ${editingEmployee ? 'text-amber-800' : 'text-blue-800'}`}>
                                     {editingEmployee ? `แก้ไขข้อมูล: ${editingEmployee.name}` : 'เพิ่มข้อมูลลูกจ้างใหม่'}
                                 </h3>
-                                {editingEmployee && (
-                                    <button onClick={handleCancelEmployeeEdit} className="text-gray-400 hover:text-gray-600">
-                                        <X size={20} />
-                                    </button>
-                                )}
+                                <button onClick={() => { setShowEmployeeForm(false); setEditingEmployee(null); employeeForm.reset(); }} className="text-gray-400 hover:text-gray-600">
+                                    <X size={20} />
+                                </button>
                             </div>
                             <form onSubmit={employeeForm.handleSubmit(onSubmitEmployee)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 <div className="space-y-1">
@@ -356,7 +554,7 @@ export const UserManagement = ({
                                     <input {...employeeForm.register('bankName')} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" placeholder="กสิกรไทย / ไทยพาณิชย์" />
                                 </div>
                                 <div className="lg:col-span-3 flex justify-end space-x-2 pt-2">
-                                    <button type="button" onClick={editingEmployee ? handleCancelEmployeeEdit : () => setShowEmployeeForm(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button>
+                                    <button type="button" onClick={() => { setShowEmployeeForm(false); setEditingEmployee(null); employeeForm.reset(); }} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button>
                                     <button type="submit" disabled={saving} className={`px-6 py-2 text-white rounded-lg disabled:opacity-50 transition-colors flex items-center space-x-2 ${editingEmployee ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
                                         <Save size={18} />
                                         <span>{editingEmployee ? 'บันทึกการแก้ไข' : 'บันทึกลูกจ้าง'}</span>
@@ -378,7 +576,13 @@ export const UserManagement = ({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 text-sm">
-                                {employees.map(e => (
+                                {employees
+                                    .filter(e => 
+                                        e.name?.toLowerCase().includes(employeeSearch.toLowerCase()) || 
+                                        e.phone?.includes(employeeSearch) ||
+                                        farmers.find(f => f.id === e.farmerId)?.name?.toLowerCase().includes(employeeSearch.toLowerCase())
+                                    )
+                                    .map(e => (
                                     <tr key={e.id} className={`hover:bg-blue-50/30 transition-colors ${editingEmployee?.id === e.id ? 'bg-amber-50/30' : ''}`}>
                                         <td className="px-6 py-4">
                                             <div className="font-bold text-gray-900">{e.name}</div>
@@ -411,7 +615,7 @@ export const UserManagement = ({
                                                     <Edit2 size={16} />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDelete('employees', e.id)}
+                                                    onClick={() => handleDeleteRecord('employees', e.id)}
                                                     className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                                                     title="ลบ"
                                                 >
@@ -438,14 +642,7 @@ export const UserManagement = ({
             {/* ===================== MEMBER TYPES TAB ===================== */}
             {activeSubTab === 'member_types' && (
                 <section className="animate-in fade-in duration-300">
-                    <div className="flex justify-between items-center mb-6">
-                        <div className="flex flex-col">
-                            <h2 className="text-xl font-bold text-gray-900 flex items-center">
-                                <Percent className="mr-2 text-amber-600" size={24} />
-                                จัดการประเภทสมาชิกและโบนัส
-                            </h2>
-                            <p className="text-xs text-gray-500 mt-1">กลุ่มลูกค้าที่ได้รับโบนัสพิเศษจากราคากลาง (หน่วย: บาท/กก.)</p>
-                        </div>
+                    <div className="flex justify-end items-center mb-6">
                         {!showMemberTypeForm && (
                             <button
                                 onClick={() => {
@@ -488,20 +685,7 @@ export const UserManagement = ({
                                 </div>
                                 <div className="flex items-end space-x-2">
                                     <button 
-                                        onClick={async () => {
-                                            if (!mtFormData.name) return alert('กรุณาระบุชื่อประเภทสมาชิก');
-                                            try {
-                                                const res = await addMemberType({
-                                                    id: editingMemberType?.id,
-                                                    name: mtFormData.name,
-                                                    bonus: mtFormData.bonus
-                                                });
-                                                if (res.status === 'success') {
-                                                    setShowMemberTypeForm(false);
-                                                    loadData();
-                                                }
-                                            } catch (e) { alert('เกิดข้อผิดพลาด'); }
-                                        }}
+                                        onClick={handleMemberTypeSubmit}
                                         disabled={saving}
                                         className="flex-1 bg-amber-600 text-white font-bold py-2 rounded-xl hover:bg-amber-700 transition shadow-lg shadow-amber-200"
                                     >
@@ -540,7 +724,7 @@ export const UserManagement = ({
                                             </div>
                                         </td>
                                         <td className="px-8 py-5 text-center font-mono font-bold text-amber-700">
-                                            +{Number(mt.bonus).toFixed(2)}
+                                            +{Number(mt.bonus || 0).toFixed(2)}
                                         </td>
                                         <td className="px-8 py-5 text-center text-xs text-gray-500">
                                             {farmers.filter(f => f.memberTypeId === mt.id).length} คน
@@ -552,7 +736,6 @@ export const UserManagement = ({
                                                         setEditingMemberType(mt);
                                                         setMtFormData({ name: mt.name, bonus: mt.bonus });
                                                         setShowMemberTypeForm(true);
-                                                        document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
                                                         window.scrollTo({ top: 0, behavior: 'smooth' });
                                                     }}
                                                     className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
@@ -562,7 +745,7 @@ export const UserManagement = ({
                                                 <button
                                                     onClick={async () => {
                                                         if (!window.confirm(`ยืนยันการลบประเภท "${mt.name}"?`)) return;
-                                                        const res = await deleteMemberType(mt.id);
+                                                        const res = await deleteMemberTypeAPI(mt.id);
                                                         if (res.status === 'success') loadData();
                                                     }}
                                                     className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"

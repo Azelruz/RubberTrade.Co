@@ -119,7 +119,26 @@ export const withAuth = (handler) => {
         };
 
         // Determine Effective Store ID (Shared data access)
-        context.user.storeId = userRecord.parentId || userId;
+        context.user.storeId = userRecord.parentId || userId || userId;
+
+        // --- NEW: Super Admin Store Switching ---
+        const superAdminEmail = context.env.SUPER_ADMIN_EMAIL || 'narapong.an@gmail.com';
+        const superAdminUser = context.env.SUPER_ADMIN_USERNAME || 'narapong.an';
+        const isSuperAdmin = context.user.role === 'super_admin' || 
+                             context.user.email === superAdminEmail || 
+                             context.user.username === superAdminUser;
+
+        if (isSuperAdmin) {
+            const switchStoreId = context.request.headers.get('X-Switch-Store-ID');
+            if (switchStoreId) {
+                context.user.storeId = switchStoreId;
+                context.user.isSwitched = true;
+            }
+        }
+
+        // --- NEW: Timezone Detection ---
+        const clientTz = context.request.headers.get('X-User-Timezone');
+        context.user.timezone = clientTz || context.request.cf?.timezone || 'Asia/Bangkok';
 
         // If staff, we need to respect the owner's subscription status
         let effectiveSubscriptionExpiry = userRecord.subscription_expiry;
@@ -181,7 +200,7 @@ export const trackUsage = async (context, metrics = {}) => {
         const rowsRead = metrics.rowsRead || 0;
         const rowsWritten = metrics.rowsWritten || 0;
         const rowsDeleted = metrics.rowsDeleted || 0;
-        const date = metrics.date || new Date().toISOString().split('T')[0];
+        const date = metrics.date || getTodayDateStr(context.user?.timezone || 'Asia/Bangkok');
 
         await db.prepare(`
             INSERT INTO user_usage_stats (userId, date, queryCount, rowsRead, rowsWritten, rowsDeleted)
@@ -191,7 +210,14 @@ export const trackUsage = async (context, metrics = {}) => {
                 rowsRead = rowsRead + excluded.rowsRead,
                 rowsWritten = rowsWritten + excluded.rowsWritten,
                 rowsDeleted = rowsDeleted + excluded.rowsDeleted
-        `).bind(userId, date, queryCount, rowsRead, rowsWritten, rowsDeleted).run();
+        `).bind(
+            userId ?? 'unknown', 
+            date ?? getTodayDateStr('Asia/Bangkok'), 
+            queryCount ?? 0, 
+            rowsRead ?? 0, 
+            rowsWritten ?? 0, 
+            rowsDeleted ?? 0
+        ).run();
     } catch (e) {
         console.error('Usage Tracking Error:', e.message);
     }
@@ -213,15 +239,15 @@ export const recordAuditLog = async (context, { action, entityType, entityId, ol
             INSERT INTO audit_logs (userId, username, action, entityType, entityId, oldData, newData, ip_address, user_agent)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-            user?.id || 'system',
-            user?.username || 'System',
-            action,
-            entityType,
-            entityId,
+            user?.id ?? 'system',
+            user?.username ?? 'System',
+            action ?? 'UNKNOWN',
+            entityType ?? 'unknown',
+            entityId ?? 'unknown',
             oldData ? JSON.stringify(oldData) : null,
             newData ? JSON.stringify(newData) : null,
-            ip,
-            ua
+            ip ?? '0.0.0.0',
+            ua ?? 'Unknown'
         ).run();
 
         // Run in background if possible
@@ -281,4 +307,55 @@ export const withRateLimit = (handler, limit = 60) => {
 
         return handler(context);
     };
+};
+/**
+ * Helper to get current Date object in a specific timezone
+ * @param {String} tz - Timezone string (e.g., 'Asia/Bangkok')
+ * @returns {Date} - Current date object (shifted to local values but in UTC internally)
+ */
+export const getNowByTimezone = (tz = 'Asia/Bangkok') => {
+    const now = new Date();
+    try {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: tz,
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: false
+        });
+        const parts = formatter.formatToParts(now);
+        const dateMap = {};
+        parts.forEach(p => dateMap[p.type] = p.value);
+        
+        // Return a date that represents the LOCAL time as if it were UTC
+        return new Date(`${dateMap.year}-${dateMap.month}-${dateMap.day}T${dateMap.hour}:${dateMap.minute}:${dateMap.second}.000Z`);
+    } catch (e) {
+        // Fallback to TH (GMT+7)
+        return new Date(now.getTime() + (7 * 60 * 60 * 1000));
+    }
+};
+
+/**
+ * Gets the current date string (YYYY-MM-DD) for a specific timezone
+ */
+export const getTodayDateStr = (tz = 'Asia/Bangkok') => {
+    try {
+        return getNowByTimezone(tz).toISOString().split('T')[0];
+    } catch (e) {
+        return new Date().toISOString().split('T')[0];
+    }
+};
+
+/**
+ * Gets the timezone offset string for SQLite (e.g., "+7 hours")
+ */
+export const getTimezoneOffset = (tz = 'Asia/Bangkok') => {
+    try {
+        const now = new Date();
+        const local = getNowByTimezone(tz);
+        const diffMs = local.getTime() - now.getTime();
+        const hours = Math.round(diffMs / (1000 * 60 * 60));
+        return hours >= 0 ? `+${hours} hours` : `${hours} hours`;
+    } catch (e) {
+        return '+7 hours';
+    }
 };

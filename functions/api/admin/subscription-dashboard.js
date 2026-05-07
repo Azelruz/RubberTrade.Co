@@ -1,4 +1,4 @@
-import { jsonResponse, errorResponse, withAuth } from '../_utils.js';
+import { jsonResponse, errorResponse, withAuth, getTimezoneOffset } from '../_utils.js';
 
 // Specific middleware for super admin
 const withSuperAdmin = (handler) => {
@@ -17,6 +17,8 @@ const withSuperAdmin = (handler) => {
 async function handleGet(context) {
     try {
         const db = context.env.DB;
+        const tz = context.user.timezone || 'Asia/Bangkok';
+        const tzOffset = getTimezoneOffset(tz);
         
         // 1. User Status Summary
         const userSummary = await db.prepare(`
@@ -33,10 +35,10 @@ async function handleGet(context) {
         const financialSummary = await db.prepare(`
             SELECT 
                 SUM(amount) as total_revenue,
-                SUM(CASE WHEN approvedAt >= date('now', 'start of month') THEN amount ELSE 0 END) as monthly_revenue
+                SUM(CASE WHEN approvedAt >= date('now', ?, 'start of month') THEN amount ELSE 0 END) as monthly_revenue
             FROM subscription_requests 
             WHERE status = 'approved'
-        `).first();
+        `).bind(tzOffset).first();
 
         // 3. Package Popularity
         const packageStats = await db.prepare(`
@@ -58,10 +60,10 @@ async function handleGet(context) {
                 SUM(amount) as revenue
             FROM subscription_requests 
             WHERE status = 'approved' 
-              AND approvedAt >= date('now', '-6 months', 'start of month')
+              AND approvedAt >= date('now', ?, '-6 months', 'start of month')
             GROUP BY month
             ORDER BY month ASC
-        `).all();
+        `).bind(tzOffset).all();
 
         // 5. Recent Activity
         const recentActivity = await db.prepare(`

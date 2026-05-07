@@ -28,7 +28,7 @@ export const onRequestGet = withAuth(handleGet);
 async function handlePost(context) {
     try {
         const body = await context.request.json();
-        const payload = body.payload;
+        const payload = body.payload || body;
         const userId = context.user.id;
         
         // Handle updateDailyPrice
@@ -42,9 +42,12 @@ async function handlePost(context) {
         // Handle generic updateSettings
         if (body.action === 'updateSettings' && payload) {
             const stmts = Object.keys(payload).map(key => {
+                const rawValue = payload[key];
+                const value = rawValue === undefined ? null : (typeof rawValue === 'object' ? JSON.stringify(rawValue) : String(rawValue));
+                
                 return context.env.DB.prepare(
                     "INSERT INTO settings (key, value, userId, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key, userId) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP"
-                ).bind(key, String(payload[key]), context.user.storeId);
+                ).bind(key, value, context.user.storeId);
             });
             if(stmts.length > 0) {
                await context.env.DB.batch(stmts);

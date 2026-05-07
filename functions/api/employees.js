@@ -3,7 +3,8 @@ import { generateNextId, getSetting } from './_id_utils.js';
 
 async function handleGet(context) {
     try {
-        const { results } = await context.env.DB.prepare("SELECT * FROM employees WHERE userId = ? ORDER BY name ASC").bind(context.user.storeId).all();
+        const storeId = context.user.storeId || context.user.id;
+        const { results } = await context.env.DB.prepare("SELECT * FROM employees WHERE userId = ? ORDER BY name ASC").bind(storeId).all();
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);
@@ -15,18 +16,18 @@ export const onRequestGet = withAuth(handleGet);
 async function handlePost(context) {
     try {
         const body = await context.request.json();
-        const userId = context.user.id;
+        const storeId = context.user.storeId || context.user.id;
 
         // Bulk Insert Support
         if (body.action === 'bulk' && Array.isArray(body.payloads)) {
-            const stationCode = await getSetting(context.env.DB, 'station_code', context.user.storeId, 'RTB');
-            const format = await getSetting(context.env.DB, 'format_employee_id', context.user.storeId, '{STATION}-E-{SEQ3}');
+            const stationCode = await getSetting(context.env.DB, 'station_code', storeId, 'RTB');
+            const format = await getSetting(context.env.DB, 'format_employee_id', storeId, '{STATION}-E-{SEQ3}');
             const stmts = [];
             for (let i = 0; i < body.payloads.length; i++) {
                 const p = body.payloads[i];
                 let id = p.id;
                 if (!id || isUUID(id)) {
-                    id = await generateNextId(context.env.DB, 'employees', format, stationCode, context.user.storeId, '', i);
+                    id = await generateNextId(context.env.DB, 'employees', format, stationCode, storeId, '', i);
                 }
                 const { name, farmerId, profitSharePct, phone, bankAccount, bankName } = p;
                 stmts.push(context.env.DB.prepare(`
@@ -39,7 +40,16 @@ async function handlePost(context) {
                         phone = excluded.phone,
                         bankAccount = excluded.bankAccount,
                         bankName = excluded.bankName
-                `).bind(id, name, farmerId, profitSharePct, phone, bankAccount, bankName, context.user.storeId));
+                `).bind(
+                    id, 
+                    name ?? null, 
+                    farmerId ?? null, 
+                    profitSharePct ?? 0, 
+                    phone ?? null, 
+                    bankAccount ?? null, 
+                    bankName ?? null, 
+                    storeId
+                ));
             }
             await context.env.DB.batch(stmts);
             return jsonResponse({ status: 'success', count: stmts.length });
@@ -48,9 +58,9 @@ async function handlePost(context) {
         const payload = body.payload;
         let id = payload.id;
         if (!id || isUUID(id)) {
-            const stationCode = await getSetting(context.env.DB, 'station_code', context.user.storeId, 'RTB');
-            const format = await getSetting(context.env.DB, 'format_employee_id', context.user.storeId, '{STATION}-E-{SEQ3}');
-            id = await generateNextId(context.env.DB, 'employees', format, stationCode, context.user.storeId, '', 0);
+            const stationCode = await getSetting(context.env.DB, 'station_code', storeId, 'RTB');
+            const format = await getSetting(context.env.DB, 'format_employee_id', storeId, '{STATION}-E-{SEQ3}');
+            id = await generateNextId(context.env.DB, 'employees', format, stationCode, storeId, '', 0);
         }
 
         const { name, farmerId, profitSharePct, phone, bankAccount, bankName } = payload;
@@ -65,7 +75,16 @@ async function handlePost(context) {
                 phone = excluded.phone,
                 bankAccount = excluded.bankAccount,
                 bankName = excluded.bankName
-        `).bind(id, name, farmerId, profitSharePct, phone, bankAccount, bankName, context.user.storeId).run();
+        `).bind(
+            id, 
+            name ?? null, 
+            farmerId ?? null, 
+            profitSharePct ?? 0, 
+            phone ?? null, 
+            bankAccount ?? null, 
+            bankName ?? null, 
+            storeId
+        ).run();
         
         return jsonResponse({ status: 'success', id });
     } catch (e) {

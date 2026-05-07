@@ -2,7 +2,8 @@ import { jsonResponse, errorResponse, withAuth } from './_utils.js';
 
 async function handleGet(context) {
     try {
-        const { results } = await context.env.DB.prepare("SELECT * FROM staff WHERE userId = ? ORDER BY name ASC").bind(context.user.storeId).all();
+        const storeId = context.user.storeId || context.user.id;
+        const { results } = await context.env.DB.prepare("SELECT * FROM staff WHERE userId = ? ORDER BY name ASC").bind(storeId).all();
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);
@@ -14,7 +15,7 @@ export const onRequestGet = withAuth(handleGet);
 async function handlePost(context) {
     try {
         const body = await context.request.json();
-        const userId = context.user.id;
+        const storeId = context.user.storeId || context.user.id;
 
         // Bulk Insert Support
         if (body.action === 'bulk' && Array.isArray(body.payloads)) {
@@ -31,7 +32,16 @@ async function handlePost(context) {
                         salary = excluded.salary,
                         bonus = excluded.bonus,
                         note = excluded.note
-                `).bind(id, name, phone, address, salary, bonus, note, context.user.storeId);
+                `).bind(
+                    id, 
+                    name ?? null, 
+                    phone ?? null, 
+                    address ?? null, 
+                    salary ?? 0, 
+                    bonus ?? 0, 
+                    note ?? null, 
+                    storeId
+                );
             });
             await context.env.DB.batch(stmts);
             return jsonResponse({ status: 'success', count: stmts.length });
@@ -51,7 +61,16 @@ async function handlePost(context) {
                 salary = excluded.salary,
                 bonus = excluded.bonus,
                 note = excluded.note
-        `).bind(id, name, phone, address, salary, bonus, note, context.user.storeId).run();
+        `).bind(
+            id, 
+            name ?? null, 
+            phone ?? null, 
+            address ?? null, 
+            salary ?? 0, 
+            bonus ?? 0, 
+            note ?? null, 
+            storeId
+        ).run();
         
         return jsonResponse({ status: 'success', id });
     } catch (e) {

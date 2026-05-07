@@ -97,11 +97,13 @@ export const ChemicalManagement = () => {
             if (res.status === 'success' && res.data && res.data.chemicalSettings) {
                 try {
                     const saved = JSON.parse(res.data.chemicalSettings);
-                    const merged = defaultChemicals.map(def => {
-                        const found = saved.find(s => s.id === def.id);
-                        return found ? { ...def, amount: found.amount, perLatex: found.perLatex } : def;
-                    });
-                    setChemicals(merged);
+                    if (Array.isArray(saved)) {
+                        const merged = defaultChemicals.map(def => {
+                            const found = saved.find(s => s.id === def.id);
+                            return found ? { ...def, amount: found.amount, perLatex: found.perLatex } : def;
+                        });
+                        setChemicals(merged);
+                    }
                 } catch (e) {
                     console.error('Failed to parse chemicalSettings:', e);
                 }
@@ -215,16 +217,7 @@ export const ChemicalManagement = () => {
         <div className="space-y-12">
             {/* Section 1: Settings */}
             <div className="space-y-8">
-                <div className="flex justify-between items-start">
-                    <div>
-                        <h2 className="text-xl font-bold text-gray-900 flex items-center">
-                            <FlaskConical className="mr-2 text-purple-600" size={24} />
-                            ตั้งค่าอัตราส่วนสารเคมี
-                        </h2>
-                        <p className="text-sm text-gray-500 mt-1">
-                            กำหนดอัตราการใส่สารเคมีอัตโนมัติอิงตามน้ำหนักยางที่รับซื้อ
-                        </p>
-                    </div>
+                <div className="flex justify-end items-center">
                     <div className="flex space-x-2">
                         <button
                             onClick={handleReset}
@@ -293,16 +286,7 @@ export const ChemicalManagement = () => {
 
             {/* Section 2: Usage History */}
             <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                    <div>
-                        <h2 className="text-xl font-bold text-gray-900 flex items-center">
-                            <Calendar className="mr-2 text-rubber-600" size={24} />
-                            ประวัติการใส่สารเคมีรายวัน
-                        </h2>
-                        <p className="text-sm text-gray-500 mt-1">
-                            ตรวจสอบและแก้ไขรายการสารเคมีที่บันทึกไปแล้ว
-                        </p>
-                    </div>
+                <div className="flex justify-end items-center">
                     <button 
                         onClick={loadUsageHistory}
                         className="p-2 text-gray-400 hover:text-rubber-600 hover:bg-rubber-50 rounded-xl transition-all"

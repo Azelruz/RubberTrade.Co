@@ -51,6 +51,7 @@ export const Buy = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 15;
 
+
     const { register, handleSubmit, watch, setValue, reset, formState: { errors, dirtyFields } } = useForm({
         defaultValues: {
             date: format(new Date(), 'yyyy-MM-dd'),
@@ -66,6 +67,17 @@ export const Buy = () => {
             rubberType: 'latex'
         }
     });
+
+    const templateConfig = React.useMemo(() => {
+        try {
+            return settings.paperSlipConfig ? JSON.parse(settings.paperSlipConfig) : null;
+        } catch (e) {
+            console.error("Error parsing paperSlipConfig:", e);
+            return null;
+        }
+    }, [settings.paperSlipConfig]);
+
+    const paperSlipConfig = templateConfig; // Now passing the FULL root config object
 
     const watchRubberType = watch('rubberType');
     const watchWeight = watch('weight');
@@ -88,7 +100,7 @@ export const Buy = () => {
         const bonusDrc = calculateDrcBonus(drc, drcBonuses);
         
         const selectedFarmer = farmers.find(f => f.id === watchFarmerId);
-        const fscBonus = selectedFarmer?.fscId ? (Number(settings.fsc_bonus) || 1) : 0;
+        const fscBonus = selectedFarmer?.fscId ? (Number(settings.fscBonus) || 1) : 0;
 
         let memberBonus = 0;
         if (selectedFarmer?.memberTypeId) {
@@ -98,8 +110,15 @@ export const Buy = () => {
 
         if (!dirtyFields.basePrice) setValue('basePrice', base.toString());
         if (!dirtyFields.bonusDrc) setValue('bonusDrc', isCupLump ? '0' : bonusDrc.toString());
-        setValue('pricePerKg', (base + (isCupLump ? 0 : bonusDrc) + fscBonus + memberBonus).toString());
-    }, [watchDrc, watchFarmerId, watchRubberType, farmers, memberTypes, dailyPriceObj.price, settings.cupLumpPrice, setValue, drcBonuses]);
+        
+        // Ensure DRC is at least 1 for cup lump to avoid API validation error
+        if (isCupLump && (!watchDrc || Number(watchDrc) < 1)) {
+            setValue('drc', '1');
+        }
+
+        const finalPrice = isCupLump ? base : (base + bonusDrc + fscBonus + memberBonus);
+        setValue('pricePerKg', finalPrice.toString());
+    }, [watchDrc, watchFarmerId, watchRubberType, farmers, memberTypes, dailyPriceObj.price, settings.cupLumpPrice, setValue, drcBonuses, dirtyFields.basePrice, dirtyFields.bonusDrc, settings.fscBonus]);
 
     // Load data
     useEffect(() => {
@@ -233,22 +252,14 @@ export const Buy = () => {
             let bp = Number(data.basePrice) || 0;
             let bDrc = Number(data.bonusDrc) || 0;
 
-            const fscBonus = selectedFarmer?.fscId ? (Number(settings.fsc_bonus) || 1) : 0;
-            let bonusMemberType = 0;
-            if (selectedFarmer?.memberTypeId) {
-                const mType = memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId);
-                if (mType) bonusMemberType = Number(mType.bonus) || 0;
-            }
-
-            const p = bp + bDrc + fscBonus + bonusMemberType;
+            const isCupLump = (data.rubberType || watchRubberType) === 'cup_lump';
+            const p = isCupLump ? bp : (bp + bDrc + (selectedFarmer?.fscId ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0));
             const farmerEmps = employees.filter(e => e.farmerId === farmerId);
             const empPct = farmerEmps.length > 0 ? Number(farmerEmps[0].profitSharePct) : 0;
 
             const netWeight = truncateOneDecimal(w - bw);
             const dryRubber = truncateOneDecimal((netWeight * d) / 100);
             const actualPrice = truncateOneDecimal(p);
-            
-            const isCupLump = (data.rubberType || watchRubberType) === 'cup_lump';
             const total = isCupLump ? Math.floor(netWeight * actualPrice) : Math.floor(dryRubber * actualPrice);
             const employeeTotal = Math.floor((total * empPct) / 100);
             const farmerTotal = Math.floor(total - employeeTotal);
@@ -294,16 +305,16 @@ export const Buy = () => {
             const payload = {
                 date: data.date, farmerId, farmerName,
                 weight: Number(data.weight) || 0, bucketWeight: Number(data.bucketWeight) || 0,
-                drc: Number(data.drc) || 0, basePrice: bp, bonusDrc: bDrc,
+                drc: isCupLump ? (Number(data.drc) || 1) : (Number(data.drc) || 0), basePrice: bp, bonusDrc: bDrc,
                 actualPrice, pricePerKg: Number(actualPrice), total: Math.floor(total),
                 dryRubber: isCupLump ? Number(netWeight) : Number(dryRubber),
                 dryWeight: isCupLump ? Number(netWeight) : Number(dryRubber),
                 empPct: Number(empPct), employeeTotal: Math.floor(employeeTotal),
-                farmerTotal: Math.floor(farmerTotal), fscBonus: Number(fscBonus),
-                bonusMemberType: Number(bonusMemberType), note: data.note,
+                farmerTotal: Math.floor(farmerTotal), fscBonus: Number(selectedFarmer?.fscId ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0),
+                bonusMemberType: Number(selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0), note: data.note,
                 rubberType: data.rubberType || 'latex', receiptUrl,
                 status: 'Completed', farmerStatus: 'Pending', employeeStatus: 'Pending',
-                timestamp: new Date().toISOString()
+                created_at: new Date().toISOString()
             };
 
             if (isDemo) {
@@ -409,17 +420,21 @@ export const Buy = () => {
         const dry = truncateOneDecimal((netWeight * d) / 100);
         
         const sf = farmers.find(f => f.id === watchFarmerId);
-        const fscBonus = sf?.fscId ? (Number(settings.fsc_bonus) || 1) : 0;
+        const isCupLump = watchRubberType === 'cup_lump' || watchRubberType === 'ขี้ยาง';
+
+        if (isCupLump) {
+            const actualPrice = truncateOneDecimal(Number(watchBasePrice || 0));
+            return Math.floor(netWeight * actualPrice);
+        }
+
+        const fscBonus = sf?.fscId ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0;
         let memberBonus = 0;
         if (sf?.memberTypeId) {
             const mType = memberTypes.find(mt => mt.id === sf.memberTypeId);
             if (mType) memberBonus = Number(mType.bonus) || 0;
         }
-        const actualPrice = truncateOneDecimal(Number(watchBasePrice || 0) + Number(watchBonusDrc || 0) + fscBonus + memberBonus);
         
-        if (watchRubberType === 'cup_lump' || watchRubberType === 'ขี้ยาง') {
-            return Math.floor(netWeight * actualPrice);
-        }
+        const actualPrice = truncateOneDecimal(Number(watchBasePrice || 0) + Number(watchBonusDrc || 0) + fscBonus + memberBonus);
         return Math.floor(dry * actualPrice);
     };
 
@@ -475,6 +490,7 @@ export const Buy = () => {
 
     const currentEmpPct = Number(employees.find(e => e.farmerId === watchFarmerId)?.profitSharePct) || 0;
 
+
     return (
         <div className="space-y-6">
             {/* Direct Print Style Injection for 57mm Thermal Printer */}
@@ -492,7 +508,12 @@ export const Buy = () => {
             <DeleteConfirmDialog confirmDeleteId={confirmDeleteId} setConfirmDeleteId={setConfirmDeleteId} confirmDelete={confirmDelete} />
 
             {/* Hidden Print Container */}
-            <BuyPaperReceipt printingReceipt={printingReceipt} printRef={printRef} setPrintingReceipt={setPrintingReceipt} settings={settings} drcBonuses={drcBonuses} farmers={farmers} memberTypes={memberTypes} />
+            <BuyPaperReceipt 
+                printingReceipt={printingReceipt} printRef={printRef} 
+                setPrintingReceipt={setPrintingReceipt} settings={settings} 
+                drcBonuses={drcBonuses} farmers={farmers} memberTypes={memberTypes}
+                paperSlipConfig={paperSlipConfig}
+            />
 
             {/* Main UI */}
             <div className="print:hidden">
@@ -515,6 +536,7 @@ export const Buy = () => {
                         submitting={submitting} calculateTotal={calculateTotal}
                         calculateDryRubber={calculateDryRubber} getEmpPct={getEmpPct}
                         setShowCalculator={setShowCalculator}
+                        templateConfig={templateConfig} 
                     />
 
                     {/* Records Table */}
@@ -535,7 +557,11 @@ export const Buy = () => {
                 </div>
 
                 {/* Premium E-Slip Modal */}
-                <BuyESlipModal viewingEslip={viewingEslip} setViewingEslip={setViewingEslip} settings={settings} farmers={farmers} memberTypes={memberTypes} />
+                <BuyESlipModal 
+                    viewingEslip={viewingEslip} setViewingEslip={setViewingEslip} 
+                    settings={settings} farmers={farmers} memberTypes={memberTypes}
+                    paperSlipConfig={paperSlipConfig}
+                />
 
                 {/* Weight Calculator Modal */}
                 <WeightCalculator
@@ -555,6 +581,7 @@ export const Buy = () => {
                 farmers={farmers} memberTypes={memberTypes}
                 currentEmpPct={currentEmpPct}
                 calculateDryRubber={calculateDryRubber} calculateTotal={calculateTotal}
+                paperSlipConfig={paperSlipConfig}
             />
         </div>
     );

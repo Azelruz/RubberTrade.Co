@@ -18,10 +18,11 @@ const RoleRoute = ({ children, allowedRoles }) => {
     }
 
     if (allowedRoles) {
+        const isSuperAdmin = userRole.toLowerCase() === 'super_admin' || isSuperAdminFallback;
         const hasRolePermission = allowedRoles.includes(userRole.toLowerCase());
         const isAllowedByFallback = isSuperAdminFallback && allowedRoles.includes('super_admin');
         
-        if (!hasRolePermission && !isAllowedByFallback) {
+        if (!hasRolePermission && !isAllowedByFallback && !isSuperAdmin) {
             return <Navigate to="/" replace />;
         }
     }

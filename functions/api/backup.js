@@ -1,4 +1,4 @@
-import { jsonResponse, errorResponse, withAuth } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth, getTodayDateStr } from './_utils.js';
 
 /**
  * GET: List backups for the current user
@@ -57,7 +57,8 @@ async function handlePost(context) {
 
         // 2. Upload to R2
         const timestamp = Date.now();
-        const dateStr = new Date().toISOString().split('T')[0];
+        const tz = context.user.timezone || 'Asia/Bangkok';
+        const dateStr = getTodayDateStr(tz);
         const filename = `backup_${dateStr}_${timestamp}.json`;
         const r2Key = `backups/${userId}/${filename}`;
         

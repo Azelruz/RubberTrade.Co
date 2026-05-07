@@ -2,19 +2,18 @@
  * Shared validation utilities for Backend APIs
  */
 
-export const isFutureDate = (dateString) => {
+import { getNowByTimezone, getTodayDateStr } from './_utils.js';
+
+export const isFutureDate = (dateString, timezone = 'Asia/Bangkok') => {
     if (!dateString) return false;
-    const inputDate = new Date(dateString);
-    const now = new Date();
     
-    // Set both to start of day for simple comparison if needed, 
-    // but here we just check if it's strictly later than 'now' (server time)
-    // Actually, users might submit for 'today'. So we compare years, months, days.
+    // Get max allowed date (Today + 3 days)
+    const now = getNowByTimezone(timezone);
+    const maxDate = new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000));
+    const maxDateStr = maxDate.toISOString().split('T')[0];
     
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // Allow all of today
-    
-    return inputDate > today;
+    // String comparison is robust for YYYY-MM-DD formats
+    return dateString > maxDateStr;
 };
 
 export const validateNumeric = (value, fieldName, min = 0, max = Infinity) => {
@@ -31,7 +30,7 @@ export const validateNumeric = (value, fieldName, min = 0, max = Infinity) => {
     return num;
 };
 
-export const validatePayload = (payload, rules) => {
+export const validatePayload = (payload, rules, timezone = 'Asia/Bangkok') => {
     const errors = [];
     
     for (const [field, rule] of Object.entries(rules)) {
@@ -51,8 +50,8 @@ export const validatePayload = (payload, rules) => {
                 }
             }
             
-            if (rule.type === 'date' && isFutureDate(value)) {
-                errors.push(`${rule.label || field} ห้ามเป็นวันที่ในอนาคต`);
+            if (rule.type === 'date' && isFutureDate(value, timezone)) {
+                errors.push(`${rule.label || field} ห้ามระบุวันที่ล่วงหน้าเกิน 3 วัน`);
             }
         }
     }

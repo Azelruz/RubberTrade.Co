@@ -147,7 +147,7 @@ const DailySummaryReport = () => {
                 const totalFarmer = filteredBuys.reduce((sum, b) => sum + Number(b.farmerTotal || 0), 0);
                 const totalEmp = filteredBuys.reduce((sum, b) => sum + Number(b.employeeTotal || 0), 0);
                 
-                const avgDrc = totalNet > 0 ? (totalDry / totalNet) * 100 : 0;
+                const avgDrc = totalNet > 0 ? truncateOneDecimal((totalDry / totalNet) * 100) : 0;
                 const avgPrice = totalDry > 0 ? (totalValue / totalDry) : 0;
 
                 data.push(['รวม/เฉลี่ย', '-', totalWeight, '-', totalNet, avgDrc.toFixed(1) + '%', totalDry, avgPrice.toFixed(1), totalValue, '-', totalFarmer, '-', totalEmp]);
@@ -384,7 +384,7 @@ const DailySummaryReport = () => {
                                     const totalFarmer = filtered.reduce((sum, b) => sum + Number(b.farmerTotal || 0), 0);
                                     const totalEmp = filtered.reduce((sum, b) => sum + Number(b.employeeTotal || 0), 0);
                                     
-                                    const avgDrc = totalNet > 0 ? (totalDry / totalNet) * 100 : 0;
+                                    const avgDrc = totalNet > 0 ? truncateOneDecimal((totalDry / totalNet) * 100) : 0;
                                     const avgPrice = totalDry > 0 ? (totalValue / totalDry) : 0;
 
                                     return (

@@ -14,13 +14,23 @@ import {
     Lock,
     Globe,
     LayoutDashboard,
-    Quote
+    Quote,
+    Maximize2,
+    X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+
+// Preview Images
+import previewBuy from '../assets/features/preview_buy.png';
+import previewExpenses from '../assets/features/preview_expenses.png';
+import previewPromotions from '../assets/features/preview_promotions.png';
+import previewPayment from '../assets/features/preview_payment.png';
+import previewSettings from '../assets/features/preview_settings.png';
 
 const Home = () => {
     const navigate = useNavigate();
     const [isScrolled, setIsScrolled] = useState(false);
+    const [activePreview, setActivePreview] = useState(null);
 
     useEffect(() => {
         const handleScroll = () => {
@@ -32,28 +42,56 @@ const Home = () => {
 
     const features = [
         {
-            title: 'จัดการพนักงาน',
-            desc: 'เพิ่มและจัดการสิทธิ์พนักงานในลานยางได้ง่ายๆ พร้อมระบบบันทึกเวลาทำงาน',
+            title: 'โมดูลการรับซื้อ (Buy)',
+            desc: 'บันทึกน้ำหนักยางสดและค่า DRC% พร้อมคำนวณราคาสุทธิและส่วนแบ่งกำไรอัตโนมัติ ออกใบเสร็จ E-Slip ได้ทันที',
             icon: <Users className="text-rubber-600" size={24} />,
             color: 'bg-blue-50'
         },
         {
-            title: 'รายงานเรียลไทม์',
-            desc: 'สรุปยอดซื้อขาย รายได้ และต้นทุนแบบรายวัน ดูผ่านมือถือได้ทุกที่ทุกเวลา',
+            title: 'โมดูลการส่งขาย (Sell)',
+            desc: 'ติดตามน้ำหนักสูญหาย (Loss Tracking) อัตโนมัติ พร้อมระบบ Stock Cards และบันทึกประวัติการขนส่งโรงงาน',
             icon: <BarChart3 className="text-rubber-600" size={24} />,
             color: 'bg-green-50'
         },
         {
-            title: 'แม่นยำและปลอดภัย',
-            desc: 'ระบบคำนวณราคาและค่าเคมีอัตโนมัติ ลดข้อผิดพลาด และสำรองข้อมูลบนคลาวด์',
-            icon: <ShieldCheck className="text-rubber-600" size={24} />,
+            title: 'แดชบอร์ดและรายงาน',
+            desc: 'วิเคราะห์สถิติ พยากรณ์กำไรรายวัน (Daily Forecast) และสรุปงบบัญชี/ภาษีที่พร้อมใช้งานทันที',
+            icon: <LayoutDashboard className="text-rubber-600" size={24} />,
             color: 'bg-amber-50'
         },
         {
-            title: 'ส่งออกข้อมูล',
-            desc: 'รองรับการส่งออกไฟล์ CSV และ JSON เพื่อนำไปส่งบัญชีหรือสรรพากรได้ทันที',
-            icon: <Download className="text-rubber-600" size={24} />,
+            title: 'ระบบหลังบ้านและ LINE',
+            desc: 'จัดการสิทธิ์ผู้ใช้ ระบบสมาชิก และเชื่อมต่อ LINE Integration เพื่อความโปร่งใสระหว่างร้านและเกษตรกร',
+            icon: <ShieldCheck className="text-rubber-600" size={24} />,
             color: 'bg-purple-50'
+        }
+    ];
+
+    const previewScreens = [
+        {
+            title: 'บันทึกรับซื้อน้ำยาง',
+            desc: 'บันทึกข้อมูลการรับซื้อที่แม่นยำ พร้อมระบบคำนวณราคาและค่าเคมีอัตโนมัติ',
+            image: previewBuy
+        },
+        {
+            title: 'จัดการค่าใช้จ่าย',
+            desc: 'บันทึกค่าใช้จ่ายรายวันและค่าจ้างพนักงานอย่างเป็นระบบ ตรวจสอบได้ทุกรายการ',
+            image: previewExpenses
+        },
+        {
+            title: 'โปรโมชั่นและของรางวัล',
+            desc: 'ระบบคะแนนสะสมสำหรับเกษตรกร เพื่อกระตุ้นยอดขายและรักษาความสัมพันธ์',
+            image: previewPromotions
+        },
+        {
+            title: 'การชำระเงิน',
+            desc: 'จัดการการโอนเงินให้เกษตรกรและลูกจ้างประจำวันอย่างรวดเร็วและปลอดภัย',
+            image: previewPayment
+        },
+        {
+            title: 'ตั้งค่าระบบและใบเสร็จ',
+            desc: 'ปรับแต่งรูปแบบใบเสร็จ (Receipt Designer) ให้เข้ากับลานยางของคุณ',
+            image: previewSettings
         }
     ];
 
@@ -98,8 +136,9 @@ const Home = () => {
                         </span>
                     </div>
 
-                    <div className="hidden md:flex items-center gap-8 text-sm font-bold text-gray-500">
+                        <div className="hidden md:flex items-center gap-8 text-sm font-bold text-gray-500">
                         <a href="#features" className="hover:text-rubber-600 transition-colors">คุณสมบัติ</a>
+                        <a href="#preview" className="hover:text-rubber-600 transition-colors">ตัวอย่างระบบ</a>
                         <a href="#packages" className="hover:text-rubber-600 transition-colors">แพ็กเกจ</a>
                         <a href="#about" className="hover:text-rubber-600 transition-colors">เกี่ยวกับเรา</a>
                     </div>
@@ -147,7 +186,10 @@ const Home = () => {
                                 เริ่มต้นใช้งานฟรี
                                 <ArrowRight size={20} />
                             </button>
-                            <button className="w-full sm:w-auto px-8 py-5 bg-white border-2 border-gray-100 text-gray-600 rounded-3xl font-black text-lg hover:bg-gray-50 transition-all flex items-center justify-center gap-3">
+                            <button 
+                                onClick={() => document.getElementById('preview')?.scrollIntoView({ behavior: 'smooth' })}
+                                className="w-full sm:w-auto px-8 py-5 bg-white border-2 border-gray-100 text-gray-600 rounded-3xl font-black text-lg hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
+                            >
                                 <Smartphone size={20} />
                                 ดูตัวอย่างระบบ
                             </button>
@@ -175,9 +217,9 @@ const Home = () => {
             {/* Features Grid */}
             <section id="features" className="py-24 bg-gray-50/50">
                 <div className="max-w-7xl mx-auto px-6">
-                    <div className="text-center space-y-4 mb-20">
-                        <h2 className="text-sm font-black text-rubber-600 uppercase tracking-[0.3em]">Powerful Features</h2>
-                        <h3 className="text-3xl md:text-5xl font-black text-gray-900 tracking-tight">ครบทุกฟังก์ชันที่ลานยางต้องการ</h3>
+                    <div className="text-center space-y-4 mb-20 px-4">
+                        <h2 className="text-sm font-black text-rubber-600 uppercase tracking-[0.3em]">Comprehensive Modules</h2>
+                        <h3 className="text-3xl md:text-5xl font-black text-gray-900 tracking-tight">จัดการลานยางครบวงจร ในหนึ่งเดียว</h3>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -187,7 +229,133 @@ const Home = () => {
                                     {f.icon}
                                 </div>
                                 <h4 className="text-xl font-extrabold text-gray-900 mb-4">{f.title}</h4>
-                                <p className="text-gray-500 font-medium leading-relaxed italic">{f.desc}</p>
+                                <p className="text-gray-500 font-medium leading-relaxed italic line-clamp-4">{f.desc}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* System Highlights Banner */}
+            <section className="py-12 bg-white">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="bg-gray-900 rounded-[40px] p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-8">
+                        {[
+                            { title: 'Offline-first', desc: 'ทำงานได้แม้ไม่มีเน็ต', icon: <Globe size={20} className="text-emerald-400" /> },
+                            { title: 'ความแม่นยำสูง', desc: 'ลดข้อผิดพลาดคำนวณมือ', icon: <Check size={20} className="text-rubber-400" /> },
+                            { title: 'ติดตั้งได้ทันที (PWA)', desc: 'ไม่ต้องผ่าน App Store', icon: <Smartphone size={20} className="text-blue-400" /> }
+                        ].map((h, i) => (
+                            <div key={i} className="flex items-center gap-4 text-white">
+                                <div className="p-3 bg-white/10 rounded-2xl">{h.icon}</div>
+                                <div>
+                                    <h5 className="font-black text-lg leading-none mb-1">{h.title}</h5>
+                                    <p className="text-gray-400 text-sm font-bold">{h.desc}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* About Us Section */}
+            <section id="about" className="py-24 overflow-hidden bg-white">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="flex flex-col lg:flex-row items-center gap-16">
+                        {/* Image/Visual Side */}
+                        <div className="w-full lg:w-1/2 relative group">
+                            <div className="absolute -inset-4 bg-gradient-to-tr from-rubber-600/20 to-emerald-600/20 rounded-[60px] blur-2xl group-hover:opacity-100 opacity-60 transition-opacity"></div>
+                            <div className="relative aspect-[4/3] rounded-[48px] overflow-hidden border-8 border-white shadow-2xl bg-gray-100">
+                                <img 
+                                    src="https://images.unsplash.com/photo-1594498653385-d5172c532c00?auto=format&fit=crop&q=80&w=1000" 
+                                    alt="Rubber Plantation" 
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-gray-900/60 to-transparent flex flex-col justify-end p-10">
+                                    <div className="flex items-center gap-4 text-white">
+                                        <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
+                                            <Quote size={20} />
+                                        </div>
+                                        <p className="text-xl font-medium italic">"เชื่อมโยงวิถีดั้งเดิม สู่ความแม่นยำระดับดิจิทัล"</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Content Side */}
+                        <div className="w-full lg:w-1/2 space-y-10">
+                            <div className="space-y-4">
+                                <h2 className="text-sm font-black text-rubber-600 uppercase tracking-[0.3em]">Our Identity</h2>
+                                <h3 className="text-4xl md:text-5xl font-black text-gray-900 leading-tight">
+                                    จุดเริ่มต้นของความโปร่งใส <br /> ในทุกหยดน้ำยาง
+                                </h3>
+                                <p className="text-lg text-gray-500 font-medium leading-relaxed">
+                                    เราเริ่มจากความเข้าใจในความยากลำบากของการบริหารลานยาง ที่ต้องแบกรับความเสี่ยงทั้งเรื่องตัวเลข และข้อจำกัดด้านพื้นที่ RubberTrade จึงถูกสร้างขึ้นภายใต้แนวคิด "Offline-first" เพื่อให้งานของคุณเดินหน้าต่อได้ไม่สะดุด
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-6">
+                                {[
+                                    { title: 'เพื่อเจ้าของลานเท', desc: 'เห็นกำไรและสต็อก Real-time สบายใจเรื่องความโปร่งใส', icon: <Users size={20} /> },
+                                    { title: 'เพื่อพนักงาน', desc: 'ทำงานแม่นยำขึ้น ลดแรงกดดันเรื่องตัวเลขแม้ไม่มีเน็ต', icon: <Smartphone size={20} /> },
+                                    { title: 'เพื่อเกษตรกร', desc: 'มั่นใจในราคาและน้ำหนัก รับ Slip ผ่าน LINE ทันที', icon: <Leaf size={20} /> }
+                                ].map((item, i) => (
+                                    <div key={i} className="flex gap-6 p-6 rounded-3xl border-2 border-gray-50 hover:border-rubber-100 hover:bg-rubber-50/30 transition-all group">
+                                        <div className="w-12 h-12 rounded-2xl bg-rubber-50 flex items-center justify-center text-rubber-600 group-hover:scale-110 transition-transform">
+                                            {item.icon}
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-gray-900">{item.title}</h4>
+                                            <p className="text-sm text-gray-500 font-medium">{item.desc}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* System Preview Section */}
+            <section id="preview" className="py-24 overflow-hidden">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
+                        <div className="space-y-4">
+                            <h2 className="text-sm font-black text-rubber-600 uppercase tracking-[0.3em]">System Preview</h2>
+                            <h3 className="text-3xl md:text-5xl font-black text-gray-900 tracking-tight">ดูการทำงานของระบบ</h3>
+                        </div>
+                        <p className="text-gray-500 font-bold max-w-md text-lg leading-relaxed">
+                            สัมผัสประสบการณ์การใช้งานที่ลื่นไหล และอินเทอร์เฟซที่ออกแบบมาเพื่อคนลานยางโดยเฉพาะ
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {previewScreens.map((screen, i) => (
+                            <div 
+                                key={i} 
+                                className={`group relative bg-white rounded-[2.5rem] border border-gray-100 overflow-hidden shadow-xl shadow-gray-200/50 hover:shadow-2xl hover:shadow-rubber-600/10 transition-all duration-500 hover:-translate-y-2 cursor-pointer ${i === 3 || i === 4 ? 'lg:col-span-1.5' : ''}`}
+                                onClick={() => setActivePreview(screen)}
+                            >
+                                {/* Image Container */}
+                                <div className="aspect-[16/10] overflow-hidden relative">
+                                    <img 
+                                        src={screen.image} 
+                                        alt={screen.title} 
+                                        className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
+                                    />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
+                                        <div className="bg-white/20 backdrop-blur-md p-4 rounded-full text-white">
+                                            <Maximize2 size={24} />
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {/* Content */}
+                                <div className="p-8 space-y-3">
+                                    <h4 className="text-xl font-black text-gray-900">{screen.title}</h4>
+                                    <p className="text-gray-500 font-medium text-sm leading-relaxed line-clamp-2">
+                                        {screen.desc}
+                                    </p>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -311,7 +479,11 @@ const Home = () => {
                             <h5 className="font-black uppercase text-xs tracking-widest text-gray-900">Support</h5>
                             <ul className="space-y-4 text-sm font-bold text-gray-400">
                                 <li className="hover:text-rubber-600 cursor-pointer">ศูนย์ช่วยเหลือ</li>
-                                <li className="hover:text-rubber-600 cursor-pointer">ติดต่อเรา</li>
+                                <li className="hover:text-rubber-600 cursor-pointer">
+                                    <a href="https://www.facebook.com/profile.php?id=61572159400802" target="_blank" rel="noopener noreferrer">
+                                        ติดต่อเรา
+                                    </a>
+                                </li>
                                 <li className="hover:text-rubber-600 cursor-pointer">คู่มืออการใช้งาน</li>
                             </ul>
                         </div>
@@ -330,13 +502,56 @@ const Home = () => {
                             © {new Date().getFullYear()} Rubber Trade .Co. All rights reserved.
                         </p>
                         <div className="flex items-center gap-6">
-                            {['Facebook', 'Line', 'Youtube'].map(s => (
+                            <a 
+                                href="https://www.facebook.com/profile.php?id=61572159400802" 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-rubber-600 cursor-pointer transition-colors"
+                            >
+                                Facebook
+                            </a>
+                            {['Line', 'Youtube'].map(s => (
                                 <span key={s} className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-rubber-600 cursor-pointer transition-colors">{s}</span>
                             ))}
                         </div>
                     </div>
                 </div>
             </footer>
+
+            {/* Preview Lightbox Modal */}
+            {activePreview && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 animate-in fade-in duration-300">
+                    <div 
+                        className="absolute inset-0 bg-gray-900/90 backdrop-blur-xl"
+                        onClick={() => setActivePreview(null)}
+                    ></div>
+                    
+                    <div className="relative w-full max-w-6xl aspect-[16/10] bg-white rounded-[2rem] md:rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+                        <button 
+                            onClick={() => setActivePreview(null)}
+                            className="absolute top-6 right-6 z-10 p-3 bg-black/10 hover:bg-black/20 text-gray-900 rounded-full backdrop-blur-md transition-colors"
+                        >
+                            <X size={24} />
+                        </button>
+                        
+                        <div className="flex flex-col h-full">
+                            <div className="flex-1 min-h-0 overflow-hidden bg-gray-50">
+                                <img 
+                                    src={activePreview.image} 
+                                    alt={activePreview.title} 
+                                    className="w-full h-full object-contain"
+                                />
+                            </div>
+                            <div className="p-8 bg-white border-t border-gray-100">
+                                <div className="max-w-3xl mx-auto text-center space-y-2">
+                                    <h2 className="text-2xl font-black text-gray-900">{activePreview.title}</h2>
+                                    <p className="text-gray-500 font-bold">{activePreview.desc}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

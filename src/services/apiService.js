@@ -72,6 +72,10 @@ export const validateRecordData = (table, data) => {
         if (!data.name) return { valid: false, message: 'กรุณาระบุชื่อ' };
     }
 
+    if (table === 'trucks') {
+        if (!data.licensePlate) return { valid: false, message: 'กรุณาระบุทะเบียนรถ' };
+    }
+
     return { valid: true };
 };
 
@@ -83,11 +87,26 @@ export const triggerDataRefresh = () => {
 };
 
 
+// Internal helper to ensure no 'undefined' values reach D1 (which crashes on undefined)
+const sanitizePayload = (data) => {
+    if (data === undefined) return null;
+    if (data === null || typeof data !== 'object') return data;
+    if (data instanceof Date) return data;
+    if (Array.isArray(data)) return data.map(item => sanitizePayload(item));
+    
+    const clean = {};
+    Object.keys(data).forEach(key => {
+        clean[key] = sanitizePayload(data[key]);
+    });
+    return clean;
+};
+
 // Internal fetch wrapper
 const fetchAPI = async (endpoint, options = {}) => {
     try {
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
+        const switchedStoreId = localStorage.getItem('rt_active_store_id');
 
         const fetchOptions = {
             method: options.method || 'GET',
@@ -100,8 +119,14 @@ const fetchAPI = async (endpoint, options = {}) => {
             fetchOptions.headers['Authorization'] = `Bearer ${token}`;
         }
 
+        // --- NEW: Super Admin Store Switching Header ---
+        if (switchedStoreId) {
+            fetchOptions.headers['X-Switch-Store-ID'] = switchedStoreId;
+        }
+
         if (options.body) {
-            fetchOptions.body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
+            const cleanBody = typeof options.body === 'string' ? options.body : sanitizePayload(options.body);
+            fetchOptions.body = typeof cleanBody === 'string' ? cleanBody : JSON.stringify(cleanBody);
         }
 
         const response = await fetch(`${API_BASE}${endpoint}`, fetchOptions);
@@ -129,10 +154,15 @@ const fetchAPI = async (endpoint, options = {}) => {
 
 // --- HYBRID READ: Online = API, Offline = IndexedDB ---
 const offlineRead = async (table, fallbackEndpoint) => {
+    const switchedStoreId = localStorage.getItem('rt_active_store_id');
+
     // ONLINE: Always fetch from API directly
     if (navigator.onLine) {
-        const cached = getCache(table);
-        if (cached) return cached;
+        // Bypass cache if switched store
+        if (!switchedStoreId) {
+            const cached = getCache(table);
+            if (cached) return cached;
+        }
 
         try {
             const res = await fetchAPI(fallbackEndpoint);
@@ -141,15 +171,17 @@ const offlineRead = async (table, fallbackEndpoint) => {
                 ? res 
                 : (res?.results ? res.results : (res?.data ? res.data : []));
             
-            // Save to IndexedDB in background for offline use
-            try {
-                await db[table].clear();
-                if (Array.isArray(data) && data.length > 0) {
-                    await db[table].bulkPut(data);
-                }
-            } catch {}
+            // Save to IndexedDB in background for offline use (ONLY IF NOT SWITCHED)
+            if (!switchedStoreId) {
+                try {
+                    await db[table].clear();
+                    if (Array.isArray(data) && data.length > 0) {
+                        await db[table].bulkPut(data);
+                    }
+                } catch {}
+                setCache(table, data);
+            }
             
-            setCache(table, data);
             return data;
         } catch {
             // Network failed despite being "online" — fall through to local
@@ -157,20 +189,26 @@ const offlineRead = async (table, fallbackEndpoint) => {
     }
 
     // OFFLINE: Read from local IndexedDB
-    try {
-        const localData = await db[table].toArray();
-        if (localData && localData.length > 0) return localData;
-    } catch {}
+    if (!switchedStoreId) {
+        try {
+            const localData = await db[table].toArray();
+            if (localData && localData.length > 0) return localData;
+        } catch {}
+    }
     
-    // Last resort: session cache
-    const cached = getCache(table);
-    if (cached) return cached;
+    // Last resort: session cache (ONLY IF NOT SWITCHED)
+    if (!switchedStoreId) {
+        const cached = getCache(table);
+        if (cached) return cached;
+    }
     
     return [];
 };
 
 // --- HYBRID WRITE: Online = API direct, Offline = queue ---
 const offlineWrite = async (table, endpoint, payload, action = 'POST') => {
+    const switchedStoreId = localStorage.getItem('rt_active_store_id');
+
     // Validate data before proceeding
     const validation = validateRecordData(table, payload);
     if (!validation.valid) {
@@ -191,13 +229,17 @@ const offlineWrite = async (table, endpoint, payload, action = 'POST') => {
             if (res.status === 'success' && res.id && res.id !== id) {
                 updatedItem.id = res.id;
                 // Delete old UUID record if it was stored
-                try { await db[table].delete(id); } catch {}
+                try { 
+                    if (!switchedStoreId) await db[table].delete(id); 
+                } catch {}
             }
             
-            // Update local IndexedDB in background
-            try {
-                if (table !== 'settings') await db[table].put(updatedItem);
-            } catch {}
+            // Update local IndexedDB in background (ONLY IF NOT SWITCHED)
+            if (!switchedStoreId) {
+                try {
+                    if (table !== 'settings') await db[table].put(updatedItem);
+                } catch {}
+            }
             
             triggerDataRefresh();
             return res;
@@ -206,7 +248,11 @@ const offlineWrite = async (table, endpoint, payload, action = 'POST') => {
         }
     }
 
-    // OFFLINE: Save locally + queue for later sync
+    // OFFLINE: Save locally + queue for later sync (BLOCK IF SWITCHED)
+    if (switchedStoreId) {
+        throw new Error('ไม่สามารถบันทึกข้อมูลแบบออฟไลน์ขณะแก้ไขข้อมูลแทนร้านค้าอื่นได้ กรุณาเชื่อมต่ออินเทอร์เน็ต');
+    }
+
     try {
         if (table !== 'settings') {
             await db[table].put(finalPayload);
@@ -316,14 +362,20 @@ export const deleteBackup = async (id) => {
 };
 
 export const getSettings = async () => {
-    try {
-        const local = await db.settings.toArray();
-        if (local && local.length > 0) {
-            const dataObj = {};
-            local.forEach(s => dataObj[s.key] = s.value);
-            return { status: 'success', data: dataObj };
-        }
-    } catch {}
+    const switchedStoreId = localStorage.getItem('rt_active_store_id');
+    
+    // Bypass local cache if we are in God Mode
+    if (!switchedStoreId) {
+        try {
+            const local = await db.settings.toArray();
+            if (local && local.length > 0) {
+                const dataObj = {};
+                local.forEach(s => dataObj[s.key] = s.value);
+                return { status: 'success', data: dataObj };
+            }
+        } catch {}
+    }
+
     try {
         const res = await fetchAPI('/settings');
         return { status: 'success', data: res };
@@ -365,7 +417,13 @@ export const updateSettingsAPI = async (payload) => {
     if (!navigator.onLine) return { status: 'offline' };
     const res = await fetchAPI('/settings', { method: 'POST', body: { action: 'updateSettings', payload } });
     triggerDataRefresh();
-    db.settings.clear(); 
+    
+    // Only clear local cache if we are NOT in God Mode
+    const switchedStoreId = localStorage.getItem('rt_active_store_id');
+    if (!switchedStoreId) {
+        db.settings.clear(); 
+    }
+    
     return res;
 };
 

@@ -13,6 +13,7 @@ const directFetch = async (endpoint, options = {}) => {
         headers: {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            'X-User-Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone,
             ...options.headers,
         },
     };

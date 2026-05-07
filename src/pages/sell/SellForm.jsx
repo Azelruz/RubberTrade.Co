@@ -13,7 +13,8 @@ const SellForm = ({
     factories, trucks, staff,
     lossSign, setLossSign, isAutoAdjust, setIsAutoAdjust,
     stockMetrics, calculateDryRubber, calculateTotal,
-    previewUrl, setPreviewUrl, setSelectedFile, handleImageUpload
+    previewUrl, setPreviewUrl, setSelectedFile, handleImageUpload,
+    templateConfig, selectedTemplateId, setSelectedTemplateId
 }) => {
     return (
         <div className="lg:col-span-1">
@@ -48,7 +49,11 @@ const SellForm = ({
                             type="date" 
                             {...register('date', { 
                                 required: 'กรุณาระบุวันที่ขาย',
-                                validate: (val) => new Date(val) <= new Date() || 'ห้ามระบุวันที่ในอนาคต'
+                                validate: (val) => {
+                                    const maxDate = new Date();
+                                    maxDate.setDate(maxDate.getDate() + 3);
+                                    return val <= maxDate.toLocaleDateString('en-CA') || 'ห้ามระบุวันที่ล่วงหน้าเกิน 3 วัน';
+                                }
                             })} 
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-orange-500 focus:border-orange-500 ${errors.date ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} 
                         />
@@ -379,6 +384,24 @@ const SellForm = ({
                             <span className="text-xl font-black text-orange-900">฿{calculateTotal().toLocaleString()}</span>
                         </div>
                     </div>
+
+                    {templateConfig?.templates?.length > 1 && (
+                        <div className="bg-orange-50/50 p-3 rounded-xl border border-orange-100 mb-4">
+                            <label className="block text-[10px] font-black text-orange-400 uppercase tracking-widest mb-2">รูปแบบเอกสาร (Template)</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {templateConfig.templates.map(temp => (
+                                    <button
+                                        key={temp.id}
+                                        type="button"
+                                        onClick={() => setSelectedTemplateId(temp.id)}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${selectedTemplateId === temp.id ? 'bg-orange-600 border-orange-600 text-white shadow-sm' : 'bg-white border-gray-200 text-gray-400 hover:border-orange-200'}`}
+                                    >
+                                        {temp.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="flex space-x-3 mt-6">
                         {editingRecord && (

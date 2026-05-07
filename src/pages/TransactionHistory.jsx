@@ -195,6 +195,18 @@ export const TransactionHistory = () => {
         }, 500);
     };
 
+    const paperSlipConfig = useMemo(() => {
+        try {
+            const rawConfig = settings.paperSlipConfig;
+            if (rawConfig) {
+                return typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig;
+            }
+        } catch (e) {
+            console.error("Error parsing paperSlipConfig in History:", e);
+        }
+        return null;
+    }, [settings.paperSlipConfig]);
+
     return (
         <div className="space-y-6 max-w-7xl mx-auto pb-10">
             <style dangerouslySetInnerHTML={{ __html: `
@@ -254,6 +266,7 @@ export const TransactionHistory = () => {
                 drcBonuses={drcBonuses}
                 calculateDrcBonus={calculateDrcBonus}
                 truncateOneDecimal={truncateOneDecimal}
+                paperSlipConfig={paperSlipConfig}
             />
 
             <HistoryESlipModal 
@@ -263,6 +276,7 @@ export const TransactionHistory = () => {
                 settings={settings}
                 farmers={farmers}
                 memberTypes={memberTypes}
+                paperSlipConfig={paperSlipConfig}
             />
         </div>
     );

@@ -27,11 +27,85 @@ import {
     ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { fetchNotificationStats } from '../services/apiService';
+import { fetchNotificationStats, adminFetchAllMembers, clearAllCache } from '../services/apiService';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import GlobalSearch from './GlobalSearch';
+
+// --- NEW: Store Switcher Component ---
+const StoreSwitcher = () => {
+    const { user, activeStoreId, setActiveStoreId } = useAuth();
+    const [stores, setStores] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+    
+    const isSuperAdmin = user?.role?.toLowerCase() === 'super_admin' || 
+                        user?.email === 'narapong.an@gmail.com' || 
+                        user?.username === 'narapong.an';
+
+    useEffect(() => {
+        if (!isSuperAdmin) return;
+        
+        const loadStores = async () => {
+            setIsLoading(true);
+            try {
+                const res = await adminFetchAllMembers();
+                if (res.status === 'success') {
+                    // Filter for users who are 'owner' (stores)
+                    const ownerStores = res.members.filter(m => m.id !== user.id);
+                    setStores(ownerStores);
+                }
+            } catch (err) {
+                console.error('Failed to load stores:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadStores();
+    }, [isSuperAdmin, user.id]);
+
+    if (!isSuperAdmin) return null;
+
+    return (
+        <div className="flex items-center space-x-2 mr-4">
+            <div className="relative group">
+                <select
+                    value={activeStoreId || ''}
+                    onChange={(e) => {
+                        const val = e.target.value || null;
+                        setActiveStoreId(val);
+                        // Trigger a global refresh to reload data for the new store
+                        clearAllCache();
+                        toast.success(val ? `สลับไปยังร้าน: ${stores.find(s => s.id === val)?.store_name || 'รหัส ' + val}` : 'กลับสู่ร้านหลัก');
+                        setTimeout(() => window.location.reload(), 500);
+                    }}
+                    className={`pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold shadow-sm focus:ring-2 focus:ring-rubber-500 transition-all appearance-none cursor-pointer
+                        ${activeStoreId ? 'text-rubber-600 border-rubber-200 bg-rubber-50/30' : 'text-gray-600 hover:border-gray-300'}`}
+                >
+                    <option value="">🏠 ร้านหลัก (Default)</option>
+                    {stores.map(store => (
+                        <option key={store.id} value={store.id}>
+                            🏪 {store.store_name || store.username || store.email}
+                        </option>
+                    ))}
+                </select>
+                <div className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${activeStoreId ? 'text-rubber-600' : 'text-gray-400'}`}>
+                    <Factory size={18} />
+                </div>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                    <ChevronDown size={14} />
+                </div>
+            </div>
+            
+            {activeStoreId && (
+                <div className="flex items-center px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-black uppercase tracking-wider animate-pulse border border-amber-200 shadow-sm">
+                    <ShieldCheck size={12} className="mr-1" />
+                    God Mode
+                </div>
+            )}
+        </div>
+    );
+};
 
 export const Layout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -129,6 +203,7 @@ export const Layout = () => {
             subItems: [
                 { name: 'รายงานสรุปยอดรายวัน', path: '/report/daily-summary' },
                 { name: 'รายงานคาดการณ์ประจำวัน', path: '/report/daily-forecast' },
+                { name: 'รายงานปรับปรุงสต็อก', path: '/report/stock-adjustments' },
                 { name: 'รายงานยอดขายประจำเดือน', path: '/report/monthly' },
                 { name: 'รายงานประวัติการซื้อ-ขาย', path: '/report/transaction-history' },
                 { name: 'บัญชีสำหรับสรรพากร', path: '/tax-report' }
@@ -171,8 +246,11 @@ export const Layout = () => {
 
     const filteredNavItems = navItems.filter(item => {
         if (!item.roles) return true;
-        const isSuperAdminFallback = user?.email === 'narapong.an@gmail.com' || user?.username === 'narapong.an';
-        if (isSuperAdminFallback && item.roles.includes('super_admin')) return true;
+        const isSuperAdmin = user?.role?.toLowerCase() === 'super_admin' || 
+                           user?.email === 'narapong.an@gmail.com' || 
+                           user?.username === 'narapong.an';
+                           
+        if (isSuperAdmin) return true;
         return item.roles.includes(user?.role?.toLowerCase());
     }).map(item => {
         if (item.subItems) {
@@ -180,8 +258,11 @@ export const Layout = () => {
                 ...item,
                 subItems: item.subItems.filter(sub => {
                     if (!sub.roles) return true;
-                    const isSuperAdminFallback = user?.email === 'narapong.an@gmail.com' || user?.username === 'narapong.an';
-                    if (isSuperAdminFallback && sub.roles.includes('super_admin')) return true;
+                    const isSuperAdmin = user?.role?.toLowerCase() === 'super_admin' || 
+                                       user?.email === 'narapong.an@gmail.com' || 
+                                       user?.username === 'narapong.an';
+                                       
+                    if (isSuperAdmin) return true;
                     return sub.roles.includes(user?.role?.toLowerCase());
                 })
             };
@@ -417,6 +498,7 @@ export const Layout = () => {
                     </div>
 
                     <div className="flex items-center ml-auto space-x-4">
+                        <StoreSwitcher />
                         <GlobalSearch />
                         <button 
                             onClick={async () => {

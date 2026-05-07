@@ -44,6 +44,7 @@ export const Sell = () => {
     const [settings, setLocalSettings] = useState({ factoryName: 'ร้านรับซื้อน้ำยางพารา', address: '', phone: '' });
     const [lossSign, setLossSign] = useState('minus'); 
     const [isAutoAdjust, setIsAutoAdjust] = useState(true);
+    const [selectedTemplateId, setSelectedTemplateId] = useState(null);
     const isDemo = false;
 
     // Form setup
@@ -125,6 +126,43 @@ export const Sell = () => {
              setIsLoading(false);
          }
      };
+
+    // Derive Template Config
+    const templateConfig = React.useMemo(() => {
+        let config = { activeTemplateId: null, defaultTemplateId: null, templates: [] };
+        try {
+            const rawConfig = settings.paperSlipConfig;
+            if (rawConfig) {
+                const parsed = typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig;
+                if (parsed.templates) {
+                    config = parsed;
+                }
+            }
+        } catch (e) {
+            console.error("Error parsing paperSlipConfig:", e);
+        }
+        return config;
+    }, [settings.paperSlipConfig]);
+
+    const activeTemplate = React.useMemo(() => {
+        const idToUse = selectedTemplateId || templateConfig.activeTemplateId || templateConfig.defaultTemplateId;
+        const template = templateConfig.templates.find(t => t.id === idToUse);
+        if (template) return template;
+        
+        // Return default layout if none found
+        return {
+            id: 'default',
+            name: 'Default',
+            showLogo: true, showStoreName: true, showAddress: true, showPhone: true,
+            showBillType: true, showBillId: true, showDateTime: true, showFarmerName: true,
+            showRawWeight: true, showBucketWeight: true, showNetWeight: true, showDrc: true,
+            showDryWeight: true, showBasePrice: true, showBonusDrc: true, showBonusFsc: true,
+            showBonusMember: true, showActualPrice: true, showSplits: true,
+            footerText: '=== ขอบคุณที่ใช้บริการ ===',
+            headerTitle: 'ใบส่งสินค้า / DELIVERY NOTE',
+            labels: {}
+        };
+    }, [selectedTemplateId, templateConfig]);
 
     const onSubmit = async (data) => {
         setSubmitting(true);
@@ -365,7 +403,11 @@ export const Sell = () => {
 
             <DeleteConfirmDialog confirmDeleteId={confirmDeleteId} setConfirmDeleteId={setConfirmDeleteId} confirmDelete={confirmDelete} />
 
-            <SellPaperReceipt printingRecord={printingRecord} printRef={printRef} settings={settings} />
+            <SellPaperReceipt 
+                printingRecord={printingRecord} printRef={printRef} 
+                settings={settings} 
+                paperSlipConfig={activeTemplate}
+            />
 
             <div className="print-hidden space-y-6">
                 <SellStockCards stockMetrics={stockMetrics} />
@@ -394,6 +436,9 @@ export const Sell = () => {
                             calculateTotal={calculateTotal} previewUrl={previewUrl}
                             setPreviewUrl={setPreviewUrl} setSelectedFile={setSelectedFile}
                             handleImageUpload={handleImageUpload}
+                            templateConfig={templateConfig}
+                            selectedTemplateId={selectedTemplateId}
+                            setSelectedTemplateId={setSelectedTemplateId}
                         />
 
                         <SellTable 

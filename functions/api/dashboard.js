@@ -1,4 +1,4 @@
-import { jsonResponse, errorResponse, withAuth, withRateLimit } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth, withRateLimit, getTodayDateStr, getNowByTimezone } from './_utils.js';
 
 async function handleGet(context) {
     try {
@@ -6,13 +6,13 @@ async function handleGet(context) {
         const storeId = context.user.storeId;
         const role = context.user.role;
         
-        // Date helpers
-        const now = new Date();
-        const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
+        // Date helpers (Dynamic based on user location)
+        const tz = context.user.timezone || 'Asia/Bangkok';
+        const today = getTodayDateStr(tz);
         const monthStart = `${today.substring(0, 7)}-01`;
         
         // We'll use 30 days window for price charts and dashboard overall
-        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const thirtyDaysAgo = new Date(getNowByTimezone(tz).getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
         const [
             farmersCount,
@@ -40,11 +40,11 @@ async function handleGet(context) {
             db.prepare(`
                 SELECT 
                     SUM(CASE WHEN date = ? THEN total ELSE 0 END) as todayTotal,
-                    SUM(CASE WHEN date = ? AND (rubberType = 'latex' OR rubberType IS NULL) THEN total ELSE 0 END) as todayLatexTotal,
+                    SUM(CASE WHEN date = ? AND (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN total ELSE 0 END) as todayLatexTotal,
                     SUM(CASE WHEN date = ? AND (rubberType = 'cup_lump' OR rubberType = 'ขี้ยาง') THEN total ELSE 0 END) as todayCupLumpTotal,
-                    SUM(CASE WHEN date = ? AND (rubberType = 'latex' OR rubberType IS NULL) THEN weight - bucketWeight ELSE 0 END) as todayLatexWeight,
+                    SUM(CASE WHEN date = ? AND (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN weight - bucketWeight ELSE 0 END) as todayLatexWeight,
                     SUM(CASE WHEN date = ? AND (rubberType = 'cup_lump' OR rubberType = 'ขี้ยาง') THEN weight - bucketWeight ELSE 0 END) as todayCupLumpWeight,
-                    SUM(CASE WHEN date = ? AND (rubberType = 'latex' OR rubberType IS NULL) THEN CASE WHEN dryRubber > 0 THEN dryRubber ELSE (weight - bucketWeight) * (drc/100) END ELSE 0 END) as todayLatexDry,
+                    SUM(CASE WHEN date = ? AND (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN CASE WHEN dryRubber > 0 THEN dryRubber ELSE (weight - bucketWeight) * (drc/100) END ELSE 0 END) as todayLatexDry,
                     SUM(CASE WHEN date >= ? THEN total ELSE 0 END) as monthTotal,
                     COUNT(CASE WHEN (farmerStatus != 'Paid' AND farmerStatus != 'จ่ายแล้ว') OR (employeeStatus != 'Paid' AND employeeStatus != 'จ่ายแล้ว') THEN 1 END) as unpaidBills
                 FROM buys WHERE userId = ?
@@ -110,7 +110,8 @@ async function handleGet(context) {
 
         const dailyPrice = {
             price: priceSetting ? (priceSetting.value || '0') : '0',
-            date: priceSetting ? (priceSetting.updated_at || '').split(' ')[0] : ''
+            date: priceSetting ? (priceSetting.updated_at || '').split(' ')[0] : '',
+            cupLumpPrice: settingsMap.cupLumpPrice || '0'
         };
 
         // Combine recent transactions for the "Recent" list
@@ -143,7 +144,7 @@ async function handleGet(context) {
                 todayCupLumpWeight: Number(buysStats?.todayCupLumpWeight || 0),
                 todayBuyWeight: Number(buysStats?.todayLatexWeight || 0) + Number(buysStats?.todayCupLumpWeight || 0),
                 todayExpense: Number(expensesStats?.todayTotal || 0) + Number(wagesStats?.todayTotal || 0),
-                todayAvgDrc: (Number(buysStats?.todayLatexWeight || 0) > 0) ? (Number(buysStats?.todayLatexDry || 0) / Number(buysStats?.todayLatexWeight)) * 100 : 0,
+                todayAvgDrc: (Number(buysStats?.todayLatexWeight || 0) > 1) ? (Number(buysStats?.todayLatexDry || 0) / Number(buysStats?.todayLatexWeight)) * 100 : 0,
                 
                 monthIncome: monthIncome,
                 monthCost: monthCost,

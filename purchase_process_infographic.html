@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RubberTrade.Co | ขั้นตอนการรับซื้อ แบบเดิม vs แบบใหม่</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Noto+Sans+Thai:wght@400;700;900&family=Outfit:wght@400;600;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #508510;
+            --primary-light: #e5f3cc;
+            --secondary: #69ab15;
+            --gray-900: #0f172a;
+            --gray-600: #475569;
+            --gray-400: #94a3b8;
+            --gray-100: #f1f5f9;
+            --danger: #ef4444;
+            --success: #22c55e;
+            --card-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+            --premium-shadow: 0 40px 60px -15px rgba(80, 133, 16, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans Thai', sans-serif;
+            background-color: #ffffff;
+            color: var(--gray-900);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        header {
+            padding: 80px 20px 40px;
+            text-align: center;
+            background: radial-gradient(circle at top right, var(--primary-light), transparent 60%);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 900;
+            font-size: 24px;
+            color: var(--gray-900);
+        }
+
+        .brand span {
+            color: var(--primary);
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--primary);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            box-shadow: 0 8px 16px rgba(80, 133, 16, 0.2);
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: clamp(32px, 5vw, 56px);
+            font-weight: 900;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+            line-height: 1.1;
+        }
+
+        .subtitle {
+            font-size: 20px;
+            color: var(--gray-600);
+            max-width: 700px;
+            margin: 0 auto;
+            font-weight: 500;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px 100px;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 40px;
+            position: relative;
+        }
+
+        @media (max-width: 900px) {
+            .comparison-grid {
+                grid-template-columns: 1fr;
+            }
+            .center-line {
+                display: none;
+            }
+            .phase-label {
+                position: static !important;
+                margin-bottom: 20px;
+                text-align: center;
+                transform: none !important;
+                left: auto !important;
+            }
+        }
+
+        .column-header {
+            padding: 24px;
+            border-radius: 32px;
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .old-header {
+            background-color: #f8fafc;
+            border: 2px solid #e2e8f0;
+            color: var(--gray-600);
+        }
+
+        .new-header {
+            background-color: var(--primary);
+            color: white;
+            box-shadow: var(--premium-shadow);
+        }
+
+        .column-header h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 28px;
+            font-weight: 900;
+        }
+
+        .center-line {
+            width: 2px;
+            background: linear-gradient(to bottom, transparent, var(--gray-100) 5%, var(--gray-100) 95%, transparent);
+            position: relative;
+        }
+
+        .comparison-row {
+            display: contents;
+        }
+
+        .card {
+            padding: 40px;
+            border-radius: 40px;
+            background: white;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border: 1px solid var(--gray-100);
+            box-shadow: var(--card-shadow);
+            margin-bottom: 30px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 30px 40px -10px rgba(0,0,0,0.08);
+        }
+
+        .old-card {
+            border-left: 8px solid #cbd5e1;
+            opacity: 0.85;
+        }
+
+        .new-card {
+            border-left: 8px solid var(--primary);
+            background: linear-gradient(135deg, #ffffff, #f7fee7);
+        }
+
+        .card-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+
+        .old-card .card-icon { background: #f1f5f9; color: #94a3b8; }
+        .new-card .card-icon { background: var(--primary-light); color: var(--primary); }
+
+        .card h3 {
+            font-size: 22px;
+            font-weight: 800;
+            margin-bottom: 12px;
+        }
+
+        .card p {
+            font-size: 16px;
+            color: var(--gray-600);
+            font-weight: 500;
+        }
+
+        .phase-label {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 10px 24px;
+            border-radius: 100px;
+            border: 2px solid var(--gray-100);
+            font-weight: 800;
+            font-size: 14px;
+            color: var(--gray-400);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            white-space: nowrap;
+            z-index: 5;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            margin-top: 50px;
+        }
+
+        .step-num {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 80px;
+            font-weight: 900;
+            color: var(--gray-100);
+            line-height: 1;
+            z-index: 0;
+            font-family: 'Outfit', sans-serif;
+            user-select: none;
+        }
+
+        .bullet-list {
+            list-style: none;
+            margin-top: 20px;
+        }
+
+        .bullet-list li {
+            position: relative;
+            padding-left: 28px;
+            margin-bottom: 12px;
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .bullet-list li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 8px;
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+        }
+
+        .old-card .bullet-list li::before { background: #e2e8f0; }
+        .new-card .bullet-list li::before { background: var(--primary); }
+
+        .summary-banner {
+            margin-top: 80px;
+            padding: 60px;
+            background: var(--gray-900);
+            border-radius: 60px;
+            color: white;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .summary-banner::after {
+            content: '';
+            position: absolute;
+            top: -100px;
+            right: -100px;
+            width: 300px;
+            height: 300px;
+            background: var(--primary);
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+        }
+
+        .summary-banner h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 40px;
+            font-weight: 900;
+            margin-bottom: 24px;
+        }
+
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .benefit-item {
+            padding: 20px;
+        }
+
+        .benefit-item h4 {
+            color: var(--primary-light);
+            font-size: 28px;
+            font-weight: 900;
+            margin-bottom: 8px;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .benefit-item p {
+            font-weight: 700;
+            opacity: 0.8;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px;
+            color: var(--gray-400);
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .animate-up {
+            animation: fadeInUp 0.8s ease-out forwards;
+            opacity: 0;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        svg {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="brand">
+        <div class="logo-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 3v19M5 8l7-5 7 5M5 19l7 5 7-5"></path></svg>
+        </div>
+        RubberTrade<span>.Co</span>
+    </div>
+    <h1 class="animate-up" style="animation-delay: 0.2s;">ยกระดับขั้นตอนการรับซื้อยาง</h1>
+    <p class="subtitle animate-up" style="animation-delay: 0.4s;">เปรียบเทียบจาก "ความล่าช้าแบบเดิม" สู่ "ประสิทธิภาพแบบดิจิทัล"</p>
+</header>
+
+<div class="container">
+    <div class="comparison-grid">
+        <!-- Headers -->
+        <div class="column-header old-header animate-up">
+            <h2>แบบเดิม (Traditional)</h2>
+        </div>
+        <div class="center-line"></div>
+        <div class="column-header new-header animate-up">
+            <h2>แบบใหม่ (RubberTrade)</h2>
+        </div>
+
+        <!-- 1. Recording -->
+        <div class="comparison-row">
+            <div class="card old-card">
+                <div class="step-num">01</div>
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                </div>
+                <h3>การบันทึกข้อมูล</h3>
+                <p>จดลงในสมุดหรือเศษกระดาษ</p>
+                <ul class="bullet-list">
+                    <li>ข้อมูลอาจสูญหายหรือเสียหาย</li>
+                    <li>กระดาษเลอะน้ำยาง ทำให้อ่านยาก</li>
+                    <li>สิ้นเปลืองกระดาษและพื้นที่จัดเก็บ</li>
+                </ul>
+            </div>
+            <div class="phase-label">การบันทึกข้อมูล</div>
+            <div class="card new-card">
+                <div class="step-num" style="color:rgba(80, 133, 16, 0.05)">01</div>
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                </div>
+                <h3>ระบบ Digital Native</h3>
+                <p>บันทึกผ่านมือถือหรือแท็บเล็ต</p>
+                <ul class="bullet-list">
+                    <li>รองรับ Offline ทำงานได้แม้ไม่มีเน็ต</li>
+                    <li>ข้อมูลเก็บใน Cloud ปลอดภัย 100%</li>
+                    <li>ค้นหาประวัติได้ทันทีภายหลัง</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 2. Calculation -->
+        <div class="comparison-row">
+            <div class="card old-card">
+                <div class="step-num">02</div>
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10H8v10h8V10z"></path></svg>
+                </div>
+                <h3>การคำนวณเงิน</h3>
+                <p>กดเครื่องคิดเลขทีละขั้นตอน</p>
+                <ul class="bullet-list">
+                    <li>เสี่ยงต่อข้อผิดพลาด (Human Error)</li>
+                    <li>ต้องหักลบน้ำหนักถังด้วยตัวเอง</li>
+                    <li>เสียเวลาคำนวณ DRC และราคาต่อกิโล</li>
+                </ul>
+            </div>
+            <div class="phase-label">การคำนวณ</div>
+            <div class="card new-card">
+                <div class="step-num" style="color:rgba(80, 133, 16, 0.05)">02</div>
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                </div>
+                <h3>คำนวณอัตโนมัติ</h3>
+                <p>แม่นยำ ทุกตัวเลขโปร่งใส</p>
+                <ul class="bullet-list">
+                    <li>หักน้ำหนักถังอัตโนมัติ (Bucket Weight)</li>
+                    <li>แปลงน้ำหนักแห้งจาก DRC% ทันที</li>
+                    <li>คำนวณราคาสุทธิ พร้อมโบนัสสมาชิก</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 3. Bonuses -->
+        <div class="comparison-row">
+            <div class="card old-card">
+                <div class="step-num">03</div>
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                </div>
+                <h3>สวัสดิการและส่วนแบ่ง</h3>
+                <p>จดแยกหรือจำความสัมพันธ์ลูกจ้าง</p>
+                <ul class="bullet-list">
+                    <li>พลาดการบวกโบนัส FSC หรือโปรโมชั่น</li>
+                    <li>คิดเงินส่วนแบ่งลูกจ้างสับสน</li>
+                    <li>ตรวจสอบความถูกต้องได้ยาก</li>
+                </ul>
+            </div>
+            <div class="phase-label">สวัสดิการ</div>
+            <div class="card new-card">
+                <div class="step-num" style="color:rgba(80, 133, 16, 0.05)">03</div>
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                </div>
+                <h3>ระบบจัดการสมาชิก</h3>
+                <p>ดูแลเกษตรกรและลูกจ้างมืออาชีพ</p>
+                <ul class="bullet-list">
+                    <li>บวกโบนัส FSC และประเภทสมาชิกอัตโนมัติ</li>
+                    <li>แบ่งเปอร์เซ็นต์กำไรลูกจ้างแม่นยำ</li>
+                    <li>มีระบบสะสมคะแนนแลกของรางวัล</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 4. Receipt -->
+        <div class="comparison-row">
+            <div class="card old-card">
+                <div class="step-num">04</div>
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                </div>
+                <h3>การออกใบกำกับ</h3>
+                <p>เขียนมือทีละใบ (ช้าและเสียเวลา)</p>
+                <ul class="bullet-list">
+                    <li>ลูกค้าต้องรอคิวนาน</li>
+                    <li>ไม่มีสำเนาเก็บไว้อย่างเป็นระเบียบ</li>
+                    <li>ดูไม่เป็นมืออาชีพสำหรับธุรกิจยุคใหม่</li>
+                </ul>
+            </div>
+            <div class="phase-label">ใบเสร็จ</div>
+            <div class="card new-card">
+                <div class="step-num" style="color:rgba(80, 133, 16, 0.05)">04</div>
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </div>
+                <h3>Instant E-Slip & PRINT</h3>
+                <p>รวดเร็ว ทันสมัย ตรวจสอบได้</p>
+                <ul class="bullet-list">
+                    <li>ส่งสลิปผ่าน LINE อัตโนมัติ</li>
+                    <li>พิมพ์ใบเสร็จผ่านเครื่อง Thermal ทันที</li>
+                    <li>ออกแบบหัวบิลเองได้ (Receipt Designer)</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 5. Oversight -->
+        <div class="comparison-row">
+            <div class="card old-card">
+                <div class="step-num">05</div>
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                </div>
+                <h3>การตรวจสอบภาพรวม</h3>
+                <p>ต้องรวมยอดเองเมื่อปิดร้าน</p>
+                <ul class="bullet-list">
+                    <li>ไม่เห็นกำไรที่แท้จริงระหว่างวัน</li>
+                    <li>เช็คสต็อกน้ำยาคงเหลือได้ยาก</li>
+                    <li>สรุปภาษีและงบยากลำบาก</li>
+                </ul>
+            </div>
+            <div class="phase-label">การตรวจสอบ</div>
+            <div class="card new-card">
+                <div class="step-num" style="color:rgba(80, 133, 16, 0.05)">05</div>
+                <div class="card-icon">
+                    <svg viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="M18.7 8l-5.1 5.2-2.8-2.7L3 18"></path></svg>
+                </div>
+                <h3>Real-time Insights</h3>
+                <p>ข้อมูลตัดสินใจ อยู่ในมือคุณ</p>
+                <ul class="bullet-list">
+                    <li>แดชบอร์ดสรุปยอดและกำไรคาดการณ์</li>
+                    <li>เห็นรายการย้อนหลังทั้งหมดทันที</li>
+                    <li>รายงานพร้อมส่งต่อเพื่อทำบัญชี</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Banner -->
+    <div class="summary-banner">
+        <h2>พร้อมจะเปลี่ยนหรือยัง?</h2>
+        <p style="font-size: 18px; color: var(--gray-400); font-weight: 500;">สถิติการใช้งานจริงจากผุ้ประกอบการกว่า 50+ ราย</p>
+        
+        <div class="benefits-grid">
+            <div class="benefit-item">
+                <h4>-60%</h4>
+                <p>เวลาการทำงาน</p>
+            </div>
+            <div class="benefit-item">
+                <h4>100%</h4>
+                <p>ความโปร่งใส</p>
+            </div>
+            <div class="benefit-item">
+                <h4>0.0%</h4>
+                <p>ข้อผิดพลาดคำนวณ</p>
+            </div>
+            <div class="benefit-item">
+                <h4>24/7</h4>
+                <p>การเข้าถึงข้อมูล</p>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        &copy; 2026 RubberTrade.Co - Next Gen Rubber Trade Management System
+    </footer>
+</div>
+
+<script>
+    // Simple intersection observer for reveal animations
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.opacity = '1';
+                entry.target.classList.add('animate-up');
+                observer.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.card, .column-header, .summary-banner').forEach(el => {
+        el.style.opacity = '0';
+        observer.observe(el);
+    });
+</script>
+
+</body>
+</html>

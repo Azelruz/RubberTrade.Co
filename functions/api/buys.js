@@ -172,7 +172,7 @@ async function handlePost(context) {
                 
                 // Server-side Validation
                 try {
-                    validatePayload(p, buySchema);
+                    validatePayload(p, buySchema, context.user.timezone);
                     if (p.bucketWeight >= p.weight) {
                         throw new Error(`น้ำหนักถัง (${p.bucketWeight}) ต้องน้อยกว่าน้ำหนักรวม (${p.weight})`);
                     }
@@ -197,8 +197,8 @@ async function handlePost(context) {
                         id, date, farmerId, farmerName, weight, drc, pricePerKg, total, 
                         dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                         farmerStatus, employeeStatus, receiptUrl, bucketWeight,
-                        basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, userId
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, userId, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         date = excluded.date,
                         farmerId = excluded.farmerId,
@@ -230,7 +230,7 @@ async function handlePost(context) {
                     farmerStatus || 'Pending', employeeStatus || 'Pending', 
                     receiptUrl || null, bucketWeight || 0,
                     basePrice || 0, bonusDrc || 0, actualPrice || 0, bonusMemberType || 0, 
-                    rubberType || 'latex', storeId
+                    rubberType || 'latex', storeId, p.created_at || p.timestamp || new Date().toISOString()
                 ));
             }
             
@@ -269,7 +269,7 @@ async function handlePost(context) {
         };
 
         try {
-            validatePayload(payload, buySchema);
+            validatePayload(payload, buySchema, context.user.timezone);
             if (payload.bucketWeight >= payload.weight) {
                 throw new Error(`น้ำหนักถัง (${payload.bucketWeight}) ต้องน้อยกว่าน้ำหนักรวม (${payload.weight})`);
             }
@@ -278,6 +278,12 @@ async function handlePost(context) {
         }
 
         let id = payload.id;
+        if (!id || isUUID(id)) {
+            const stationCode = await getSetting(context.env.DB, 'station_code', storeId, '0335');
+            const format = await getSetting(context.env.DB, 'format_buy_bill', storeId, 'B-{STATION}{YYYY}-{SEQ4}');
+            const nonce = isUUID(id) ? id.substring(0, 4).toUpperCase() : '';
+            id = await generateNextId(context.env.DB, 'buys', format, stationCode, storeId, nonce, 0);
+        }
 
         const { 
             date, farmerId, farmerName, weight, drc, pricePerKg, total, 
@@ -291,8 +297,8 @@ async function handlePost(context) {
                 id, date, farmerId, farmerName, weight, drc, pricePerKg, total, 
                 dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                 farmerStatus, employeeStatus, receiptUrl, bucketWeight,
-                basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, userId
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, userId, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 date = excluded.date,
                 farmerId = excluded.farmerId,
@@ -324,7 +330,7 @@ async function handlePost(context) {
             farmerStatus || 'Pending', employeeStatus || 'Pending', 
             receiptUrl || null, bucketWeight || 0,
             basePrice || 0, bonusDrc || 0, actualPrice || 0, bonusMemberType || 0, 
-            rubberType || 'latex', storeId
+            rubberType || 'latex', storeId, payload.created_at || payload.timestamp || new Date().toISOString()
         ).run();
         
         // --- Audit Logging ---

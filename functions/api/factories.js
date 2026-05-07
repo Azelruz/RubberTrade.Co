@@ -3,8 +3,8 @@ import { jsonResponse, errorResponse, withAuth } from './_utils.js';
 async function handleGet(context) {
     try {
         const { results } = await context.env.DB.prepare(`
-            SELECT * FROM factories WHERE userId = ? OR userId IS NULL ORDER BY name ASC
-        `).bind(context.user.storeId).all();
+            SELECT * FROM factories WHERE userId = ? ORDER BY name ASC
+        `).bind(context.user.storeId || context.user.id).all();
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);
@@ -32,7 +32,15 @@ async function handlePost(context) {
                         shortName = excluded.shortName,
                         taxId = excluded.taxId,
                         address = excluded.address
-                `).bind(id, name, code, shortName, taxId || null, address || null, context.user.storeId);
+                `).bind(
+                    id, 
+                    name || '', 
+                    code || '', 
+                    shortName || '', 
+                    taxId || null, 
+                    address || null, 
+                    context.user.storeId || context.user.id
+                );
             });
             await context.env.DB.batch(stmts);
             return jsonResponse({ status: 'success', count: stmts.length });
@@ -51,7 +59,15 @@ async function handlePost(context) {
                 shortName = excluded.shortName,
                 taxId = excluded.taxId,
                 address = excluded.address
-        `).bind(id, name, code, shortName, taxId || null, address || null, context.user.storeId).run();
+        `).bind(
+            id, 
+            name || '', 
+            code || '', 
+            shortName || '', 
+            taxId || null, 
+            address || null, 
+            context.user.storeId || context.user.id
+        ).run();
         
         return jsonResponse({ status: 'success', id });
     } catch (e) {

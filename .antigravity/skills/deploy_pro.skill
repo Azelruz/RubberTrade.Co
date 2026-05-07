@@ -1,0 +1,17 @@
+# Skill: Deploy to Production
+
+## 🎯 Goal
+ทำการ Build และ Deploy โค้ดล่าสุดขึ้นสู่ระบบ Production (หน้าเว็บหลัก) บน Cloudflare Pages
+
+## 📋 Context
+- **Command**: `npm run deploy`
+- **Keywords**: `deploy Pro`, `deploy`
+
+## 🚶 Steps
+1. เมื่อผู้ใช้สั่ง "deploy Pro" หรือ "deploy" ให้ทำการรันคำสั่ง `npm run deploy` ทันที
+2. ตรวจสอบสถานะการรันคำสั่ง หากสำเร็จให้แจ้ง URL ของหน้าเว็บหลักให้ผู้ใช้ทราบ
+3. หากระบบต้องการการยืนยัน (Confirmation) ให้ขออนุญาตผู้ใช้ก่อน
+
+## ✅ Verification
+- ตรวจสอบว่า `Success! Uploaded X files` แสดงใน Console
+- แจ้งสรุปผลการ Deploy ให้ผู้ใช้ทราบ

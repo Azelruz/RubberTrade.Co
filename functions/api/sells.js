@@ -163,7 +163,7 @@ async function handlePost(context) {
                 
                 // Server-side Validation
                 try {
-                    validatePayload(p, sellSchema);
+                    validatePayload(p, sellSchema, context.user.timezone);
                 } catch (valErr) {
                     return errorResponse(`ข้อมูลรายการที่ ${i+1} ไม่ถูกต้อง: ${valErr.message}`);
                 }
@@ -182,8 +182,8 @@ async function handlePost(context) {
                     INSERT INTO sells (
                         id, date, buyerName, factoryId, employeeId, truckId, truckInfo,
                         weight, drc, pricePerKg, lossWeight, total, 
-                        profitShareAmount, receiptUrl, note, rubberType, userId
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        profitShareAmount, receiptUrl, note, rubberType, userId, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         date = excluded.date,
                         buyerName = excluded.buyerName,
@@ -204,7 +204,8 @@ async function handlePost(context) {
                     id, date || null, buyerName || null, factoryId || null, employeeId || null, 
                     truckId || null, truckInfo || null,
                     weight || 0, drc || 0, pricePerKg || 0, lossWeight || 0, total || 0, 
-                    profitShareAmount || 0, receiptUrl || null, note || null, rubberType || 'latex', context.user.storeId
+                    profitShareAmount || 0, receiptUrl || null, note || null, rubberType || 'latex', context.user.storeId,
+                    p.created_at || p.timestamp || new Date().toISOString()
                 ));
             }
             
@@ -239,7 +240,7 @@ async function handlePost(context) {
         };
 
         try {
-            validatePayload(payload, sellSchema);
+            validatePayload(payload, sellSchema, context.user.timezone);
         } catch (valErr) {
             return errorResponse(`ข้อมูลไม่ถูกต้อง: ${valErr.message}`);
         }
@@ -262,8 +263,8 @@ async function handlePost(context) {
             INSERT INTO sells (
                 id, date, buyerName, factoryId, employeeId, truckId, truckInfo,
                 weight, drc, pricePerKg, lossWeight, total, 
-                profitShareAmount, receiptUrl, note, rubberType, userId
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                profitShareAmount, receiptUrl, note, rubberType, userId, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 date = excluded.date,
                 buyerName = excluded.buyerName,
@@ -284,7 +285,8 @@ async function handlePost(context) {
             id, date || null, buyerName || null, factoryId || null, employeeId || null, 
             truckId || null, truckInfo || null,
             weight || 0, drc || 0, pricePerKg || 0, lossWeight || 0, total || 0, 
-            profitShareAmount || 0, receiptUrl || null, note || null, rubberType || 'latex', context.user.storeId
+            profitShareAmount || 0, receiptUrl || null, note || null, rubberType || 'latex', context.user.storeId,
+            payload.created_at || payload.timestamp || new Date().toISOString()
         ).run();
         
         // Track usage

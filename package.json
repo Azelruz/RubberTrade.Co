@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "deploy": "npm run build && npx wrangler pages deploy dist",
+    "deploy:test": "npm run build && npx wrangler pages deploy dist --branch test",
     "lint": "eslint .",
     "preview": "vite preview"
   },

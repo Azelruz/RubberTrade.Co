@@ -60,8 +60,8 @@ const ActivityLog = () => {
             Object.keys(params).forEach(key => (params[key] === '' || params[key] === 'all') && delete params[key]);
             const res = await fetchActivityLogs(params);
             if (res.status === 'success') {
-                setLogs(res.results);
-                setTotal(res.total);
+                setLogs(Array.isArray(res.results) ? res.results : []);
+                setTotal(res.total || 0);
             } else {
                 toast.error('ไม่สามารถดึงข้อมูลประวัติได้: ' + res.message);
             }
@@ -171,16 +171,8 @@ const ActivityLog = () => {
 
     return (
         <div className="max-w-6xl mx-auto pb-20">
-            <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-black text-gray-900 flex items-center">
-                        <History className="mr-3 text-rubber-600" />
-                        บันทึกความเคลื่อนไหว (Activity Log)
-                    </h1>
-                    <p className="text-gray-500 text-sm mt-1 font-medium">ติดตามประวัติการเพิ่ม แก้ไข หรือลบข้อมูลสำคัญในกิจการของคุณ</p>
-                </div>
-                
-                <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col md:flex-row md:items-end justify-end gap-4 mb-6">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                     {/* UserID Search (Express) - Super Admin Only */}
                     {isSuperAdmin && (
                         <form onSubmit={handleSearchSubmit} className="relative group">
@@ -291,7 +283,7 @@ const ActivityLog = () => {
                         </button>
                     </div>
                 </div>
-            </header>
+            </div>
 
             {/* Main Content */}
             <div className="bg-white rounded-[2rem] shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden">

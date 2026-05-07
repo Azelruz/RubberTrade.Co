@@ -33,7 +33,8 @@ export const Dashboard = () => {
         unpaidBills: 0,
         totalMembers: 0,
         todayAvgDrc: 0,
-        dailyPrice: 0
+        dailyPrice: 0,
+        cupLumpPrice: 0
     });
     const [chemicalCalcs, setChemicalCalcs] = useState([]);
     const [chartData, setChartData] = useState([]);
@@ -96,6 +97,9 @@ export const Dashboard = () => {
                 const s = dashData.stats;
                 setStats({
                     ...s,
+                    todayAvgDrc: truncateOneDecimal(s.todayAvgDrc || 0),
+                    dailyPrice: Number(dashData?.dailyPrice?.price || 0),
+                    cupLumpPrice: Number(dashData?.dailyPrice?.cupLumpPrice || dashData?.settings?.cupLumpPrice || 0),
                     // Ensure monthProfit is calculated if missing or use server value
                     monthProfit: s.monthProfit !== undefined ? s.monthProfit : truncateOneDecimal((s.monthIncome || 0) - (s.monthCost || 0))
                 });
@@ -179,7 +183,7 @@ export const Dashboard = () => {
         };
 
         const todayBuys = buys.filter(b => isValidDate(b.date) && isWithinInterval(new Date(b.date), todayRange));
-        const latexBuys = todayBuys.filter(b => b.rubberType === 'latex' || !b.rubberType);
+        const latexBuys = todayBuys.filter(b => b.rubberType === 'latex' || !b.rubberType || b.rubberType === '');
         const cupLumpBuys = todayBuys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง');
 
         const todayLatexBuyTotal = latexBuys.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
@@ -227,6 +231,7 @@ export const Dashboard = () => {
         
         const profit = truncateOneDecimal(monthIncome - monthCost);
         const dailyPrice = Number(dashData?.dailyPrice?.price || dashData?.settings?.daily_price || 0);
+        const cupLumpPrice = Number(dashData?.dailyPrice?.cupLumpPrice || dashData?.settings?.cupLumpPrice || 0);
 
         setStats({
             todayBuy: truncateOneDecimal(todayLatexBuyTotal + todayCupLumpBuyTotal),
@@ -237,7 +242,7 @@ export const Dashboard = () => {
             todayLatexWeight: truncateOneDecimal(todayLatexWeight),
             todayCupLumpWeight: truncateOneDecimal(todayCupLumpWeight),
             todayExpense: truncateOneDecimal(todayExpTotal + todayWageTotal),
-            monthIncome, monthCost, monthProfit: profit, dailyPrice,
+            monthIncome, monthCost, monthProfit: profit, dailyPrice, cupLumpPrice,
             unpaidBills, totalMembers: Array.isArray(farmers) ? farmers.length : 0,
             todayAvgDrc
         });

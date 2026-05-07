@@ -52,6 +52,7 @@ const AdminReports = lazy(() => import('./pages/admin/AdminReports'));
 const SyncRequired = lazy(() => import('./pages/SyncRequired'));
 const Home = lazy(() => import('./pages/Home'));
 const BackupManagement = lazy(() => import('./pages/admin/BackupManagement'));
+const StockAdjustmentReport = lazy(() => import('./pages/StockAdjustmentReport'));
 
 // Root Index Component to handle Landing vs Dashboard
 const RootIndex = () => {
@@ -130,6 +131,11 @@ function App() {
                 <Route path="transaction-history" element={
                   <RoleRoute allowedRoles={['owner']}>
                     <TransactionHistory />
+                  </RoleRoute>
+                } />
+                <Route path="stock-adjustments" element={
+                  <RoleRoute allowedRoles={['owner']}>
+                    <StockAdjustmentReport />
                   </RoleRoute>
                 } />
               </Route>

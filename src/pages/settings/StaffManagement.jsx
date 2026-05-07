@@ -1,38 +1,117 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
 import { UserCircle, Plus, Save, Trash2, Edit2, X, RefreshCw } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { fetchStaff, addStaff, updateRecord, deleteRecord } from '../../services/apiService';
 
-export const StaffManagement = ({ 
-    staffList, 
-    loading, 
-    saving, 
-    showStaffForm, 
-    setShowStaffForm, 
-    staffForm, 
-    onSubmitStaff, 
-    handleDelete,
-    editingStaff,
-    onEditStaff,
-    onCancelEdit
-}) => {
+export const StaffManagement = () => {
+    const [staffList, setStaffList] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [showStaffForm, setShowStaffForm] = useState(false);
+    const [editingStaff, setEditingStaff] = useState(null);
+
+    const staffForm = useForm({
+        defaultValues: {
+            name: '', phone: '', address: '', salary: 0, bonus: 0, note: ''
+        }
+    });
+
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            const data = await fetchStaff();
+            setStaffList(Array.isArray(data) ? data : []);
+        } catch (error) {
+            toast.error('โหลดข้อมูลล้มเหลว');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const onSubmitStaff = async (data) => {
+        setSaving(true);
+        try {
+            let res;
+            if (editingStaff) {
+                res = await updateRecord('staff', editingStaff.id, data);
+                if (res.status === 'success') {
+                    toast.success('แก้ไขพนักงานสำเร็จ');
+                    setEditingStaff(null);
+                    staffForm.reset();
+                    setShowStaffForm(false);
+                    loadData();
+                }
+            } else {
+                res = await addStaff(data);
+                if (res.status === 'success') {
+                    toast.success('เพิ่มพนักงานสำเร็จ');
+                    staffForm.reset();
+                    setShowStaffForm(false);
+                    loadData();
+                } else {
+                    toast.error(res.message || 'บันทึกล้มเหลว');
+                }
+            }
+        } catch (err) {
+            toast.error(editingStaff ? 'แก้ไขข้อมูลล้มเหลว' : 'บันทึกล้มเหลว: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleEditStaff = (staff) => {
+        setEditingStaff(staff);
+        setShowStaffForm(true);
+        staffForm.reset({
+            name: staff.name,
+            phone: staff.phone,
+            address: staff.address,
+            salary: staff.salary,
+            bonus: staff.bonus,
+            note: staff.note
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleDeleteStaff = async (id) => {
+        if (!window.confirm('ยืนยันการลบข้อมูลพนักงาน?')) return;
+        try {
+            const res = await deleteRecord('staff', id);
+            if (res.status === 'success') {
+                toast.success('ลบข้อมูลสำเร็จ');
+                loadData();
+            }
+        } catch (err) {
+            toast.error('ลบล้มเหลว');
+        }
+    };
+
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-lg font-bold text-gray-900 flex items-center">
-                        <UserCircle className="mr-2 text-gray-400" size={20} />
-                        พนักงานประจำ
-                    </h2>
-                    <p className="text-sm text-gray-500 mt-1">จัดการข้อมูลพนักงานประจำ ค่าจ้าง และโบนัส</p>
-                </div>
-                {!showStaffForm && (
+            <div className="flex items-center justify-end">
+                <div className="flex space-x-2">
                     <button
-                        onClick={() => setShowStaffForm(true)}
-                        className="flex items-center space-x-2 px-4 py-2 bg-rubber-600 text-white rounded-lg hover:bg-rubber-700 transition-colors text-sm font-medium"
+                        onClick={loadData}
+                        className="p-2 text-gray-400 hover:text-rubber-600 transition-colors"
+                        title="รีเฟรช"
                     >
-                        <Plus size={16} />
-                        <span>เพิ่มพนักงาน</span>
+                        <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
                     </button>
-                )}
+                    {!showStaffForm && (
+                        <button
+                            onClick={() => setShowStaffForm(true)}
+                            className="flex items-center space-x-2 px-4 py-2 bg-rubber-600 text-white rounded-lg hover:bg-rubber-700 transition-colors text-sm font-medium"
+                        >
+                            <Plus size={16} />
+                            <span>เพิ่มพนักงาน</span>
+                        </button>
+                    )}
+                </div>
             </div>
 
             {showStaffForm && (
@@ -41,11 +120,9 @@ export const StaffManagement = ({
                         <h3 className={`text-sm font-bold ${editingStaff ? 'text-amber-800' : 'text-rubber-800'}`}>
                             {editingStaff ? `แก้ไขข้อมูล: ${editingStaff.name}` : 'ข้อมูลพนักงานใหม่'}
                         </h3>
-                        {editingStaff && (
-                            <button onClick={onCancelEdit} className="text-gray-400 hover:text-gray-600 transition-colors">
-                                <X size={18} />
-                            </button>
-                        )}
+                        <button onClick={() => { setEditingStaff(null); staffForm.reset(); setShowStaffForm(false); }} className="text-gray-400 hover:text-gray-600 transition-colors">
+                            <X size={18} />
+                        </button>
                     </div>
                     
                     <form onSubmit={staffForm.handleSubmit(onSubmitStaff)} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -86,7 +163,7 @@ export const StaffManagement = ({
                                 placeholder="หมายเหตุเพิ่มเติม" />
                         </div>
                         <div className="md:col-span-2 flex justify-end space-x-3 pt-2">
-                            <button type="button" onClick={editingStaff ? onCancelEdit : () => { setShowStaffForm(false); staffForm.reset(); }}
+                            <button type="button" onClick={() => { setEditingStaff(null); staffForm.reset(); setShowStaffForm(false); }}
                                 className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">ยกเลิก</button>
                             <button type="submit" disabled={saving}
                                 className={`px-6 py-2 text-sm text-white rounded-lg disabled:opacity-50 flex items-center space-x-2 shadow-sm transition-all active:scale-95 ${editingStaff ? 'bg-amber-600 hover:bg-amber-700' : 'bg-rubber-600 hover:bg-rubber-700'}`}>
@@ -127,14 +204,14 @@ export const StaffManagement = ({
                                 <td className="px-6 py-4 text-center">
                                     <div className="flex items-center justify-center space-x-1">
                                         <button
-                                            onClick={() => onEditStaff(s)}
+                                            onClick={() => handleEditStaff(s)}
                                             className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
                                             title="แก้ไข"
                                         >
                                             <Edit2 size={16} />
                                         </button>
                                         <button
-                                            onClick={() => handleDelete('staff', s.id)}
+                                            onClick={() => handleDeleteStaff(s.id)}
                                             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                                             title="ลบ"
                                         >

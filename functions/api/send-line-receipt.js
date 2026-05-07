@@ -7,7 +7,7 @@ async function handlePost(context) {
     try {
         const body = await context.request.json();
         const { farmerId, receiptUrl } = body;
-        const userId = context.user.id;
+        const storeId = context.user.storeId || context.user.id;
 
         if (!farmerId || !receiptUrl) {
             return errorResponse('Missing farmerId or receiptUrl', 400);
@@ -15,8 +15,8 @@ async function handlePost(context) {
 
         const db = context.env.DB;
 
-        // 1. Get LINE credentials from settings (Filtered by userId)
-        const { results: settings } = await db.prepare("SELECT * FROM settings WHERE userId = ? AND key IN ('lineChannelAccessToken', 'lineChannelSecret')").bind(userId).all();
+        // 1. Get LINE credentials from settings (Filtered by storeId)
+        const { results: settings } = await db.prepare("SELECT * FROM settings WHERE userId = ? AND key IN ('lineChannelAccessToken', 'lineChannelSecret')").bind(storeId).all();
         const creds = {};
         settings.forEach(s => creds[s.key] = s.value);
 
@@ -24,8 +24,8 @@ async function handlePost(context) {
             return errorResponse('LINE Channel Access Token not configured in settings', 500);
         }
 
-        // 2. Get farmer's lineId (Filtered by userId)
-        const farmer = await db.prepare("SELECT lineId, name FROM farmers WHERE id = ? AND userId = ?").bind(farmerId, userId).first();
+        // 2. Get farmer's lineId (Filtered by storeId)
+        const farmer = await db.prepare("SELECT lineId, name FROM farmers WHERE id = ? AND userId = ?").bind(farmerId, storeId).first();
         if (!farmer) {
             return errorResponse('Farmer record not found', 404);
         }

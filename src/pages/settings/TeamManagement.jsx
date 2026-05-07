@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Trash2, Mail, Shield, ShieldAlert, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { fetchTeamMembers, inviteTeamMember, removeTeamMember } from '../../services/apiService';
+import { useAuth } from '../../context/AuthContext';
 
-export const TeamManagement = ({ user }) => {
+export const TeamManagement = () => {
+    const { user } = useAuth();
     const [team, setTeam] = useState([]);
     const [loading, setLoading] = useState(true);
     const [inviting, setInviting] = useState(false);
@@ -13,7 +15,7 @@ export const TeamManagement = ({ user }) => {
         setLoading(true);
         try {
             const data = await fetchTeamMembers();
-            setTeam(data);
+            setTeam(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error(err);
         } finally {
@@ -64,22 +66,6 @@ export const TeamManagement = ({ user }) => {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center mb-6">
-                <div className="flex flex-col">
-                    <h2 className="text-xl font-bold text-gray-900 flex items-center">
-                        <Users className="mr-2 text-indigo-600" size={24} />
-                        จัดการสมาชิกในทีม (System Access)
-                    </h2>
-                    <p className="text-xs text-gray-500 mt-1">จัดการสิทธิการใช้งานระบบสำหรับพนักงานของร้าน</p>
-                </div>
-                <button
-                    onClick={loadTeam}
-                    className="inline-flex items-center px-3 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition text-sm font-bold"
-                >
-                    <RefreshCw size={18} className={`mr-1 ${loading ? 'animate-spin' : ''}`} />
-                    รีเฟรช
-                </button>
-            </div>
 
             {isOwner && (
                 <section className="bg-white border-2 border-dashed border-indigo-100 rounded-2xl p-6 mb-8">
@@ -128,7 +114,7 @@ export const TeamManagement = ({ user }) => {
                             โควตาพนักงานในแพ็กเกจของคุณ: 
                         </div>
                         <div className="text-sm font-black text-amber-900">
-                            {team.filter(m => m.role === 'staff').length} / {user?.maxStaffLimit || 1} คน
+                            {Array.isArray(team) ? team.filter(m => m.role === 'staff').length : 0} / {user?.maxStaffLimit || 1} คน
                         </div>
                     </div>
                 </section>
@@ -145,7 +131,7 @@ export const TeamManagement = ({ user }) => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {team.map((member) => (
+                        {Array.isArray(team) && team.map((member) => (
                             <tr key={member.id} className="hover:bg-gray-50/50 transition-colors">
                                 <td className="px-6 py-4">
                                     <div className="flex items-center space-x-3">
@@ -189,7 +175,7 @@ export const TeamManagement = ({ user }) => {
                         ))}
                     </tbody>
                 </table>
-                {team.length === 0 && !loading && (
+                {(!Array.isArray(team) || team.length === 0) && !loading && (
                     <div className="py-20 text-center text-gray-400">
                         <Users size={48} className="mx-auto mb-4 opacity-10" />
                         <p>ยังไม่มีข้อมูลทีม</p>

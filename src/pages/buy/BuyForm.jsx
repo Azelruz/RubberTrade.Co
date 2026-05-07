@@ -7,7 +7,8 @@ const BuyForm = ({
     watchRubberType, watchWeight, watchBucketWeight, watchBasePrice, watchBonusDrc, watchFarmerId, watchFarmerName,
     farmers, employees, memberTypes, settings, selectedFarmer,
     farmerSearch, setFarmerSearch, showFarmerDropdown, setShowFarmerDropdown, farmerDropdownRef,
-    submitting, calculateTotal, calculateDryRubber, getEmpPct, setShowCalculator
+    submitting, calculateTotal, calculateDryRubber, getEmpPct, setShowCalculator,
+    templateConfig
 }) => {
     return (
         <div className="lg:col-span-1">
@@ -24,7 +25,11 @@ const BuyForm = ({
                             type="date" 
                             {...register('date', { 
                                 required: 'กรุณาระบุวันที่',
-                                validate: (val) => new Date(val) <= new Date() || 'ห้ามระบุวันที่ในอนาคต'
+                                validate: (val) => {
+                                    const maxDate = new Date();
+                                    maxDate.setDate(maxDate.getDate() + 3);
+                                    return val <= maxDate.toLocaleDateString('en-CA') || 'ห้ามระบุวันที่ล่วงหน้าเกิน 3 วัน';
+                                }
                             })} 
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-rubber-500 focus:border-rubber-500 ${errors.date ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} 
                         />
@@ -116,7 +121,12 @@ const BuyForm = ({
                         </button>
                         <button
                             type="button"
-                            onClick={() => setValue('rubberType', 'cup_lump')}
+                            onClick={() => {
+                                setValue('rubberType', 'cup_lump');
+                                if (!watch('drc') || Number(watch('drc')) < 1) {
+                                    setValue('drc', '1');
+                                }
+                            }}
                             className={`flex items-center justify-center p-2 rounded-lg text-xs font-bold transition-all z-10 ${watchRubberType === 'cup_lump' ? 'bg-white text-amber-700 shadow-sm' : 'text-gray-500'}`}
                         >
                             <div className="w-3 h-3 rounded-full bg-amber-600 mr-1.5 shadow-inner"></div>
@@ -226,7 +236,7 @@ const BuyForm = ({
                                 <Leaf size={14} className="mr-1.5 text-amber-600" />
                                 🌿 FSC โบนัส
                             </div>
-                            <span className="text-xs font-black">+{Number(settings.fsc_bonus || 1).toLocaleString(undefined, { minimumFractionDigits: 1 })} บาท/กก.</span>
+                            <span className="text-xs font-black">+{Number(settings.fscBonus || 1).toLocaleString(undefined, { minimumFractionDigits: 1 })} บาท/กก.</span>
                         </div>
                     )}
 
@@ -244,7 +254,10 @@ const BuyForm = ({
                         <div className="flex justify-between items-center">
                             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">ราคาจริงรวมโบนัส:</span>
                             <span className="text-sm font-black text-gray-700 font-mono">
-                                ฿{(Number(watchBasePrice || 0) + Number(watchBonusDrc || 0) + (selectedFarmer?.fscId ? (Number(settings.fsc_bonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.
+                                ฿{(watchRubberType === 'cup_lump'
+                                    ? Number(watchBasePrice || 0)
+                                    : (Number(watchBasePrice || 0) + Number(watchBonusDrc || 0) + (selectedFarmer?.fscId ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0))
+                                ).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.
                             </span>
                         </div>
                     </div>
@@ -260,7 +273,12 @@ const BuyForm = ({
                             <span className="text-lg font-bold text-rubber-900 font-mono">฿{truncateOneDecimal(calculateTotal()).toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
                         </div>
                         <div className="flex justify-between items-center text-[10px] text-rubber-600/70 italic">
-                            <span>(คำนวณจากเนื้อยางแห้ง: {truncateOneDecimal(calculateDryRubber()).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.)</span>
+                            <span>
+                                {watchRubberType === 'cup_lump' 
+                                    ? `(คำนวณจากน้ำหนักสุทธิ: ${truncateOneDecimal(calculateDryRubber()).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.)`
+                                    : `(คำนวณจากเนื้อยางแห้ง: ${truncateOneDecimal(calculateDryRubber()).toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.)`
+                                }
+                            </span>
                         </div>
                         {getEmpPct() > 0 && (
                             <div className="flex justify-between items-center pt-2 border-t border-rubber-200">
@@ -290,7 +308,6 @@ const BuyForm = ({
                             )}
                         </div>
                     </div>
-
                     <button
                         type="submit"
                         disabled={submitting}

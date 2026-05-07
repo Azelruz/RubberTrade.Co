@@ -355,7 +355,11 @@ export const Expenses = () => {
                                             <input type="date" 
                                                 {...expenseForm.register('date', { 
                                                     required: 'กรุณาระบุวันที่',
-                                                    validate: (val) => new Date(val) <= new Date() || 'ห้ามระบุวันที่ในอนาคต'
+                                                    validate: (val) => {
+                                                        const maxDate = new Date();
+                                                        maxDate.setDate(maxDate.getDate() + 3);
+                                                        return val <= maxDate.toLocaleDateString('en-CA') || 'ห้ามระบุวันที่ล่วงหน้าเกิน 3 วัน';
+                                                    }
                                                 })}
                                                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rubber-500 ${expenseForm.formState.errors.date ? 'border-red-500 bg-red-50' : 'border-gray-200'}`} />
                                             {expenseForm.formState.errors.date && <p className="text-red-500 text-[10px] mt-1 font-medium">{expenseForm.formState.errors.date.message}</p>}
@@ -509,7 +513,11 @@ export const Expenses = () => {
                                             <input type="date" 
                                                 {...wageForm.register('date', { 
                                                     required: 'กรุณาระบุวันที่',
-                                                    validate: (val) => new Date(val) <= new Date() || 'ห้ามระบุวันที่ในอนาคต'
+                                                    validate: (val) => {
+                                                        const maxDate = new Date();
+                                                        maxDate.setDate(maxDate.getDate() + 3);
+                                                        return val <= maxDate.toLocaleDateString('en-CA') || 'ห้ามระบุวันที่ล่วงหน้าเกิน 3 วัน';
+                                                    }
                                                 })}
                                                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${wageForm.formState.errors.date ? 'border-red-500 bg-red-50' : 'border-gray-200'}`} />
                                             {wageForm.formState.errors.date && <p className="text-red-500 text-[10px] mt-1 font-medium">{wageForm.formState.errors.date.message}</p>}

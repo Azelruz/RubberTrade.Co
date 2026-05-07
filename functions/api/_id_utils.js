@@ -1,9 +1,11 @@
-export async function generateNextId(db, table, format, stationCode, userId, nonce = '', offset = 0) {
-    // 1. Get current date parts
-    const now = new Date();
-    const YYYY = now.getFullYear().toString();
-    const MM = (now.getMonth() + 1).toString().padStart(2, '0');
-    const DD = now.getDate().toString().padStart(2, '0');
+import { getNowByTimezone } from './_utils.js';
+
+export async function generateNextId(db, table, format, stationCode, userId, nonce = '', offset = 0, timezone = 'Asia/Bangkok') {
+    // 1. Get current date parts adjusted to user timezone
+    const thaiNow = getNowByTimezone(timezone);
+    const YYYY = thaiNow.getFullYear().toString();
+    const MM = (thaiNow.getMonth() + 1).toString().padStart(2, '0');
+    const DD = thaiNow.getDate().toString().padStart(2, '0');
 
     // 2. Prepare prefix for search (everything before the {SEQ})
     let searchPattern = (format || '')
@@ -20,18 +22,44 @@ export async function generateNextId(db, table, format, stationCode, userId, non
     const prefix = searchPattern.substring(0, seqMatch.index);
     const suffix = searchPattern.substring(seqMatch.index + seqMatch[0].length);
 
-    // 3. Query DB for max ID with this prefix and THIS user
-    const sql = `SELECT id FROM ${table} WHERE id LIKE ? AND userId = ? ORDER BY id DESC LIMIT 1`;
-    const { results } = await db.prepare(sql).bind(prefix + '%', userId).all();
+    // 3. SINGLE-QUERY ATOMIC UPSERT
+    // This query handles both initialization (if counter missing) and incrementing in one atomic step.
+    // It uses a subquery to find the MAX existing sequence only if the row doesn't exist yet.
+    let nextSeq = 1;
 
-    let nextSeq = 1 + offset;
-    if (results && results.length > 0) {
-        const lastId = results[0].id;
-        // Attempt to extract the sequence part (account for B-XXXXYYYY-#### format)
-        const possibleSeqPart = lastId.substring(prefix.length, prefix.length + seqLen);
-        const lastSeq = parseInt(possibleSeqPart, 10);
-        if (!isNaN(lastSeq)) {
-            nextSeq = lastSeq + 1 + offset;
+    try {
+        const sql = `
+            INSERT INTO counters (table_name, id_prefix, userId, last_seq) 
+            VALUES (
+                ?, ?, ?, 
+                (SELECT COALESCE(MAX(CAST(substr(id, ?, ?) AS INTEGER)), 0) FROM ${table} WHERE id LIKE ? AND userId = ?) + 1
+            )
+            ON CONFLICT(table_name, id_prefix, userId) 
+            DO UPDATE SET last_seq = last_seq + 1, updated_at = CURRENT_TIMESTAMP
+            RETURNING last_seq
+        `;
+
+        const result = await db.prepare(sql).bind(
+            table, prefix, userId, 
+            prefix.length + 1, seqLen, prefix + '%', userId
+        ).first();
+
+        if (result && result.last_seq) {
+            nextSeq = result.last_seq;
+        }
+    } catch (err) {
+        console.error("[ID_UTILS] Atomic counter failed:", err.message);
+        // Fallback to legacy logic if counters table is missing or query fails
+        const legacySql = `SELECT id FROM ${table} WHERE id LIKE ? AND userId = ? ORDER BY id DESC LIMIT 1`;
+        const { results } = await db.prepare(legacySql).bind(prefix + '%', userId).all();
+        
+        if (results && results.length > 0) {
+            const lastId = results[0].id;
+            const possibleSeqPart = lastId.substring(prefix.length, prefix.length + seqLen);
+            const parsedSeq = parseInt(possibleSeqPart, 10);
+            if (!isNaN(parsedSeq)) nextSeq = parsedSeq + 1 + offset;
+        } else {
+            nextSeq = 1 + offset;
         }
     }
 
@@ -39,9 +67,8 @@ export async function generateNextId(db, table, format, stationCode, userId, non
     const nextSeqStr = nextSeq.toString().padStart(seqLen, '0');
     let finalId = prefix + nextSeqStr + suffix;
     
-    // 5. Append short nonce if provided to prevent strictly timed collisions
+    // 5. Append short nonce if provided
     if (nonce) {
-        // Use only first 2 chars of nonce for brevity if it's a long string
         const shortNonce = nonce.length > 2 ? nonce.substring(0, 2) : nonce;
         finalId += '-' + shortNonce;
     }

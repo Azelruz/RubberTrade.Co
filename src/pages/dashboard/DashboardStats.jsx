@@ -68,6 +68,9 @@ const DashboardStats = ({ stats }) => {
                         value={formatVal(stats.todayAvgDrc, '', '%')}
                         icon={<Activity className="text-cyan-500" size={24} />}
                         bgColor="bg-cyan-50"
+                        details={[
+                            { label: 'เฉพาะน้ำยางสด', value: '' }
+                        ]}
                     />
                     <StatCard
                         title="ยอดขายวันนี้"
@@ -77,9 +80,13 @@ const DashboardStats = ({ stats }) => {
                     />
                     <StatCard
                         title="ราคายางวันนี้"
-                        value={formatVal(stats.dailyPrice || 0, '฿')}
+                        value={formatVal(stats.dailyPrice || stats.cupLumpPrice || 0, '฿')}
                         icon={<DollarSign className="text-emerald-500" size={24} />}
                         bgColor="bg-emerald-50"
+                        details={[
+                            { label: 'น้ำยางสด', value: formatVal(stats.dailyPrice, '฿') },
+                            { label: 'ขี้ยาง', value: formatVal(stats.cupLumpPrice, '฿') }
+                        ]}
                     />
                     <StatCard
                         title="ค่าใช้จ่ายวันนี้"
