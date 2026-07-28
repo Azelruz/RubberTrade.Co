@@ -248,15 +248,6 @@ export const Layout = () => {
             ]
         },
         { 
-            name: 'ระบบสมาชิก', 
-            path: '/subscription', 
-            icon: <CreditCard size={20} />, 
-            roles: ['owner', 'admin', 'staff'],
-            subItems: [
-                { name: 'สถานะและการสมัคร', path: '/subscription' }
-            ]
-        },
-        { 
             name: 'Super Admin', 
             path: '/admin', 
             icon: <ShieldCheck size={20} className="text-amber-500" />, 
@@ -276,6 +267,7 @@ export const Layout = () => {
             roles: ['owner', 'staff'],
             subItems: [
                 { name: 'ข้อมูลร้านค้า', path: '/settings' },
+                { name: 'สถานะและการสมัครสมาชิก', path: '/subscription' },
                 { name: 'จัดการข้อมูล (Import/Export)', path: '/import' },
                 { name: 'บันทึกกิจกรรม', path: '/activity-log' },
                 { name: 'คิวซิงค์ออฟไลน์', path: '/offline-sync' }
@@ -543,13 +535,13 @@ export const Layout = () => {
                     <div className="flex items-center space-x-2">
                         <span className="text-lg font-bold text-rubber-600 lg:hidden">RubberTrade</span>
                         <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-rubber-50 text-rubber-700 rounded-full border border-rubber-200 lg:hidden">
-                            v1.3.9
+                            v1.4.0
                         </span>
                     </div>
 
                     <div className="flex items-center ml-auto space-x-3">
                         <span className="px-2.5 py-1 text-xs font-mono font-bold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200 shadow-xs hidden md:inline-flex items-center">
-                            v1.3.9
+                            v1.4.0
                         </span>
                         <StoreSwitcher />
                         <GlobalSearch />
