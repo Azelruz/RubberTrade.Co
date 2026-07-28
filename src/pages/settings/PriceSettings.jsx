@@ -20,7 +20,7 @@ export const PriceSettings = () => {
     const [dailyPriceObj, setDailyPriceObj] = useState({ price: 0, cup_lump_price: 0, date: '' });
     const [drcBonuses, setDrcBonuses] = useState([]);
     const [fscBonus, setFscBonus] = useState(0);
-    const [notifyPriceLine, setNotifyPriceLine] = useState(true);
+    const [notifyPriceLine, setNotifyPriceLine] = useState(false);
     const [shopInfo, setShopInfo] = useState({ factoryName: '', phone: '' });
 
     // Broadcast logic states

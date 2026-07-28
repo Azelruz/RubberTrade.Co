@@ -9,6 +9,7 @@ import {
 } from '../services/apiService';
 import { truncateOneDecimal, truncateTwoDecimals } from '../utils/calculations';
 import { useAuth } from '../context/AuthContext';
+import { printRecord } from '../utils/PrintService';
 
 // Sub-components
 import SellStockCards from './sell/SellStockCards';
@@ -154,7 +155,7 @@ export const Sell = () => {
             id: 'default',
             name: 'Default',
             showLogo: true, showStoreName: true, showAddress: true, showPhone: true,
-            showBillType: true, showBillId: true, showDateTime: true, showFarmerName: true,
+            showBillType: true, showBillId: true, showDateTime: true, showSelectedDate: true, showRecordingTime: true, showFarmerName: true,
             showRawWeight: true, showBucketWeight: true, showNetWeight: true, showDrc: true,
             showDryWeight: true, showBasePrice: true, showBonusDrc: true, showBonusFsc: true,
             showBonusMember: true, showActualPrice: true, showSplits: true,
@@ -304,10 +305,12 @@ export const Sell = () => {
         const toastId = toast.loading('กำลังเตรียมใบส่งสินค้า...');
         setPrintingRecord(record);
         setTimeout(() => {
-            toast.dismiss(toastId);
-            window.print();
-            setPrintingRecord(null);
-        }, 1000);
+            if (printRef.current) {
+                printRecord(printRef.current.innerHTML);
+                toast.dismiss(toastId);
+                setPrintingRecord(null);
+            }
+        }, 600);
     };
 
     const handleImageUpload = (e) => {
@@ -407,6 +410,7 @@ export const Sell = () => {
                 printingRecord={printingRecord} printRef={printRef} 
                 settings={settings} 
                 paperSlipConfig={activeTemplate}
+                staff={staff}
             />
 
             <div className="print-hidden space-y-6">

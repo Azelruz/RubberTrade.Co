@@ -1,10 +1,39 @@
-import React from 'react';
-import { Wallet, Gift } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Wallet, Gift, CheckSquare, Square, UserX } from 'lucide-react';
 
 const WageConfirmModal = ({ 
     wageConfirmData, setWageConfirmData, confirmAndRecordWages, stats 
 }) => {
+    const [selectedIds, setSelectedIds] = useState(new Set());
+
+    // Initialize all employees as selected when modal opens
+    useEffect(() => {
+        if (wageConfirmData.show && wageConfirmData.unpaidStaff.length > 0) {
+            setSelectedIds(new Set(wageConfirmData.unpaidStaff.map(s => s.id)));
+        }
+    }, [wageConfirmData.show, wageConfirmData.unpaidStaff]);
+
     if (!wageConfirmData.show) return null;
+
+    const toggleEmployee = (id) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleAll = () => {
+        if (selectedIds.size === wageConfirmData.unpaidStaff.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(wageConfirmData.unpaidStaff.map(s => s.id)));
+        }
+    };
+
+    const selectedStaff = wageConfirmData.unpaidStaff.filter(s => selectedIds.has(s.id));
+    const onLeaveCount = wageConfirmData.unpaidStaff.length - selectedIds.size;
     
     return (
         <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
@@ -15,23 +44,88 @@ const WageConfirmModal = ({
                     </div>
                     <h3 className="text-lg font-bold text-gray-900">ยืนยันบันทึกค่าจ้าง</h3>
                 </div>
-                <p className="text-sm text-gray-600 mb-3">
+                <p className="text-sm text-gray-600 mb-1">
                     พนักงานที่ยังไม่ได้บันทึกวันนี้ <strong>{wageConfirmData.unpaidStaff.length} คน</strong>:
                 </p>
-                <ul className="text-sm text-gray-700 mb-3 space-y-1 max-h-32 overflow-y-auto bg-gray-50 rounded-lg p-3">
-                    {wageConfirmData.unpaidStaff.map(s => (
-                        <li key={s.id} className="flex justify-between">
-                            <span className="font-medium">{s.name}</span>
-                            <span className="text-gray-500">ค่าจ้าง ฿{(Number(s.salary)||0).toLocaleString()} + โบนัส ฿{wageConfirmData.bonus}</span>
-                        </li>
-                    ))}
+                <p className="text-xs text-gray-400 mb-3">
+                    เลือกพนักงานที่มาทำงาน (เอาเครื่องหมายถูกออก = ลางาน)
+                </p>
+
+                {/* Select All / Deselect All */}
+                <div className="flex items-center justify-between mb-2 px-1">
+                    <button
+                        onClick={toggleAll}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-bold flex items-center space-x-1"
+                    >
+                        {selectedIds.size === wageConfirmData.unpaidStaff.length ? (
+                            <><Square size={14} /><span>ยกเลิกเลือกทั้งหมด</span></>
+                        ) : (
+                            <><CheckSquare size={14} /><span>เลือกทั้งหมด</span></>
+                        )}
+                    </button>
+                    {onLeaveCount > 0 && (
+                        <span className="text-xs text-orange-500 font-bold flex items-center">
+                            <UserX size={13} className="mr-1" />
+                            ลางาน {onLeaveCount} คน
+                        </span>
+                    )}
+                </div>
+
+                {/* Employee list with checkboxes */}
+                <ul className="text-sm text-gray-700 mb-3 space-y-0.5 max-h-40 overflow-y-auto bg-gray-50 rounded-lg p-2">
+                    {wageConfirmData.unpaidStaff.map(s => {
+                        const isSelected = selectedIds.has(s.id);
+                        return (
+                            <li 
+                                key={s.id} 
+                                onClick={() => toggleEmployee(s.id)}
+                                className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all select-none
+                                    ${isSelected 
+                                        ? 'bg-white border border-gray-100 hover:border-blue-200' 
+                                        : 'bg-orange-50/50 border border-orange-100/50 opacity-60'}`}
+                            >
+                                <div className="flex items-center space-x-2.5">
+                                    <div className={`flex-shrink-0 transition-colors ${isSelected ? 'text-blue-600' : 'text-gray-300'}`}>
+                                        {isSelected ? <CheckSquare size={18} /> : <Square size={18} />}
+                                    </div>
+                                    <span className={`font-medium ${!isSelected ? 'line-through text-gray-400' : ''}`}>
+                                        {s.name}
+                                    </span>
+                                    {!isSelected && (
+                                        <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full font-bold">
+                                            ลางาน
+                                        </span>
+                                    )}
+                                </div>
+                                <span className={`text-xs ${isSelected ? 'text-gray-500' : 'text-gray-300 line-through'}`}>
+                                    ฿{(Number(s.salary)||0).toLocaleString()} + โบนัส ฿{wageConfirmData.bonus}
+                                </span>
+                            </li>
+                        );
+                    })}
                 </ul>
-                <p className="text-xs text-gray-400 mb-4">โบนัสคำนวณจากน้ำยาง {stats.todayBuyWeight.toLocaleString()} กก. = ฿{wageConfirmData.bonus}/คน</p>
+
+                <p className="text-xs text-gray-400 mb-4">
+                    โบนัสคำนวณจากน้ำยาง {stats.todayBuyWeight.toLocaleString()} กก. = ฿{wageConfirmData.bonus}/คน
+                    {selectedIds.size < wageConfirmData.unpaidStaff.length && (
+                        <span className="block mt-1 text-blue-600 font-bold">
+                            จะบันทึกค่าจ้างให้ {selectedIds.size} จาก {wageConfirmData.unpaidStaff.length} คน
+                        </span>
+                    )}
+                </p>
                 <div className="flex space-x-3">
                     <button onClick={() => setWageConfirmData({ show: false, unpaidStaff: [], bonus: 0 })}
                         className="flex-1 px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium">ยกเลิก</button>
-                    <button onClick={confirmAndRecordWages}
-                        className="flex-1 px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-bold">ยืนยัน บันทึกค่าจ้าง</button>
+                    <button 
+                        onClick={() => confirmAndRecordWages(selectedStaff)}
+                        disabled={selectedIds.size === 0}
+                        className={`flex-1 px-4 py-2 text-sm text-white rounded-lg font-bold transition-all
+                            ${selectedIds.size === 0 
+                                ? 'bg-gray-300 cursor-not-allowed' 
+                                : 'bg-blue-600 hover:bg-blue-700'}`}
+                    >
+                        ยืนยัน บันทึก ({selectedIds.size} คน)
+                    </button>
                 </div>
             </div>
         </div>

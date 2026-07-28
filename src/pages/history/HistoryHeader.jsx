@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, FileText, Filter, ChevronDown, ChevronUp, RotateCcw, X } from 'lucide-react';
+import { Search, FileText, Filter, ChevronDown, ChevronUp, RotateCcw, X, Printer } from 'lucide-react';
 
 const HistoryHeader = ({ 
     activeTab, 
@@ -8,7 +8,8 @@ const HistoryHeader = ({
     handleFilterChange, 
     farmers = [], 
     factories = [], 
-    setFilters 
+    setFilters,
+    onPrintReport
 }) => {
     const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -91,6 +92,15 @@ const HistoryHeader = ({
                             </span>
                         )}
                         {showAdvanced ? <ChevronUp size={16} className="ml-2" /> : <ChevronDown size={16} className="ml-2" />}
+                    </button>
+
+                    <button
+                        onClick={onPrintReport}
+                        className="flex items-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md active:scale-95 border border-emerald-700"
+                        title="พิมพ์รายงานสรุปผลค้นหา"
+                    >
+                        <Printer size={18} className="mr-2" />
+                        <span>พิมพ์รายงาน</span>
                     </button>
 
                     <div className="flex bg-white p-1 rounded-xl border border-gray-200 shadow-sm">

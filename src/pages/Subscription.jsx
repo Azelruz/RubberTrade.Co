@@ -112,7 +112,7 @@ const Subscription = () => {
                     ยกระดับธุรกิจของคุณด้วย <span className="text-transparent bg-clip-text bg-gradient-to-r from-rubber-600 to-teal-500">Subscription</span>
                 </h1>
                 <p className="text-gray-500 font-medium max-w-2xl mx-auto text-lg leading-relaxed">
-                    จัดการอายุการใช้งาน เพิ่มสิทธิ์พนักงาน และปลดล็อกฟีเจอร์รายงานเชิงลึกเพื่อการเติบโตที่ยั่งยืน
+                    จัดการอายุการใช้งาน สลับสาขาเพื่อดูข้อมูลทีม และปลดล็อกฟีเจอร์รายงานเชิงลึกเพื่อการเติบโตที่ยั่งยืน
                 </p>
             </div>
 
@@ -157,10 +157,6 @@ const Subscription = () => {
                                     <div className="text-2xl font-black text-gray-900 flex items-center justify-center md:justify-start">
                                         {user?.role === 'super_admin' ? 'Super User' : (subData?.subscription?.subscription_status === 'trial' ? 'FREE TRIAL' : 'PREMIUM')}
                                         <Sparkles className="ml-2 text-amber-400" size={20} />
-                                    </div>
-                                    <div className="flex items-center justify-center md:justify-start text-sm font-bold text-rubber-600 bg-rubber-50 w-fit px-3 py-1 rounded-full mx-auto md:mx-0">
-                                        <User size={14} className="mr-1.5" />
-                                        Max Staff: {subData?.subscription?.maxStaffLimit || 1}
                                     </div>
                                 </div>
                                 <div className="space-y-1">
@@ -221,12 +217,6 @@ const Subscription = () => {
                                 </div>
 
                                 <div className="space-y-4 pt-4">
-                                    <div className="flex items-center text-sm font-bold text-gray-600">
-                                        <div className="w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center mr-3 flex-shrink-0">
-                                            <Check size={12} strokeWidth={4} />
-                                        </div>
-                                        เพิ่มพนักงานสูงสุด {pkg.maxStaff || 1} คน
-                                    </div>
                                     <div className="flex items-center text-sm font-bold text-gray-600">
                                         <div className="w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center mr-3 flex-shrink-0">
                                             <Check size={12} strokeWidth={4} />

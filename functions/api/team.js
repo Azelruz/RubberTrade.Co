@@ -6,10 +6,11 @@ async function handleGet(context) {
         const storeId = context.user.storeId;
         // Get owner and all staff
         const { results } = await context.db.prepare(`
-            SELECT id, email, username, role, created_at 
-            FROM users 
-            WHERE id = ? OR parentId = ?
-            ORDER BY CASE WHEN role = 'owner' THEN 0 WHEN role = 'admin' THEN 1 ELSE 2 END ASC, created_at ASC
+            SELECT u.id, u.email, u.username, u.role, u.created_at, COALESCE(s.value, u.store_name) AS store_name
+            FROM users u
+            LEFT JOIN settings s ON s.userId = u.id AND s.key = 'factoryName'
+            WHERE u.id = ? OR u.parentId = ?
+            ORDER BY CASE WHEN u.role = 'owner' THEN 0 WHEN u.role = 'admin' THEN 1 ELSE 2 END ASC, u.created_at ASC
         `).bind(storeId, storeId).all();
         
         return jsonResponse(results);

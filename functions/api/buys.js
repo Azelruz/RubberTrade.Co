@@ -1,6 +1,7 @@
 import { jsonResponse, errorResponse, withAuth, isUUID, trackUsage, recordAuditLog } from './_utils.js';
 import { generateNextId, getSetting } from './_id_utils.js';
 import { validatePayload } from './_validation.js';
+import { refundLoanDeductions } from './_loan_helpers.js';
 
 async function handleGet(context) {
     try {
@@ -189,7 +190,7 @@ async function handlePost(context) {
                     date, farmerId, farmerName, weight, drc, pricePerKg, total,
                     dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                     farmerStatus, employeeStatus, receiptUrl, bucketWeight,
-                    basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType
+                    basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, createdBy
                 } = p;
 
                 stmts.push(context.env.DB.prepare(`
@@ -197,8 +198,8 @@ async function handlePost(context) {
                         id, date, farmerId, farmerName, weight, drc, pricePerKg, total, 
                         dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                         farmerStatus, employeeStatus, receiptUrl, bucketWeight,
-                        basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, userId, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, createdBy, userId, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         date = excluded.date,
                         farmerId = excluded.farmerId,
@@ -221,7 +222,8 @@ async function handlePost(context) {
                         bonusDrc = excluded.bonusDrc,
                         actualPrice = excluded.actualPrice,
                         bonusMemberType = excluded.bonusMemberType,
-                        rubberType = excluded.rubberType
+                        rubberType = excluded.rubberType,
+                        createdBy = excluded.createdBy
                 `).bind(
                     id, date || null, farmerId || null, farmerName || null, 
                     weight || 0, drc || 0, pricePerKg || 0, total || 0, 
@@ -230,7 +232,7 @@ async function handlePost(context) {
                     farmerStatus || 'Pending', employeeStatus || 'Pending', 
                     receiptUrl || null, bucketWeight || 0,
                     basePrice || 0, bonusDrc || 0, actualPrice || 0, bonusMemberType || 0, 
-                    rubberType || 'latex', storeId, p.created_at || p.timestamp || new Date().toISOString()
+                    rubberType || 'latex', createdBy || context.user.username || 'Owner', storeId, p.created_at || p.timestamp || new Date().toISOString()
                 ));
             }
             
@@ -289,7 +291,7 @@ async function handlePost(context) {
             date, farmerId, farmerName, weight, drc, pricePerKg, total, 
             dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
             farmerStatus, employeeStatus, receiptUrl, bucketWeight,
-            basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType
+            basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, createdBy
         } = payload;
         
         await context.env.DB.prepare(`
@@ -297,8 +299,8 @@ async function handlePost(context) {
                 id, date, farmerId, farmerName, weight, drc, pricePerKg, total, 
                 dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                 farmerStatus, employeeStatus, receiptUrl, bucketWeight,
-                basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, userId, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, createdBy, userId, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 date = excluded.date,
                 farmerId = excluded.farmerId,
@@ -321,7 +323,8 @@ async function handlePost(context) {
                 bonusDrc = excluded.bonusDrc,
                 actualPrice = excluded.actualPrice,
                 bonusMemberType = excluded.bonusMemberType,
-                rubberType = excluded.rubberType
+                rubberType = excluded.rubberType,
+                createdBy = excluded.createdBy
         `).bind(
             id, date || null, farmerId || null, farmerName || null, 
             weight || 0, drc || 0, pricePerKg || 0, total || 0, 
@@ -330,8 +333,61 @@ async function handlePost(context) {
             farmerStatus || 'Pending', employeeStatus || 'Pending', 
             receiptUrl || null, bucketWeight || 0,
             basePrice || 0, bonusDrc || 0, actualPrice || 0, bonusMemberType || 0, 
-            rubberType || 'latex', storeId, payload.created_at || payload.timestamp || new Date().toISOString()
+            rubberType || 'latex', createdBy || context.user.username || 'Owner', storeId, payload.created_at || payload.timestamp || new Date().toISOString()
         ).run();
+
+        // --- Process Loan Deductions ---
+        // 1. Revert any existing deductions for this buyId (in case this is an update)
+        await refundLoanDeductions(context.env.DB, id, storeId);
+
+        // 2. Process new deductions if present in payload
+        if (Array.isArray(payload.loanDeductions) && payload.loanDeductions.length > 0) {
+            for (const ded of payload.loanDeductions) {
+                const { borrowerType, borrowerId, amount: deductAmt } = ded;
+                if (!deductAmt || deductAmt <= 0) continue;
+
+                // Fetch active loans for borrower
+                const { results: activeLoans } = await context.env.DB.prepare(
+                    "SELECT * FROM loans WHERE userId = ? AND borrowerId = ? AND remainingAmount > 0 ORDER BY date ASC, created_at ASC"
+                ).bind(storeId, borrowerId).all();
+
+                let remainingToDeduct = deductAmt;
+                for (const loan of activeLoans) {
+                    if (remainingToDeduct <= 0) break;
+
+                    let deductionFromThisLoan = 0;
+                    let newRemaining = 0;
+
+                    if (loan.remainingAmount >= remainingToDeduct) {
+                        deductionFromThisLoan = remainingToDeduct;
+                        newRemaining = loan.remainingAmount - remainingToDeduct;
+                        remainingToDeduct = 0;
+                    } else {
+                        deductionFromThisLoan = loan.remainingAmount;
+                        newRemaining = 0;
+                        remainingToDeduct -= loan.remainingAmount;
+                    }
+
+                    // Update the loan's remainingAmount
+                    await context.env.DB.prepare(
+                        "UPDATE loans SET remainingAmount = ? WHERE id = ?"
+                    ).bind(newRemaining, loan.id).run();
+                }
+
+                // Query total remaining debt after updates
+                const totalDebtResult = await context.env.DB.prepare(
+                    "SELECT SUM(remainingAmount) as total FROM loans WHERE userId = ? AND borrowerId = ? AND remainingAmount > 0"
+                ).bind(storeId, borrowerId).first();
+                const remainingDebtAfter = totalDebtResult ? (totalDebtResult.total || 0) : 0;
+
+                // Save deduction record
+                const deductionId = crypto.randomUUID();
+                await context.env.DB.prepare(
+                    `INSERT INTO loan_deductions (id, buyId, borrowerType, borrowerId, amount, remainingDebtAfter, userId)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`
+                ).bind(deductionId, id, borrowerType, borrowerId, deductAmt, remainingDebtAfter, storeId).run();
+            }
+        }
         
         // --- Audit Logging ---
         context.waitUntil?.(recordAuditLog(context, {

@@ -2,9 +2,9 @@ import React from 'react';
 import { X, Leaf, User, ChevronDown, Coins, Eye } from 'lucide-react';
 import { format, addYears } from 'date-fns';
 import { th } from 'date-fns/locale';
-import { formatReceiptDate } from '../../utils/dateUtils';
+import { formatReceiptDate, formatSelectedDate, formatRecordingDate } from '../../utils/dateUtils';
 
-const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, memberTypes, paperSlipConfig, selectedTemplateId }) => {
+const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, memberTypes, paperSlipConfig, selectedTemplateId, loanDeductions = [] }) => {
     if (!viewingEslip) return null;
 
     const isCupLump = viewingEslip.rubberType === 'cup_lump' || viewingEslip.rubber_type === 'cup_lump';
@@ -27,7 +27,7 @@ const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, membe
 
     const config = resolveConfig() || { 
         showLogo: true, showStoreName: true, showAddress: true, showPhone: true, 
-        showBillType: true, showBillId: true, showDateTime: true, showFarmerName: true, 
+        showBillType: true, showBillId: true, showDateTime: true, showSelectedDate: true, showRecordingTime: true, showFarmerName: true, 
         showRawWeight: true, showBucketWeight: true, showNetWeight: true, showDrc: true, 
         showDryWeight: true, showBasePrice: true, showBonusDrc: true, showBonusFsc: true, 
         showBonusMember: true, showActualPrice: true, showSplits: true,
@@ -53,6 +53,31 @@ const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, membe
     const labels = config.labels;
     const headerTitle = config.headerTitle;
     const rawWeightLabel = labels.rawWeight;
+    const farmerId = viewingEslip.farmerId || viewingEslip.farmer_id;
+    const farmer = (farmers || []).find(f => f.id === farmerId);
+    const fscId = viewingEslip.fscId || viewingEslip.fsc_id || farmer?.fscId || farmer?.fsc_id;
+
+    // Deductions checking
+    const recDeds = (loanDeductions || []).filter(d => d.buyId === viewingEslip.id);
+    const hasFarmerDed = recDeds.some(d => d.borrowerType === 'farmer');
+    const hasEmployeeDed = recDeds.some(d => d.borrowerType === 'employee');
+    const hasAnyDed = recDeds.length > 0;
+
+    const farmerNet = viewingEslip.farmerTotal !== undefined ? viewingEslip.farmerTotal : (Number(viewingEslip.total || 0) * (100 - Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? 0)) / 100);
+    const employeeNet = viewingEslip.employeeTotal !== undefined ? viewingEslip.employeeTotal : (Number(viewingEslip.total || 0) * Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? 0) / 100);
+    const totalNet = viewingEslip.total || 0; // Wait, total in database is the gross total of the transaction.
+    // If it's a cup lump or has employees, net paid is actually:
+    const calculatedTotalNet = Number(farmerNet) + Number(employeeNet);
+
+    let finalFscBonus = 0;
+    if (viewingEslip.fscBonus !== undefined || viewingEslip.fsc_bonus !== undefined) {
+        finalFscBonus = Number(viewingEslip.fscBonus ?? viewingEslip.fsc_bonus);
+    } else {
+        const derived = Number(viewingEslip.base_price ?? viewingEslip.basePrice) > 0 
+            ? Math.max(0, Math.round((Number(viewingEslip.actual_price ?? viewingEslip.actualPrice ?? viewingEslip.price_per_kg ?? viewingEslip.pricePerKg ?? 0) - Number(viewingEslip.base_price ?? viewingEslip.basePrice ?? 0) - Number(viewingEslip.bonus_drc ?? viewingEslip.bonusDrc ?? 0) - Number(viewingEslip.memberTypeId ? (memberTypes?.find(mt => mt.id === viewingEslip.memberTypeId)?.bonus || 0) : (viewingEslip.bonus_member_type ?? viewingEslip.bonusMemberType ?? 0))) * 10) / 10)
+            : (fscId ? (settings.fscBonus || 1) : 0);
+        finalFscBonus = derived;
+    }
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-2 no-print sm:p-4">
@@ -104,10 +129,26 @@ const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, membe
                     </div>
 
                     <div className="px-3 pt-3 pb-4 bg-white">
-                        {(config.showBillId !== false || config.showDateTime !== false) && (
-                            <div className="flex justify-between items-center mb-3 font-black text-gray-400 bg-gray-50/80 px-2 py-1.5 rounded-lg border border-gray-100">
-                                {config.showBillId !== false ? <span style={{ fontSize: `${config.fontSizeBillIdValue || config.fontSizeBillId || 7}px` }} className="flex items-center"><span style={{ fontSize: `${config.fontSizeBillIdLabel || config.fontSizeBillId || 7}px` }} className="opacity-40 mr-1 font-bold small-caps">ID:</span> <span className="text-gray-900 mono">{viewingEslip.id?.substring(0, 14)}</span></span> : <span></span>}
-                                {config.showDateTime !== false && <span style={{ fontSize: `${config.fontSizeDateTimeValue || config.fontSizeDateTime || 7}px` }}>{formatReceiptDate(viewingEslip, 'dd MMM yy HH:mm')}</span>}
+                        {(config.showBillId !== false || config.showSelectedDate !== false || config.showRecordingTime !== false) && (
+                            <div className="flex flex-col mb-3 font-black text-gray-400 bg-gray-50/80 px-2 py-1.5 rounded-lg border border-gray-100 gap-0.5">
+                                {config.showBillId !== false && (
+                                    <div className="flex justify-between items-center border-b border-gray-100 pb-0.5 mb-0.5">
+                                        <span style={{ fontSize: `${config.fontSizeBillIdLabel || config.fontSizeBillId || 7}px` }} className="opacity-40 font-bold small-caps">ID:</span>
+                                        <span style={{ fontSize: `${config.fontSizeBillIdValue || config.fontSizeBillId || 7}px` }} className="text-gray-900 mono">{viewingEslip.id?.substring(0, 14)}</span>
+                                    </div>
+                                )}
+                                {config.showSelectedDate !== false && (
+                                    <div className="flex justify-between items-center">
+                                        <span style={{ fontSize: `${(config.fontSizeDateTimeLabel || config.fontSizeDateTime || 7)}px` }} className="opacity-40">{(config.labels?.selectedDate || 'วันที่ทำรายการ')}:</span>
+                                        <span style={{ fontSize: `${config.fontSizeDateTimeValue || config.fontSizeDateTime || 7}px` }} className="text-gray-900">{formatSelectedDate(viewingEslip, 'dd MMM yy')}</span>
+                                    </div>
+                                )}
+                                {config.showRecordingTime !== false && (
+                                    <div className="flex justify-between items-center">
+                                        <span style={{ fontSize: `${(config.fontSizeDateTimeLabel || config.fontSizeDateTime || 7)}px` }} className="opacity-40">{(config.labels?.recordingTime || 'เวลาบันทึก')}:</span>
+                                        <span style={{ fontSize: `${config.fontSizeDateTimeValue || config.fontSizeDateTime || 7}px` }} className="text-gray-900">{formatRecordingDate(viewingEslip, 'dd MMM yy HH:mm')}</span>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -122,8 +163,16 @@ const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, membe
                                         <h2 style={{ fontSize: `${config.fontSizeFarmerNameValue || config.fontSizeFarmerName || 22}px` }} className="font-black text-gray-800 leading-none mb-0.5">
                                             {viewingEslip.farmerName || viewingEslip.buyerName || 'ลูกค้าทั่วไป'}
                                         </h2>
-                                        <div style={{ fontSize: `${(config.fontSizeSubData || 8) - 1}px` }} className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded font-bold text-gray-500">
-                                            รหัส: {viewingEslip.farmerId || viewingEslip.farmer_id || '-'}
+                                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                            <div style={{ fontSize: `${(config.fontSizeSubData || 8) - 1}px` }} className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded font-bold text-gray-500">
+                                                รหัส: {viewingEslip.farmerId || viewingEslip.farmer_id || '-'}
+                                            </div>
+                                            {(config.showFscCode !== false && fscId) && (
+                                                <div style={{ fontSize: `${(config.fontSizeSubData || 8) - 1}px` }} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#fff9eb] text-[#d97706] border border-[#fde68a] rounded font-bold">
+                                                    <Leaf size={10} className="text-[#d97706]" />
+                                                    <span>{fscId}</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-100">
@@ -199,11 +248,11 @@ const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, membe
                                         </div>
                                     )}
 
-                                    {config.showBonusFsc !== false && (Number(viewingEslip.fsc_bonus ?? viewingEslip.fscBonus ?? 0)) > 0 && (
+                                    {config.showBonusFsc !== false && finalFscBonus > 0 && (
                                         <div className="flex justify-between items-center">
                                             <span style={{ fontSize: `${config.fontSizeBonusFscLabel || config.fontSizeSubData || 8}px` }} className="font-bold text-gray-400">{labels.bonusFsc}</span>
                                             <span style={{ fontSize: `${config.fontSizeBonusFscValue || config.fontSizeSubData || 8}px` }} className="font-bold text-amber-600 mono">
-                                                +฿{Number(viewingEslip.fsc_bonus ?? viewingEslip.fscBonus ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-xs text-gray-400 font-bold">/กก.</span>
+                                                +฿{finalFscBonus.toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-xs text-gray-400 font-bold">/กก.</span>
                                             </span>
                                         </div>
                                     )}
@@ -241,13 +290,19 @@ const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, membe
                                 <div className="space-y-1 pt-1 border-t border-dotted border-gray-200">
                                     <div className="flex justify-between items-center">
                                         <span style={{ fontSize: `${config.fontSizeFarmerSplitLabel || config.fontSizeSplit || 9}px` }} className="font-bold text-orange-400 flex items-center"><Coins size={14} className="mr-1.5" /> {labels.farmerSplit} ({(100 - Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0))}%)</span>
-                                        <span style={{ fontSize: `${config.fontSizeFarmerSplitValue || config.fontSizeSplit || 9}px` }} className="font-black text-[#5ba2d7] mono">฿{Math.floor(Number(viewingEslip.total || 0) * (100 - Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0)) / 100).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                        <span style={{ fontSize: `${config.fontSizeFarmerSplitValue || config.fontSizeSplit || 9}px` }} className="font-black text-[#5ba2d7] mono">
+                                            ฿{Math.floor(Number(farmerNet)).toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                            {hasFarmerDed ? '*' : ''}
+                                        </span>
                                     </div>
                                     
                                     {Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0) > 0 && (
                                         <div className="flex justify-between items-center">
                                             <span style={{ fontSize: `${config.fontSizeEmployeeSplitLabel || config.fontSizeSplit || 9}px` }} className="font-bold text-[#a855f7] flex items-center"><User size={14} className="mr-1.5" /> {labels.employeeSplit} ({Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0)}%)</span>
-                                            <span style={{ fontSize: `${config.fontSizeEmployeeSplitValue || config.fontSizeSplit || 9}px` }} className="font-black text-[#a855f7] mono">฿{Math.floor(Number(viewingEslip.total || 0) * Number(viewingEslip.emp_pct ?? viewingEslip.empPct ?? viewingEslip.employee_percent ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                            <span style={{ fontSize: `${config.fontSizeEmployeeSplitValue || config.fontSizeSplit || 9}px` }} className="font-black text-[#a855f7] mono">
+                                                ฿{Math.floor(Number(employeeNet)).toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                                {hasEmployeeDed ? '*' : ''}
+                                            </span>
                                         </div>
                                     )}
                                 </div>
@@ -265,7 +320,8 @@ const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, membe
                             <span style={{ fontSize: `${config.fontSizeTotalLabel || 10}px` }} className="font-black uppercase tracking-widest">ยอดรวมจ่าย</span>
                             <div className="text-right relative z-10">
                                 <span style={{ fontSize: `${config.fontSizeTotalValue || 24}px` }} className="font-black leading-none tracking-tighter tabular-nums drop-shadow-md">
-                                    ฿{Number(viewingEslip.total || 0).toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                    ฿{Math.floor(Number(hasAnyDed ? calculatedTotalNet : totalNet)).toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                    {hasAnyDed ? '*' : ''}
                                 </span>
                                 <p style={{ fontSize: `${config.fontSizeFooterText || 7}px` }} className="opacity-60 font-bold">{config.footerText}</p>
                             </div>

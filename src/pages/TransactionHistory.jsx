@@ -195,6 +195,110 @@ export const TransactionHistory = () => {
         }, 500);
     };
 
+    const [allPrintRecords, setAllPrintRecords] = useState([]);
+
+    const reportRecords = useMemo(() => {
+        return allPrintRecords.length > 0 ? allPrintRecords : records;
+    }, [allPrintRecords, records]);
+
+    const totalDryWeight = useMemo(() => {
+        return records.reduce((sum, r) => {
+            if (r.dry_weight !== undefined && r.dry_weight !== null) return sum + Number(r.dry_weight);
+            if (r.dryWeight !== undefined && r.dryWeight !== null) return sum + Number(r.dryWeight);
+            if (r.dryRubber !== undefined && r.dryRubber !== null) return sum + Number(r.dryRubber);
+            
+            const weight = Number(r.weight || 0);
+            const bucketWeight = Number(r.bucket_weight ?? r.bucketWeight ?? 0);
+            const netWeight = Math.max(0, weight - bucketWeight);
+            
+            const isCupLump = (r.rubberType === 'cup_lump' || r.rubber_type === 'cup_lump');
+            if (isCupLump) return sum + netWeight;
+            
+            const drc = Number(r.drc || 0);
+            return sum + (Math.trunc(((netWeight * drc) / 100) * 10) / 10);
+        }, 0);
+    }, [records]);
+
+    const enhancedSummary = useMemo(() => ({
+        ...summary,
+        totalDryWeight
+    }), [summary, totalDryWeight]);
+
+    const reportSummary = useMemo(() => {
+        const totalBills = reportRecords.length;
+        const totalWeight = reportRecords.reduce((sum, r) => sum + Math.max(0, Number(r.weight || 0) - Number(r.bucket_weight ?? r.bucketWeight ?? 0)), 0);
+        const totalDryWeight = reportRecords.reduce((sum, r) => {
+            if (r.dry_weight !== undefined && r.dry_weight !== null) return sum + Number(r.dry_weight);
+            if (r.dryWeight !== undefined && r.dryWeight !== null) return sum + Number(r.dryWeight);
+            if (r.dryRubber !== undefined && r.dryRubber !== null) return sum + Number(r.dryRubber);
+            
+            const weight = Number(r.weight || 0);
+            const bucketWeight = Number(r.bucket_weight ?? r.bucketWeight ?? 0);
+            const netWeight = Math.max(0, weight - bucketWeight);
+            
+            const isCupLump = (r.rubberType === 'cup_lump' || r.rubber_type === 'cup_lump');
+            if (isCupLump) return sum + netWeight;
+            
+            const drc = Number(r.drc || 0);
+            return sum + (Math.trunc(((netWeight * drc) / 100) * 10) / 10);
+        }, 0);
+        const totalAmount = reportRecords.reduce((sum, r) => sum + Number(r.total || 0), 0);
+
+        const validDrcs = reportRecords.filter(r => Number(r.drc) > 0);
+        const avgDrc = validDrcs.length > 0 ? (validDrcs.reduce((sum, r) => sum + Number(r.drc), 0) / validDrcs.length) : 0;
+
+        const sumPrice = reportRecords.reduce((sum, r) => {
+            const price = Number(activeTab === 'buy' 
+                ? (r.actual_price ?? r.actualPrice ?? r.price_per_kg ?? r.pricePerKg ?? 0) 
+                : (r.pricePerKg ?? r.price_per_kg ?? 0));
+            return sum + price;
+        }, 0);
+        const avgPrice = reportRecords.length > 0 ? (sumPrice / reportRecords.length) : 0;
+
+        return { totalBills, totalWeight, totalDryWeight, totalAmount, avgDrc, avgPrice };
+    }, [reportRecords, activeTab]);
+
+    const handlePrintReport = async () => {
+        const toastId = toast.loading('กำลังจัดเตรียมรายการทุกหน้าสำหรับพิมพ์...');
+        try {
+            const params = {
+                startDate: filters.startDate,
+                endDate: filters.endDate,
+                search: debouncedSearch,
+                page: 1,
+                pageSize: 10000, // Fetch all matching items without pagination limit
+                rubberType: filters.rubberType,
+                minWeight: filters.minWeight,
+                maxWeight: filters.maxWeight,
+                minTotal: filters.minTotal,
+                maxTotal: filters.maxTotal,
+                farmerId: filters.farmerId,
+                factoryId: filters.factoryId,
+                farmerStatus: filters.farmerStatus,
+                employeeStatus: filters.employeeStatus
+            };
+
+            const res = activeTab === 'buy' 
+                ? await fetchBuyHistory(params)
+                : await fetchSellHistory(params);
+
+            if (res && res.results && res.results.length > 0) {
+                setAllPrintRecords(res.results);
+            } else {
+                setAllPrintRecords(records);
+            }
+            toast.dismiss(toastId);
+
+            setTimeout(() => {
+                window.print();
+            }, 300);
+        } catch (e) {
+            toast.dismiss(toastId);
+            setAllPrintRecords(records);
+            window.print();
+        }
+    };
+
     const paperSlipConfig = useMemo(() => {
         try {
             const rawConfig = settings.paperSlipConfig;
@@ -212,22 +316,32 @@ export const TransactionHistory = () => {
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
                     @page {
-                        size: 48mm 210mm;
-                        margin: 0;
+                        size: A4 portrait;
+                        margin: 10mm;
                     }
-                    body {
-                        margin: 0;
-                        padding: 0;
-                        -webkit-print-color-adjust: exact;
+                    html, body, #root, main, div {
+                        overflow: visible !important;
+                        height: auto !important;
+                        max-height: none !important;
                     }
                     .receipt-content {
-                        width: 48mm;
+                        width: 100%;
+                        max-width: 76mm;
                         padding: 2mm;
-                        margin: 0 auto;
+                        margin: 0;
                         font-family: 'Noto Sans Thai', sans-serif;
                     }
                     .no-print {
                         display: none !important;
+                    }
+                    tr {
+                        page-break-inside: avoid;
+                    }
+                    thead {
+                        display: table-header-group;
+                    }
+                    tfoot {
+                        display: table-footer-group;
                     }
                 }
             ` }} />
@@ -240,9 +354,10 @@ export const TransactionHistory = () => {
                 farmers={farmers}
                 factories={factories}
                 setFilters={setFilters}
+                onPrintReport={handlePrintReport}
             />
 
-            <HistorySummary totals={summary} />
+            <HistorySummary totals={enhancedSummary} />
 
             <HistoryTable 
                 loading={loading} 
@@ -278,6 +393,113 @@ export const TransactionHistory = () => {
                 memberTypes={memberTypes}
                 paperSlipConfig={paperSlipConfig}
             />
+
+            {/* A4 Printable Report View (Visible only during window.print()) */}
+            <div className="hidden print:block text-black p-4 font-sans bg-white">
+                <div className="text-center border-b-2 border-black pb-3 mb-4">
+                    <h1 className="text-2xl font-bold">{settings.factoryName || settings.factory_name || 'ร้านรับซื้อน้ำยางพารา'}</h1>
+                    {settings.address && <p className="text-xs">{settings.address}</p>}
+                    {settings.phone && <p className="text-xs">โทร: {settings.phone}</p>}
+                    <h2 className="text-lg font-bold mt-2 underline">
+                        รายงานประวัติการ{activeTab === 'buy' ? 'รับซื้อยาง' : 'ขายยาง'}
+                    </h2>
+                    <p className="text-xs mt-1 font-semibold">
+                        ประจำวันที่: {filters.startDate ? format(parseISO(filters.startDate), 'dd/MM/yyyy', { locale: th }) : '-'} ถึง {filters.endDate ? format(parseISO(filters.endDate), 'dd/MM/yyyy', { locale: th }) : '-'}
+                        {filters.searchTerm && ` | คำค้นหา: "${filters.searchTerm}"`}
+                    </p>
+                </div>
+
+                {/* Summary Box */}
+                <div className="grid grid-cols-4 gap-2 mb-4 p-3 border border-black rounded bg-gray-50 text-center text-xs">
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">รายการทั้งหมด</span>
+                        <span className="text-sm font-bold">{reportSummary.totalBills} รายการ</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">น้ำหนักสุทธิรวม</span>
+                        <span className="text-sm font-bold">{reportSummary.totalWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ยางแห้งรวม</span>
+                        <span className="text-sm font-bold">{reportSummary.totalDryWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ยอดรวมเงินสุทธิ</span>
+                        <span className="text-sm font-bold">฿{reportSummary.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
+                    </div>
+                </div>
+
+                {/* Detail Table */}
+                <table className="w-full border-collapse border border-black text-xs">
+                    <thead>
+                        <tr className="bg-gray-100 border-b border-black text-[11px]">
+                            <th className="border border-black p-1.5 text-center">ลำดับ</th>
+                            <th className="border border-black p-1.5 text-left">วันที่</th>
+                            <th className="border border-black p-1.5 text-left">{activeTab === 'buy' ? 'เกษตรกร' : 'โรงงาน/ผู้ซื้อ'}</th>
+                            <th className="border border-black p-1.5 text-center">ประเภท</th>
+                            <th className="border border-black p-1.5 text-right">น้ำหนักสุทธิ (กก.)</th>
+                            <th className="border border-black p-1.5 text-center">% DRC</th>
+                            <th className="border border-black p-1.5 text-right">ยางแห้ง (กก.)</th>
+                            <th className="border border-black p-1.5 text-right">ราคา/กก. (฿)</th>
+                            <th className="border border-black p-1.5 text-right">ยอดรวม (฿)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {reportRecords.map((r, index) => {
+                            const weight = Number(r.weight || 0);
+                            const bucketWeight = Number(r.bucket_weight ?? r.bucketWeight ?? 0);
+                            const netWeight = Math.max(0, weight - bucketWeight);
+                            const isCupLump = (r.rubberType === 'cup_lump' || r.rubber_type === 'cup_lump');
+                            const dryWeight = isCupLump ? netWeight : (r.dry_weight ?? r.dryWeight ?? ((netWeight * (r.drc || 0)) / 100));
+                            const price = Number(activeTab === 'buy' ? (r.actual_price ?? r.actualPrice ?? r.price_per_kg ?? r.pricePerKg ?? 0) : (r.pricePerKg ?? r.price_per_kg ?? 0));
+                            
+                            return (
+                                <tr key={r.id} className="border-b border-black">
+                                    <td className="border border-black p-1.5 text-center">{index + 1}</td>
+                                    <td className="border border-black p-1.5">{r.date ? format(parseISO(r.date), 'dd/MM/yyyy', { locale: th }) : '-'}</td>
+                                    <td className="border border-black p-1.5 font-semibold">{activeTab === 'buy' ? (r.farmerName || 'ลูกค้าทั่วไป') : r.buyerName}</td>
+                                    <td className="border border-black p-1.5 text-center">{isCupLump ? 'ขี้ยาง' : 'น้ำยาง'}</td>
+                                    <td className="border border-black p-1.5 text-right">{netWeight.toFixed(1)}</td>
+                                    <td className="border border-black p-1.5 text-center">{Number(r.drc || 0).toFixed(1)}%</td>
+                                    <td className="border border-black p-1.5 text-right font-semibold">{Number(dryWeight).toFixed(1)}</td>
+                                    <td className="border border-black p-1.5 text-right">{price.toFixed(1)}</td>
+                                    <td className="border border-black p-1.5 text-right font-bold">{Number(r.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                    <tfoot>
+                        <tr className="bg-gray-100 font-bold border-t-2 border-black">
+                            <td colSpan="4" className="border border-black p-1.5 text-center">รวมทั้งสิ้น ({reportRecords.length} รายการ) / เฉลี่ยสุทธิ</td>
+                            <td className="border border-black p-1.5 text-right">{reportSummary.totalWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                            <td className="border border-black p-1.5 text-center bg-blue-50">
+                                <span className="block text-[8px] text-gray-500 font-normal">เฉลี่ย %DRC</span>
+                                <span>{reportSummary.avgDrc.toFixed(1)}%</span>
+                            </td>
+                            <td className="border border-black p-1.5 text-right bg-emerald-50">{reportSummary.totalDryWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                            <td className="border border-black p-1.5 text-right bg-amber-50">
+                                <span className="block text-[8px] text-gray-500 font-normal">เฉลี่ย ราคา/กก.</span>
+                                <span>฿{reportSummary.avgPrice.toFixed(2)}</span>
+                            </td>
+                            <td className="border border-black p-1.5 text-right text-xs">฿{reportSummary.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                {/* Signatures */}
+                <div className="flex justify-between items-center mt-10 pt-4 text-xs text-center">
+                    <div>
+                        <p className="mb-6">ลงชื่อ ...........................................................</p>
+                        <p className="font-bold">( ........................................................... )</p>
+                        <p className="text-gray-600 mt-0.5 text-[10px]">ผู้จัดทำรายงาน</p>
+                    </div>
+                    <div>
+                        <p className="mb-6">ลงชื่อ ...........................................................</p>
+                        <p className="font-bold">( ........................................................... )</p>
+                        <p className="text-gray-600 mt-0.5 text-[10px]">ผู้ตรวจสอบ / ผู้จัดการ</p>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };

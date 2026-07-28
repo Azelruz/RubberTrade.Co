@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { format, subMonths, isWithinInterval, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
@@ -8,6 +9,8 @@ import { truncateOneDecimal } from '../utils/calculations';
 import toast from 'react-hot-toast';
 
 export const Report = () => {
+    const { user } = useAuth();
+    const isStaff = user?.role === 'staff';
     const [loading, setLoading] = useState(true);
     const [buys, setBuys] = useState([]);
     const [sells, setSells] = useState([]);
@@ -341,13 +344,13 @@ export const Report = () => {
                                 </p>
                                 <p className="text-2xl font-black text-gray-900">{Number(filteredData.todaySummary.cost).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} <span className="text-sm font-normal text-gray-400">฿</span></p>
                             </div>
-                            <div className={`p-6 bg-gradient-to-br transition-colors ${filteredData.todaySummary.profit >= 0 ? 'from-green-50/50 to-white' : 'from-red-50/50 to-white'}`}>
+                            <div className={`p-6 bg-gradient-to-br transition-colors ${filteredData.todaySummary.profit >= 0 || isStaff ? 'from-green-50/50 to-white' : 'from-red-50/50 to-white'}`}>
                                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center">
-                                    <TrendingUp size={12} className={`mr-1.5 ${filteredData.todaySummary.profit >= 0 ? 'text-green-500' : 'text-red-500'}`} />กำไรจากเนื้อยาง
+                                    <TrendingUp size={12} className={`mr-1.5 ${filteredData.todaySummary.profit >= 0 || isStaff ? 'text-green-500' : 'text-red-500'}`} />กำไรจากเนื้อยาง
                                 </p>
                                 <div className="flex items-baseline space-x-1">
-                                    <p className={`text-2xl font-black ${filteredData.todaySummary.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                        {filteredData.todaySummary.profit >= 0 ? '+' : ''}{Number(filteredData.todaySummary.profit).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                    <p className={`text-2xl font-black ${filteredData.todaySummary.profit >= 0 || isStaff ? 'text-green-600' : 'text-red-600'}`}>
+                                        {isStaff ? '***' : (filteredData.todaySummary.profit >= 0 ? '+' : '') + Number(filteredData.todaySummary.profit).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                                     </p>
                                     <span className={`text-xs font-bold ${filteredData.todaySummary.profit >= 0 ? 'text-green-600/60' : 'text-red-600/60'}`}>฿</span>
                                 </div>
@@ -486,13 +489,13 @@ export const Report = () => {
                                 </div>
                                 <span className="text-sm font-black text-red-600">-{Number(filteredData.todaySummary.wages).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ฿</span>
                             </div>
-                            <div className={`p-4 flex items-center justify-between bg-gradient-to-r ${filteredData.todaySummary.netOutcome >= 0 ? 'from-green-600 to-green-500' : 'from-red-600 to-red-500'} text-white`}>
+                            <div className={`p-4 flex items-center justify-between bg-gradient-to-r ${filteredData.todaySummary.netOutcome >= 0 || isStaff ? 'from-green-600 to-green-500' : 'from-red-600 to-red-500'} text-white`}>
                                 <div className="flex items-center">
                                     <BarChart3 size={18} className="mr-2" />
                                     <span className="text-sm font-black uppercase tracking-wider">ผลประกอบการสุทธิ:</span>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-lg font-black">{Number(filteredData.todaySummary.netOutcome).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
+                                    <span className="text-lg font-black">{isStaff ? '***' : Number(filteredData.todaySummary.netOutcome).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
                                     <span className="text-xs ml-1 opacity-80 font-bold">฿</span>
                                 </div>
                             </div>
@@ -528,13 +531,13 @@ export const Report = () => {
                             </div>
                         </div>
 
-                        <div className={`bg-white p-6 rounded-xl border border-gray-100 shadow-sm lg:col-span-2 relative overflow-hidden group ${filteredData.profit >= 0 ? 'bg-green-50/30' : 'bg-red-50/30'}`}>
-                            <div className={`absolute right-0 top-0 w-full h-full opacity-10 ${filteredData.profit >= 0 ? 'bg-gradient-to-l from-green-400' : 'bg-gradient-to-l from-red-400'}`}></div>
+                        <div className={`bg-white p-6 rounded-xl border border-gray-100 shadow-sm lg:col-span-2 relative overflow-hidden group ${filteredData.profit >= 0 || isStaff ? 'bg-green-50/30' : 'bg-red-50/30'}`}>
+                            <div className={`absolute right-0 top-0 w-full h-full opacity-10 ${filteredData.profit >= 0 || isStaff ? 'bg-gradient-to-l from-green-400' : 'bg-gradient-to-l from-red-400'}`}></div>
                             <div className="relative z-10 flex justify-between items-center h-full">
                                 <div>
                                     <p className="text-sm font-medium text-gray-500 mb-1">กำไร / ขาดทุน (ขั้นต้น)</p>
-                                    <p className={`text-4xl font-black ${filteredData.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                        {filteredData.profit >= 0 ? '+' : ''}฿{Number(filteredData.profit).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                    <p className={`text-4xl font-black ${filteredData.profit >= 0 || isStaff ? 'text-green-600' : 'text-red-600'}`}>
+                                        {isStaff ? '***' : (filteredData.profit >= 0 ? '+' : '') + '฿' + Number(filteredData.profit).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                                     </p>
                                 </div>
                                 <div className="hidden sm:block text-right">

@@ -72,16 +72,20 @@
 }
 
 @media print {
-  .no-print {
+  @page {
+    margin: 0;
+  }
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact;
+  }
+  .no-print, .print\:hidden {
     display: none !important;
   }
   .print-only {
     display: block !important;
   }
 }
-
-  /* Reset height for full length printing */
-  html, body {
-    height: auto !important;
-    overflow: visible !important;
-  }

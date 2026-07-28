@@ -3,7 +3,7 @@ import { FileText, Search, Printer, Trash2, Eye, User, Image as ImageIcon, Chevr
 import { format, addYears } from 'date-fns';
 import { th } from 'date-fns/locale';
 
-const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearchTerm, selectedDate, setSelectedDate, handlePrintReceipt, handleDelete, setViewingEslip, user, pagination, onPageChange }) => {
+const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearchTerm, selectedDate, setSelectedDate, handlePrintReceipt, handleDelete, setViewingEslip, user, pagination, onPageChange, loanDeductions = [] }) => {
     return (
         <div className="lg:col-span-2">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -81,17 +81,19 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
                                             </td>
                                         </tr>
                                     ) : (
-                                        filteredRecords.map((record) => (
-                                            <tr key={record.id} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                    {record.date ? format(addYears(new Date(record.date), 543), 'dd MMM yyyy', { locale: th }) : '-'}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm font-bold text-gray-900 flex items-center">
-                                                        <User size={14} className="mr-1.5 text-gray-400" />
-                                                        <span className="flex items-center gap-2">
-                                                            {record.farmerName}
-                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${
+                                        filteredRecords.map((record) => {
+                                            const hasAnyDed = loanDeductions.some(d => d.buyId === record.id);
+                                            return (
+                                                <tr key={record.id} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                        {record.date ? format(addYears(new Date(record.date), 543), 'dd MMM yyyy', { locale: th }) : '-'}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <div className="text-sm font-bold text-gray-900 flex items-center">
+                                                            <User size={14} className="mr-1.5 text-gray-400" />
+                                                            <span className="flex items-center gap-2">
+                                                                {record.farmerName}{hasAnyDed ? '*' : ''}
+                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${
                                                                 (record.rubberType === 'cup_lump' || record.rubber_type === 'cup_lump') 
                                                                     ? 'bg-amber-100 text-amber-700 border border-amber-200' 
                                                                     : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
@@ -130,7 +132,7 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
                                                         >
                                                             <Printer size={18} />
                                                         </button>
-                                                        {user?.role === 'owner' && (
+                                                        {(user?.role === 'owner' || user?.role === 'staff') && (
                                                             <button
                                                                 onClick={() => handleDelete(record.id)}
                                                                 className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
@@ -160,7 +162,8 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
                                                     </div>
                                                 </td>
                                             </tr>
-                                        ))
+                                            );
+                                        })
                                     )}
                                 </tbody>
                             </table>

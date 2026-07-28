@@ -53,6 +53,13 @@ const SyncRequired = lazy(() => import('./pages/SyncRequired'));
 const Home = lazy(() => import('./pages/Home'));
 const BackupManagement = lazy(() => import('./pages/admin/BackupManagement'));
 const StockAdjustmentReport = lazy(() => import('./pages/StockAdjustmentReport'));
+const Loans = lazy(() => import('./pages/Loans').then(m => ({ default: m.Loans })));
+
+// Queue Management Pages
+const QueueStation1 = lazy(() => import('./pages/QueueStation1').then(m => ({ default: m.QueueStation1 })));
+const QueueStation2 = lazy(() => import('./pages/QueueStation2').then(m => ({ default: m.QueueStation2 })));
+const ServiceQueueStation = lazy(() => import('./pages/ServiceQueueStation').then(m => ({ default: m.ServiceQueueStation })));
+const QueueMonitor = lazy(() => import('./pages/QueueMonitor').then(m => ({ default: m.QueueMonitor })));
 
 // Root Index Component to handle Landing vs Dashboard
 const RootIndex = () => {
@@ -72,6 +79,7 @@ const RootIndex = () => {
 // Nested Lazy Pages
 const GeneralSettings = lazy(() => import('./pages/settings/GeneralSettings').then(m => ({ default: m.GeneralSettings })));
 const ActivityLog = lazy(() => import('./pages/settings/ActivityLog'));
+const OfflineSyncSettings = lazy(() => import('./pages/settings/OfflineSyncSettings'));
 
 function App() {
   useEffect(() => {
@@ -98,6 +106,7 @@ function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/queue-monitor" element={<QueueMonitor />} />
 
             {/* Root Route: Dashboard if logged in, Home if guest */}
             <Route path="/" element={<RootIndex />}>
@@ -106,54 +115,79 @@ function App() {
               <Route path="sell" element={<Sell />} />
               <Route path="expenses" element={<Expenses />} />
               <Route path="payments" element={<Payments />} />
+              <Route path="loans" element={
+                <RoleRoute allowedRoles={['owner', 'staff']}>
+                  <Loans />
+                </RoleRoute>
+              } />
               <Route path="promotions" element={
-                <RoleRoute allowedRoles={['owner']}>
+                <RoleRoute allowedRoles={['owner', 'staff']}>
                   <Promotions />
+                </RoleRoute>
+              } />
+              <Route path="queue/station-1" element={
+                <RoleRoute allowedRoles={['owner', 'staff']}>
+                  <QueueStation1 />
+                </RoleRoute>
+              } />
+              <Route path="queue/station-2" element={
+                <RoleRoute allowedRoles={['owner', 'staff']}>
+                  <QueueStation2 />
+                </RoleRoute>
+              } />
+              <Route path="queue/services" element={
+                <RoleRoute allowedRoles={['owner', 'staff']}>
+                  <ServiceQueueStation />
                 </RoleRoute>
               } />
               <Route path="report">
                 <Route index element={<Navigate to="daily-forecast" replace />} />
                 <Route path="daily-forecast" element={
-                  <RoleRoute allowedRoles={['owner']}>
+                  <RoleRoute allowedRoles={['owner', 'staff']}>
                     <Report />
                   </RoleRoute>
                 } />
                 <Route path="daily-summary" element={
-                  <RoleRoute allowedRoles={['owner']}>
+                  <RoleRoute allowedRoles={['owner', 'staff']}>
                     <DailySummaryReport />
                   </RoleRoute>
                 } />
                 <Route path="monthly" element={
-                  <RoleRoute allowedRoles={['owner']}>
+                  <RoleRoute allowedRoles={['owner', 'staff']}>
                     <MonthlyReport />
                   </RoleRoute>
                 } />
                 <Route path="transaction-history" element={
-                  <RoleRoute allowedRoles={['owner']}>
+                  <RoleRoute allowedRoles={['owner', 'staff']}>
                     <TransactionHistory />
                   </RoleRoute>
                 } />
                 <Route path="stock-adjustments" element={
-                  <RoleRoute allowedRoles={['owner']}>
+                  <RoleRoute allowedRoles={['owner', 'staff']}>
                     <StockAdjustmentReport />
                   </RoleRoute>
                 } />
               </Route>
               <Route path="tax-report" element={
-                <RoleRoute allowedRoles={['owner']}>
+                <RoleRoute allowedRoles={['owner', 'staff']}>
                   <TaxReport />
                 </RoleRoute>
               } />
               <Route path="settings" element={
-                <RoleRoute allowedRoles={['owner', 'super_admin']}>
+                <RoleRoute allowedRoles={['owner', 'super_admin', 'staff']}>
                   <Settings />
                 </RoleRoute>
               }>
                 <Route index element={<GeneralSettings />} />
               </Route>
               <Route path="activity-log" element={
-                <RoleRoute allowedRoles={['owner', 'super_admin']}>
+                <RoleRoute allowedRoles={['owner', 'super_admin', 'staff']}>
                   <ActivityLog />
+                </RoleRoute>
+              } />
+              <Route path="offline-sync" element={
+                <RoleRoute allowedRoles={['owner', 'super_admin', 'staff']}>
+                  <OfflineSyncSettings />
                 </RoleRoute>
               } />
               <Route path="subscription" element={<Subscription />} />
@@ -178,7 +212,7 @@ function App() {
                 </RoleRoute>
               } />
               <Route path="import" element={
-                <RoleRoute allowedRoles={['owner', 'super_admin']}>
+                <RoleRoute allowedRoles={['owner', 'super_admin', 'staff']}>
                   <DataImport />
                 </RoleRoute>
               } />

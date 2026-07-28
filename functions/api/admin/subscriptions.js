@@ -20,9 +20,14 @@ async function handleGet(context) {
 
         if (type === 'settings') {
             const { results } = await db.prepare("SELECT key, value FROM settings WHERE userId = 'SYSTEM'").all();
-            const settingsObj = {};
+            const settingsObj = {
+                bank_name: 'พร้อมเพย์ (PromptPay)',
+                bank_account: '0858959641',
+                bank_owner: 'ผู้ดูแลระบบ RubberTrade',
+                promptpay_id: '0858959641'
+            };
             results.forEach(row => {
-                settingsObj[row.key] = row.value;
+                if (row.value) settingsObj[row.key] = row.value;
             });
             return jsonResponse({
                 status: 'success',

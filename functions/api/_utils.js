@@ -119,7 +119,7 @@ export const withAuth = (handler) => {
         };
 
         // Determine Effective Store ID (Shared data access)
-        context.user.storeId = userRecord.parentId || userId || userId;
+        context.user.storeId = userId;
 
         // --- NEW: Super Admin Store Switching ---
         const superAdminEmail = context.env.SUPER_ADMIN_EMAIL || 'narapong.an@gmail.com';
@@ -133,6 +133,16 @@ export const withAuth = (handler) => {
             if (switchStoreId) {
                 context.user.storeId = switchStoreId;
                 context.user.isSwitched = true;
+            }
+        } else if (context.user.role === 'owner') {
+            const switchStoreId = context.request.headers.get('X-Switch-Store-ID');
+            if (switchStoreId) {
+                const isMyStaff = await db.prepare("SELECT 1 FROM users WHERE id = ? AND parentId = ?")
+                    .bind(switchStoreId, userId).first();
+                if (isMyStaff) {
+                    context.user.storeId = switchStoreId;
+                    context.user.isSwitched = true;
+                }
             }
         }
 

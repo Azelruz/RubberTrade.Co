@@ -1,7 +1,7 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
-import { formatReceiptDate } from '../../utils/dateUtils';
+import { formatReceiptDate, formatSelectedDate, formatRecordingDate } from '../../utils/dateUtils';
 
 const HistoryPrintTemplates = ({ 
     printingReceipt, printingSellRecord, buyPrintRef, sellPrintRef, 
@@ -33,7 +33,7 @@ const HistoryPrintTemplates = ({
 
                     const config = resolveConfig() || { 
                         showLogo: true, showStoreName: true, showAddress: true, showPhone: true, 
-                        showBillType: true, showBillId: true, showDateTime: true, showFarmerName: true, 
+                        showBillType: true, showBillId: true, showDateTime: true, showSelectedDate: true, showRecordingTime: true, showFarmerName: true, 
                         showRawWeight: true, showBucketWeight: true, showNetWeight: true, showDrc: true, 
                         showDryWeight: true, showBasePrice: true, showBonusDrc: true, showBonusFsc: true, 
                         showBonusMember: true, showActualPrice: true, showSplits: true,
@@ -58,9 +58,11 @@ const HistoryPrintTemplates = ({
                     const labels = config.labels;
                     const headerTitle = config.headerTitle;
                     const rawWeightLabel = labels.rawWeight;
+                    const farmer = farmers.find(f => f.id === (printingReceipt.farmerId || printingReceipt.farmer_id));
+                    const fscId = printingReceipt.fscId || printingReceipt.fsc_id || farmer?.fscId || farmer?.fsc_id;
 
                     return (
-                        <div className="receipt-content text-black text-[12px] leading-snug p-4 font-sans" style={{ width: '57mm', background: 'white' }}>
+                        <div className="receipt-content text-black text-[12px] leading-snug p-1 pr-[5px] font-sans" style={{ width: '100%', maxWidth: '76mm', margin: '0', paddingRight: '5px', background: 'white', boxSizing: 'border-box' }}>
                             {/* Top Note */}
                             {config.topNote && (
                                 <div style={{ fontSize: `${(config.fontSizeTopNote || 7) * 2}px` }} className="text-center italic border-b border-black mb-1 pb-1">
@@ -70,11 +72,11 @@ const HistoryPrintTemplates = ({
 
                             {/* Header - High Contrast for Thermal */}
                             <div className="text-center mb-3 border-b-2 border-black pb-2">
-                                <div className="h-12 flex items-center justify-center mb-2">
                                     {(config.showLogo !== false && (settings.logo_url || settings.logoUrl)) && (
-                                        <img src={settings.logo_url || settings.logoUrl} alt="Logo" className="h-12 mx-auto object-contain" style={{ filter: 'grayscale(1) contrast(2)' }} />
+                                        <div className="h-12 flex items-center justify-center mb-2">
+                                            <img src={settings.logo_url || settings.logoUrl} alt="Logo" className="h-12 mx-auto object-contain" style={{ filter: 'grayscale(1) contrast(2)' }} />
+                                        </div>
                                     )}
-                                </div>
                                 {config.showStoreName !== false && <h1 style={{ fontSize: `${(config.fontSizeStoreName || 12) * 2}px` }} className="font-bold leading-tight">{settings.factoryName || settings.factory_name || 'ร้านรับซื้อน้ำยางพารา'}</h1>}
                                 {config.showAddress !== false && <p style={{ fontSize: `${(config.fontSizeAddress || 7) * 2}px` }} className="font-medium leading-tight">{settings.address || '-'}</p>}
                                 {config.showPhone !== false && <p style={{ fontSize: `${(config.fontSizePhone || 8) * 2}px` }} className="font-bold">โทร: {settings.phone || '-'}</p>}
@@ -86,24 +88,42 @@ const HistoryPrintTemplates = ({
                             </div>
 
                             {/* Invoice Info */}
-                            {(config.showBillId !== false || config.showDateTime !== false) && (
-                                <div className="flex justify-between mb-3 border-b border-black pb-1 font-mono">
-                                    {config.showBillId !== false && <span style={{ fontSize: `${(config.fontSizeBillIdValue || config.fontSizeBillId || 7) * 2}px` }}>
-                                        <span style={{ fontSize: `${(config.fontSizeBillIdLabel || config.fontSizeBillId || 7) * 2}px` }}>เลขที่: </span>
-                                        <span className="font-bold">{printingReceipt.id?.substring(0, 14)}</span>
-                                    </span>}
-                                    {config.showDateTime !== false && <span style={{ fontSize: `${(config.fontSizeDateTimeValue || config.fontSizeDateTime || 7) * 2}px` }} className="font-bold">
-                                        <span style={{ fontSize: `${(config.fontSizeDateTimeLabel || config.fontSizeDateTime || 7) * 2}px` }}></span>
-                                        {formatReceiptDate(printingReceipt, 'dd/MM/yyyy HH:mm')}
-                                    </span>}
+                            {(config.showBillId !== false || config.showSelectedDate !== false || config.showRecordingTime !== false) && (
+                                <div className="mb-3 border-b border-black pb-1 font-mono">
+                                    {config.showBillId !== false && (
+                                        <div className="flex justify-between" style={{ fontSize: `${(config.fontSizeBillIdValue || config.fontSizeBillId || 7) * 2}px` }}>
+                                            <span style={{ fontSize: `${(config.fontSizeBillIdLabel || config.fontSizeBillId || 7) * 2}px` }}>เลขที่:</span>
+                                            <span className="font-bold">{printingReceipt.id?.substring(0, 14)}</span>
+                                        </div>
+                                    )}
+                                    {config.showSelectedDate !== false && (
+                                        <div className="flex justify-between" style={{ fontSize: `${(config.fontSizeDateTimeValue || config.fontSizeDateTime || 7) * 2}px` }}>
+                                            <span style={{ fontSize: `${(config.fontSizeDateTimeLabel || config.fontSizeDateTime || 7) * 2}px` }}>{(config.labels?.selectedDate || 'วันที่ทำรายการ')}:</span>
+                                            <span className="font-bold">{formatSelectedDate(printingReceipt, 'dd/MM/yyyy')}</span>
+                                        </div>
+                                    )}
+                                    {config.showRecordingTime !== false && (
+                                        <div className="flex justify-between" style={{ fontSize: `${(config.fontSizeDateTimeValue || config.fontSizeDateTime || 7) * 2}px` }}>
+                                            <span style={{ fontSize: `${(config.fontSizeDateTimeLabel || config.fontSizeDateTime || 7) * 2}px` }}>{(config.labels?.recordingTime || 'เวลาบันทึก')}:</span>
+                                            <span className="font-bold">{formatRecordingDate(printingReceipt, 'dd/MM/yyyy HH:mm')}</span>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
                             {/* Farmer Info */}
                             {config.showFarmerName !== false && (
-                                <div className="mb-3 flex items-baseline gap-1">
-                                    <span style={{ fontSize: `${(config.fontSizeFarmerNameLabel || 9) * 2}px` }}>ชื่อลูกค้า: </span>
-                                    <h2 style={{ fontSize: `${(config.fontSizeFarmerNameValue || config.fontSizeFarmerName || 10) * 2}px` }} className="font-bold">{printingReceipt.farmerName || 'ลูกค้าทั่วไป'}</h2>
+                                <div className="mb-3">
+                                    <div className="flex items-baseline gap-1">
+                                        <span style={{ fontSize: `${(config.fontSizeFarmerNameLabel || 9) * 2}px` }}>ชื่อลูกค้า: </span>
+                                        <h2 style={{ fontSize: `${(config.fontSizeFarmerNameValue || config.fontSizeFarmerName || 10) * 2}px` }} className="font-bold">{printingReceipt.farmerName || 'ลูกค้าทั่วไป'}</h2>
+                                    </div>
+                                    {(config.showFscCode !== false && fscId) && (
+                                        <div style={{ fontSize: `${((config.fontSizeFarmerNameValue || config.fontSizeFarmerName || 10) - 2) * 2}px` }} className="font-mono text-gray-700 leading-tight mt-0.5">
+                                            <span>{(config.labels?.fscCode || 'รหัส FSC')}: </span>
+                                            <span className="font-bold">{fscId}</span>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -187,12 +207,12 @@ const HistoryPrintTemplates = ({
                                 <div className="py-2 border-t-2 border-black my-2 space-y-1">
                                     <div style={{ fontSize: `${(config.fontSizeFarmerSplitLabel || config.fontSizeSplit || 9) * 2}px` }} className="flex justify-between items-center font-bold">
                                         <span>{labels.farmerSplit} ({100 - (Number(printingReceipt.empPct ?? printingReceipt.emp_pct ?? printingReceipt.employee_percent ?? 0))}%)</span>
-                                        <span style={{ fontSize: `${(config.fontSizeFarmerSplitValue || config.fontSizeSplit + 2 || 11) * 2}px` }} className="font-bold">{Math.floor(Number(printingReceipt.farmerTotal ?? printingReceipt.farmer_total ?? (Number(printingReceipt.total) * (100 - (Number(printingReceipt.empPct ?? printingReceipt.emp_pct ?? printingReceipt.employee_percent ?? 0))) / 100))).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                        <span style={{ fontSize: `${(config.fontSizeFarmerSplitValue || config.fontSizeSplit + 2 || 11) * 2}px`, paddingRight: '5px' }} className="font-bold text-right ml-auto pr-1">{Math.floor(Number(printingReceipt.farmerTotal ?? printingReceipt.farmer_total ?? (Number(printingReceipt.total) * (100 - (Number(printingReceipt.empPct ?? printingReceipt.emp_pct ?? printingReceipt.employee_percent ?? 0))) / 100))).toLocaleString(undefined, { minimumFractionDigits: 0 })}{'\u00A0'}</span>
                                     </div>
                                     {Number(printingReceipt.empPct ?? printingReceipt.emp_pct ?? printingReceipt.employee_percent ?? 0) > 0 && (
                                         <div style={{ fontSize: `${(config.fontSizeEmployeeSplitLabel || config.fontSizeSplit - 1 || 8) * 2}px` }} className="flex justify-between items-center opacity-80">
                                             <span>{labels.employeeSplit} ({Number(printingReceipt.empPct ?? printingReceipt.emp_pct ?? printingReceipt.employee_percent ?? 0)}%)</span>
-                                            <span style={{ fontSize: `${(config.fontSizeEmployeeSplitValue || config.fontSizeSplit || 9) * 2}px` }} className="font-bold">{Math.floor(Number(printingReceipt.employeeTotal ?? printingReceipt.employee_total ?? (Number(printingReceipt.total) * (Number(printingReceipt.empPct ?? printingReceipt.emp_pct ?? printingReceipt.employee_percent ?? 0)) / 100))).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                            <span style={{ fontSize: `${(config.fontSizeEmployeeSplitValue || config.fontSizeSplit || 9) * 2}px`, paddingRight: '5px' }} className="font-bold text-right ml-auto pr-1">{Math.floor(Number(printingReceipt.employeeTotal ?? printingReceipt.employee_total ?? (Number(printingReceipt.total) * (Number(printingReceipt.empPct ?? printingReceipt.emp_pct ?? printingReceipt.employee_percent ?? 0)) / 100))).toLocaleString(undefined, { minimumFractionDigits: 0 })}{'\u00A0'}</span>
                                         </div>
                                     )}
                                 </div>
@@ -209,13 +229,13 @@ const HistoryPrintTemplates = ({
                             <div className="border-t-4 border-double border-black py-2 mt-2">
                                 <div className="flex justify-between items-center">
                                     <span style={{ fontSize: `${(config.fontSizeTotalLabel || 10) * 2}px` }} className="font-bold uppercase">ยอดรวมสุทธิ</span>
-                                    <span style={{ fontSize: `${(config.fontSizeTotalValue || 20) * 2}px` }} className="font-bold">{Math.floor(Number(printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                                    <span style={{ fontSize: `${(config.fontSizeTotalValue || 20) * 2}px`, paddingRight: '5px' }} className="font-bold text-right ml-auto pr-1">{Math.floor(Number(printingReceipt.total)).toLocaleString(undefined, { minimumFractionDigits: 0 })}{'\u00A0'}</span>
                                 </div>
                             </div>
 
                             {/* Footer Message */}
                             <div className="text-center mt-4 border-t border-black pt-2">
-                                <p style={{ fontSize: `${(config.fontSizeFooterText || 8) * 2}px` }} className="font-bold">{config.footerText || '=== ขอบคุณที่ใช้บริการ ==='}</p>
+                                <p style={{ fontSize: `${(config.fontSizeFooterText || 8) * 1.35}px` }} className="font-bold">{config.footerText || '=== ขอบคุณที่ใช้บริการ ==='}</p>
                             </div>
                         </div>
                     )
@@ -245,7 +265,7 @@ const HistoryPrintTemplates = ({
 
                     const config = resolveConfig() || { 
                         showLogo: true, showStoreName: true, showAddress: true, showPhone: true, 
-                        showBillType: true, showBillId: true, showDateTime: true, showFarmerName: true, 
+                        showBillType: true, showBillId: true, showDateTime: true, showSelectedDate: true, showRecordingTime: true, showFarmerName: true, 
                         showRawWeight: true, showNetWeight: true, showDrc: true, 
                         showDryWeight: true, showActualPrice: true,
                         footerText: '=== ขอบคุณที่ใช้บริการ ===',
@@ -310,10 +330,18 @@ const HistoryPrintTemplates = ({
                                             <span style={{ fontSize: `${(config.fontSizeBillIdLabel || 7) * 1.5}px` }}>เลขที่บิล:</span>
                                             <span style={{ fontSize: `${(config.fontSizeBillIdValue || 7) * 1.5}px` }}>{printingSellRecord.id}</span>
                                         </div>}
-                                        {config.showDateTime !== false && <div className="flex justify-between border-b border-black">
-                                            <span style={{ fontSize: `${(config.fontSizeDateTimeLabel || 7) * 1.5}px` }}>วันที่ขาย:</span>
-                                            <span style={{ fontSize: `${(config.fontSizeDateTimeValue || 7) * 1.5}px` }}>{formatReceiptDate(printingSellRecord, 'dd MMMM yyyy')}</span>
-                                        </div>}
+                                        {config.showSelectedDate !== false && (
+                                            <div className="flex justify-between border-b border-black">
+                                                <span style={{ fontSize: `${(config.fontSizeDateTimeLabel || 7) * 1.5}px` }}>{(config.labels?.selectedDate || 'วันที่ทำรายการ')}:</span>
+                                                <span style={{ fontSize: `${(config.fontSizeDateTimeValue || 7) * 1.5}px` }}>{formatSelectedDate(printingSellRecord, 'dd MMMM yyyy')}</span>
+                                            </div>
+                                        )}
+                                        {config.showRecordingTime !== false && (
+                                            <div className="flex justify-between border-b border-black">
+                                                <span style={{ fontSize: `${(config.fontSizeDateTimeLabel || 7) * 1.5}px` }}>{(config.labels?.recordingTime || 'เวลาบันทึก')}:</span>
+                                                <span style={{ fontSize: `${(config.fontSizeDateTimeValue || 7) * 1.5}px` }}>{formatRecordingDate(printingSellRecord, 'dd MMMM yyyy HH:mm')}</span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between border-b border-black opacity-30 italic"><span>วันที่พิมพ์ซ้ำ:</span><span>{format(new Date(), 'dd/MM/yyyy HH:mm')}</span></div>
                                     </div>
                                 </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard,
     Droplets,
@@ -24,10 +24,13 @@ import {
     Clock,
     ShieldCheck,
     History,
-    ShieldAlert
+    ShieldAlert,
+    Tv,
+    Maximize2,
+    Minimize2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { fetchNotificationStats, adminFetchAllMembers, clearAllCache } from '../services/apiService';
+import { fetchNotificationStats, adminFetchAllMembers, clearAllCache, fetchTeamMembers } from '../services/apiService';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -42,18 +45,28 @@ const StoreSwitcher = () => {
     const isSuperAdmin = user?.role?.toLowerCase() === 'super_admin' || 
                         user?.email === 'narapong.an@gmail.com' || 
                         user?.username === 'narapong.an';
+    const isOwner = user?.role?.toLowerCase() === 'owner';
 
     useEffect(() => {
-        if (!isSuperAdmin) return;
+        if (!isSuperAdmin && !isOwner) return;
         
         const loadStores = async () => {
             setIsLoading(true);
             try {
-                const res = await adminFetchAllMembers();
-                if (res.status === 'success') {
-                    // Filter for users who are 'owner' (stores)
-                    const ownerStores = res.members.filter(m => m.id !== user.id);
-                    setStores(ownerStores);
+                if (isSuperAdmin) {
+                    const res = await adminFetchAllMembers();
+                    if (res.status === 'success') {
+                        // Filter for users who are 'owner' (stores)
+                        const ownerStores = res.members.filter(m => m.id !== user.id);
+                        setStores(ownerStores);
+                    }
+                } else if (isOwner) {
+                    const res = await fetchTeamMembers();
+                    if (Array.isArray(res)) {
+                        // Filter out the owner themselves, leaving team members (acting as branches)
+                        const staffMembers = res.filter(m => m.id !== user.id);
+                        setStores(staffMembers);
+                    }
                 }
             } catch (err) {
                 console.error('Failed to load stores:', err);
@@ -62,9 +75,9 @@ const StoreSwitcher = () => {
             }
         };
         loadStores();
-    }, [isSuperAdmin, user.id]);
+    }, [isSuperAdmin, isOwner, user.id]);
 
-    if (!isSuperAdmin) return null;
+    if (!isSuperAdmin && !isOwner) return null;
 
     return (
         <div className="flex items-center space-x-2 mr-4">
@@ -76,16 +89,20 @@ const StoreSwitcher = () => {
                         setActiveStoreId(val);
                         // Trigger a global refresh to reload data for the new store
                         clearAllCache();
-                        toast.success(val ? `สลับไปยังร้าน: ${stores.find(s => s.id === val)?.store_name || 'รหัส ' + val}` : 'กลับสู่ร้านหลัก');
+                        const selectedStore = stores.find(s => s.id === val);
+                        const storeDisplayName = selectedStore?.store_name || selectedStore?.username || selectedStore?.email?.split('@')[0] || 'รหัส ' + val;
+                        toast.success(val ? `สลับไปยังสาขา: ${storeDisplayName}` : 'กลับสู่ร้านหลัก');
                         setTimeout(() => window.location.reload(), 500);
                     }}
                     className={`pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold shadow-sm focus:ring-2 focus:ring-rubber-500 transition-all appearance-none cursor-pointer
                         ${activeStoreId ? 'text-rubber-600 border-rubber-200 bg-rubber-50/30' : 'text-gray-600 hover:border-gray-300'}`}
                 >
-                    <option value="">🏠 ร้านหลัก (Default)</option>
+                    <option value="">🏠 {user?.storeName || 'ร้านหลัก'}</option>
                     {stores.map(store => (
                         <option key={store.id} value={store.id}>
-                            🏪 {store.store_name || store.username || store.email}
+                            {isSuperAdmin 
+                                ? `🏪 ${store.store_name || store.username || store.email}`
+                                : `📍 ${store.store_name || store.username || store.email?.split('@')[0]} (${store.email})`}
                         </option>
                     ))}
                 </select>
@@ -100,7 +117,7 @@ const StoreSwitcher = () => {
             {activeStoreId && (
                 <div className="flex items-center px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-black uppercase tracking-wider animate-pulse border border-amber-200 shadow-sm">
                     <ShieldCheck size={12} className="mr-1" />
-                    God Mode
+                    {isSuperAdmin ? 'God Mode' : 'สวมบทบาทสาขา'}
                 </div>
             )}
         </div>
@@ -113,6 +130,7 @@ export const Layout = () => {
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [syncQueueCount, setSyncQueueCount] = useState(0);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
     const { user, logout } = useAuth();
     const navigate = useNavigate();
 
@@ -192,21 +210,41 @@ export const Layout = () => {
         { name: 'แดชบอร์ด', path: '/', icon: <LayoutDashboard size={20} />, roles: ['owner', 'admin', 'staff'] },
         { name: 'รับซื้อน้ำยาง', path: '/buy', icon: <Droplets size={20} />, roles: ['owner', 'admin', 'staff'] },
         { name: 'ขายน้ำยาง', path: '/sell', icon: <Truck size={20} />, roles: ['owner', 'admin', 'staff'] },
-        { name: 'การชำระเงิน', path: '/payments', icon: <Wallet size={20} />, roles: ['owner', 'admin', 'staff'] },
+        { 
+            name: 'การชำระเงิน', 
+            path: '/payments', 
+            icon: <Wallet size={20} />, 
+            roles: ['owner', 'admin', 'staff'],
+            subItems: [
+                { name: 'ประวัติจ่ายเงิน', path: '/payments' },
+                { name: 'ระบบเงินกู้ & หนี้สิน', path: '/loans' }
+            ]
+        },
         { name: 'ค่าใช้จ่าย', path: '/expenses', icon: <Wallet size={20} />, roles: ['owner', 'admin', 'staff'] },
-        { name: 'โปรโมชั่น', path: '/promotions', icon: <Gift size={20} />, roles: ['owner'] },
+        { name: 'โปรโมชั่น', path: '/promotions', icon: <Gift size={20} />, roles: ['owner', 'staff'] },
+        { 
+            name: 'ระบบจัดการคิว', 
+            path: '/queue', 
+            icon: <Tv size={20} />, 
+            roles: ['owner', 'admin', 'staff'],
+            subItems: [
+                { name: 'จุดที่ 1: รับชั่งยางสด', path: '/queue/station-1' },
+                { name: 'จุดที่ 2: ป้อนผลตรวจ %DRC', path: '/queue/station-2' },
+                { name: 'คิวบริการทั่วไป & คิดเงิน', path: '/queue/services' }
+            ]
+        },
         { 
             name: 'รายงาน', 
             path: '/report', 
             icon: <BarChart3 size={20} />, 
-            roles: ['owner'],
+            roles: ['owner', 'staff'],
             subItems: [
                 { name: 'รายงานสรุปยอดรายวัน', path: '/report/daily-summary' },
                 { name: 'รายงานคาดการณ์ประจำวัน', path: '/report/daily-forecast' },
                 { name: 'รายงานปรับปรุงสต็อก', path: '/report/stock-adjustments' },
                 { name: 'รายงานยอดขายประจำเดือน', path: '/report/monthly' },
                 { name: 'รายงานประวัติการซื้อ-ขาย', path: '/report/transaction-history' },
-                { name: 'บัญชีสำหรับสรรพากร', path: '/tax-report' }
+                { name: 'ระบบบัญชี & ภาษีสรรพากร', path: '/tax-report' }
             ]
         },
         { 
@@ -235,11 +273,12 @@ export const Layout = () => {
             name: 'ตั้งค่าร้าน', 
             path: '/settings', 
             icon: <Settings size={20} />, 
-            roles: ['owner'],
+            roles: ['owner', 'staff'],
             subItems: [
                 { name: 'ข้อมูลร้านค้า', path: '/settings' },
                 { name: 'จัดการข้อมูล (Import/Export)', path: '/import' },
-                { name: 'บันทึกกิจกรรม', path: '/activity-log' }
+                { name: 'บันทึกกิจกรรม', path: '/activity-log' },
+                { name: 'คิวซิงค์ออฟไลน์', path: '/offline-sync' }
             ]
         },
     ];
@@ -273,14 +312,15 @@ export const Layout = () => {
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
             {/* Mobile sidebar overlay */}
-            {sidebarOpen && (
+            {!isFullscreen && sidebarOpen && (
                 <div
                     className="fixed inset-0 z-20 bg-black/50 lg:hidden print:hidden"
                     onClick={() => setSidebarOpen(false)}
                 />
             )}
 
-            {/* Sidebar */}
+            {/* Sidebar - hidden in fullscreen mode */}
+            {!isFullscreen && (
             <aside
                 className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 flex flex-col print:hidden
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
@@ -354,6 +394,11 @@ export const Layout = () => {
                                                             {pendingCount}
                                                         </span>
                                                     )}
+                                                    {sub.path === '/offline-sync' && syncQueueCount > 0 && (
+                                                        <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[9px] font-black rounded-full shadow-sm ml-2">
+                                                            {syncQueueCount}
+                                                        </span>
+                                                    )}
                                                 </NavLink>
                                             );
                                         })}
@@ -422,6 +467,7 @@ export const Layout = () => {
                     </button>
                 </div>
             </aside>
+            )}
 
             {/* Main content */}
             <div className="flex flex-col flex-1 overflow-hidden">
@@ -484,7 +530,8 @@ export const Layout = () => {
                     })()
                 )}
 
-                {/* Top Header */}
+                {/* Top Header - hidden in fullscreen mode */}
+                {!isFullscreen && (
                 <header className="flex items-center justify-between h-16 px-4 bg-white border-b border-gray-200 lg:px-8 print:hidden">
                     <button
                         onClick={() => setSidebarOpen(true)}
@@ -493,11 +540,17 @@ export const Layout = () => {
                         <Menu size={24} />
                     </button>
 
-                    <div className="flex items-center lg:hidden">
-                        <span className="text-lg font-bold text-rubber-600">RubberTrade</span>
+                    <div className="flex items-center space-x-2">
+                        <span className="text-lg font-bold text-rubber-600 lg:hidden">RubberTrade</span>
+                        <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-rubber-50 text-rubber-700 rounded-full border border-rubber-200 lg:hidden">
+                            v1.3.9
+                        </span>
                     </div>
 
-                    <div className="flex items-center ml-auto space-x-4">
+                    <div className="flex items-center ml-auto space-x-3">
+                        <span className="px-2.5 py-1 text-xs font-mono font-bold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200 shadow-xs hidden md:inline-flex items-center">
+                            v1.3.9
+                        </span>
                         <StoreSwitcher />
                         <GlobalSearch />
                         <button 
@@ -606,11 +659,24 @@ export const Layout = () => {
                         </div>
                     </div>
                 </header>
+                )}
 
                 {/* Main section */}
-                <main className="flex-1 overflow-y-auto bg-gray-50 p-4 lg:p-8 print:p-0 print:bg-white">
+                <main className={`flex-1 overflow-y-auto bg-gray-50 print:p-0 print:bg-white ${isFullscreen ? 'p-2' : 'p-4 lg:p-8'}`}>
                     <Outlet />
                 </main>
+
+                {/* Fullscreen toggle button */}
+                <button
+                    onClick={() => setIsFullscreen(prev => !prev)}
+                    className={`fixed z-50 p-2.5 rounded-full shadow-lg border transition-all duration-200 print:hidden
+                        ${isFullscreen 
+                            ? 'bottom-4 right-4 bg-gray-800 text-white border-gray-700 hover:bg-gray-700' 
+                            : 'bottom-4 right-4 bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:text-rubber-600'}`}
+                    title={isFullscreen ? 'ออกจากโหมดเต็มจอ' : 'เปิดโหมดเต็มจอ'}
+                >
+                    {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+                </button>
             </div>
         </div>
     );

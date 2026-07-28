@@ -2,13 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { 
     Leaf, RefreshCw, Plus, Phone, MapPin, Database, Edit2, Trash2, 
-    UserCircle, Percent, X, Save, Search 
+    UserCircle, Percent, X, Save, Search, Clock, Filter, AlertTriangle, ShoppingBag
 } from 'lucide-react';
+import { differenceInDays, format, parseISO } from 'date-fns';
+import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
+import { db } from '../../services/db';
 import { 
     fetchFarmers, 
     fetchEmployees, 
     fetchMemberTypes, 
+    fetchBuyRecords,
     addFarmer, 
     addEmployee, 
     deleteRecord,
@@ -26,6 +30,11 @@ export const UserManagement = () => {
     const [farmers, setFarmers] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [memberTypes, setMemberTypes] = useState([]);
+    const [buys, setBuys] = useState([]);
+
+    // Activity Filter State
+    const [activityFilter, setActivityFilter] = useState('all'); // 'all', 'active', 'inactive_30', 'inactive_60', 'never', 'custom_days'
+    const [customDaysThreshold, setCustomDaysThreshold] = useState(30);
 
     // UI States
     const [showFarmerForm, setShowFarmerForm] = useState(false);
@@ -59,14 +68,22 @@ export const UserManagement = () => {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [fRes, eRes, mtRes] = await Promise.all([
+            // First load local buys from Dexie if available
+            try {
+                const localBuys = await db.buys.toArray();
+                if (localBuys && localBuys.length > 0) setBuys(localBuys);
+            } catch (e) { console.error(e); }
+
+            const [fRes, eRes, mtRes, bRes] = await Promise.all([
                 fetchFarmers(),
                 fetchEmployees(),
-                fetchMemberTypes()
+                fetchMemberTypes(),
+                fetchBuyRecords()
             ]);
             setFarmers(Array.isArray(fRes) ? fRes : []);
             setEmployees(Array.isArray(eRes) ? eRes : []);
             setMemberTypes(Array.isArray(mtRes) ? mtRes : []);
+            if (Array.isArray(bRes)) setBuys(bRes);
         } catch (error) {
             toast.error('โหลดข้อมูลล้มเหลว');
         } finally {
@@ -191,6 +208,88 @@ export const UserManagement = () => {
         }
     };
 
+    // Compute Farmer Last Buy Activity and Days Inactive
+    const farmerActivityMap = React.useMemo(() => {
+        const map = {};
+        const today = new Date();
+
+        buys.forEach(b => {
+            if (!b.farmerId && !b.farmerName) return;
+            const key = b.farmerId || b.farmerName;
+            const bDate = b.date ? new Date(b.date) : (b.timestamp ? new Date(b.timestamp) : null);
+            if (!bDate || isNaN(bDate.getTime())) return;
+
+            if (!map[key] || bDate > map[key].lastDate) {
+                map[key] = {
+                    lastDate: bDate,
+                    count: (map[key]?.count || 0) + 1
+                };
+            } else {
+                map[key].count += 1;
+            }
+        });
+
+        // Resolve map entries for all farmers by id or name
+        const result = {};
+        farmers.forEach(f => {
+            const entry = map[f.id] || map[f.name];
+            if (entry && entry.lastDate) {
+                const daysAgo = differenceInDays(today, entry.lastDate);
+                result[f.id] = {
+                    lastDate: entry.lastDate,
+                    daysAgo: Math.max(0, daysAgo),
+                    count: entry.count
+                };
+            } else {
+                result[f.id] = { lastDate: null, daysAgo: null, count: 0 };
+            }
+        });
+
+        return result;
+    }, [buys, farmers]);
+
+    // Statistics for Inactive Farmers
+    const activityStats = React.useMemo(() => {
+        let active = 0;
+        let inactive30 = 0;
+        let inactive60 = 0;
+        let never = 0;
+
+        farmers.forEach(f => {
+            const act = farmerActivityMap[f.id];
+            if (!act || act.daysAgo === null) {
+                never++;
+            } else if (act.daysAgo <= 30) {
+                active++;
+            } else if (act.daysAgo <= 60) {
+                inactive30++;
+            } else {
+                inactive60++;
+            }
+        });
+
+        return { active, inactive30, inactive60, never, total: farmers.length };
+    }, [farmers, farmerActivityMap]);
+
+    // Filtered Farmers List
+    const filteredFarmers = React.useMemo(() => {
+        return farmers.filter(f => {
+            const matchesSearch = f.name?.toLowerCase().includes(farmerSearch.toLowerCase()) || 
+                f.phone?.includes(farmerSearch) ||
+                f.id?.toLowerCase().includes(farmerSearch.toLowerCase());
+            
+            if (!matchesSearch) return false;
+
+            const act = farmerActivityMap[f.id];
+            if (activityFilter === 'active') return act && act.daysAgo !== null && act.daysAgo <= 30;
+            if (activityFilter === 'inactive_30') return act && act.daysAgo !== null && act.daysAgo > 30 && act.daysAgo <= 60;
+            if (activityFilter === 'inactive_60') return act && act.daysAgo !== null && act.daysAgo > 60;
+            if (activityFilter === 'never') return !act || act.daysAgo === null;
+            if (activityFilter === 'custom_days') return act && act.daysAgo !== null && act.daysAgo >= Number(customDaysThreshold);
+            return true;
+        });
+    }, [farmers, farmerSearch, activityFilter, farmerActivityMap, customDaysThreshold]);
+
     return (
         <div className="space-y-6">
             {/* Sub-Tabs */}
@@ -243,24 +342,104 @@ export const UserManagement = () => {
             {/* ===================== FARMERS TAB ===================== */}
             {activeSubTab === 'farmers' && (
                 <section className="animate-in fade-in duration-300">
+                    {/* Activity Status Summary Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                        <div 
+                            onClick={() => setActivityFilter('active')}
+                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${activityFilter === 'active' ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-500/20' : 'bg-white border-gray-100 hover:border-gray-200'}`}
+                        >
+                            <div className="flex items-center justify-between text-xs font-bold text-emerald-700 mb-1">
+                                <span className="flex items-center"><div className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></div>มาขายปกติ (≤30 วัน)</span>
+                                <span className="font-mono">{activityStats.active}</span>
+                            </div>
+                            <div className="text-[11px] text-gray-400">เกษตรกรที่มาขายน้ำยางสม่ำเสมอ</div>
+                        </div>
+
+                        <div 
+                            onClick={() => setActivityFilter('inactive_30')}
+                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${activityFilter === 'inactive_30' ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-500/20' : 'bg-white border-gray-100 hover:border-gray-200'}`}
+                        >
+                            <div className="flex items-center justify-between text-xs font-bold text-amber-700 mb-1">
+                                <span className="flex items-center"><Clock size={13} className="mr-1 text-amber-500" />ขาดติดต่อ (31-60 วัน)</span>
+                                <span className="font-mono">{activityStats.inactive30}</span>
+                            </div>
+                            <div className="text-[11px] text-gray-400">ไม่ได้มาขายมากกว่า 1 เดือน</div>
+                        </div>
+
+                        <div 
+                            onClick={() => setActivityFilter('inactive_60')}
+                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${activityFilter === 'inactive_60' ? 'bg-red-50 border-red-300 ring-2 ring-red-500/20' : 'bg-white border-gray-100 hover:border-gray-200'}`}
+                        >
+                            <div className="flex items-center justify-between text-xs font-bold text-red-700 mb-1">
+                                <span className="flex items-center"><AlertTriangle size={13} className="mr-1 text-red-500" />ไม่ได้มาขาย &gt;60 วัน</span>
+                                <span className="font-mono">{activityStats.inactive60}</span>
+                            </div>
+                            <div className="text-[11px] text-gray-400">ขาดการติดต่อนานเกิน 2 เดือน</div>
+                        </div>
+
+                        <div 
+                            onClick={() => setActivityFilter('never')}
+                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${activityFilter === 'never' ? 'bg-gray-100 border-gray-300 ring-2 ring-gray-400/20' : 'bg-white border-gray-100 hover:border-gray-200'}`}
+                        >
+                            <div className="flex items-center justify-between text-xs font-bold text-gray-600 mb-1">
+                                <span className="flex items-center"><ShoppingBag size={13} className="mr-1 text-gray-400" />ยังไม่เคยขาย</span>
+                                <span className="font-mono">{activityStats.never}</span>
+                            </div>
+                            <div className="text-[11px] text-gray-400">ไม่มีประวัติรายการรับซื้อ</div>
+                        </div>
+                    </div>
+
                     <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                        <div className="relative w-full md:w-72">
-                            <input
-                                type="text"
-                                placeholder="ค้นหาชื่อหรือเบอร์โทร..."
-                                value={farmerSearch}
-                                onChange={(e) => setFarmerSearch(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-rubber-500 focus:border-rubber-500 text-sm shadow-sm"
-                            />
-                            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                            {farmerSearch && (
-                                <button 
-                                    onClick={() => setFarmerSearch('')}
-                                    className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto flex-1">
+                            <div className="relative w-full sm:w-64">
+                                <input
+                                    type="text"
+                                    placeholder="ค้นหาชื่อหรือเบอร์โทร..."
+                                    value={farmerSearch}
+                                    onChange={(e) => setFarmerSearch(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-rubber-500 focus:border-rubber-500 text-sm shadow-sm"
+                                />
+                                <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                                {farmerSearch && (
+                                    <button 
+                                        onClick={() => setFarmerSearch('')}
+                                        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Status Filter Selector */}
+                            <div className="flex items-center space-x-2">
+                                <select
+                                    value={activityFilter}
+                                    onChange={(e) => setActivityFilter(e.target.value)}
+                                    className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-semibold bg-white text-gray-700 shadow-sm focus:ring-rubber-500 focus:border-rubber-500 cursor-pointer"
                                 >
-                                    <X size={16} />
-                                </button>
-                            )}
+                                    <option value="all">🌐 แสดงทุกสถานะ ({activityStats.total} คน)</option>
+                                    <option value="active">🟢 มาขายปกติ (≤30 วัน) [{activityStats.active} คน]</option>
+                                    <option value="inactive_30">🟡 ขาดการติดต่อ (31-60 วัน) [{activityStats.inactive30} คน]</option>
+                                    <option value="inactive_60">🔴 ขาดการติดต่อนาน (&gt;60 วัน) [{activityStats.inactive60} คน]</option>
+                                    <option value="never">⚪ ยังไม่เคยมีประวัติขาย [{activityStats.never} คน]</option>
+                                    <option value="custom_days">⏱️ กำหนดจำนวนวันขาดติดต่อเอง...</option>
+                                </select>
+
+                                {activityFilter === 'custom_days' && (
+                                    <div className="flex items-center space-x-1.5 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl animate-in fade-in duration-200">
+                                        <span className="text-xs font-bold text-amber-800">ขาดขาย ≥</span>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="999"
+                                            value={customDaysThreshold}
+                                            onChange={(e) => setCustomDaysThreshold(Math.max(1, Number(e.target.value)))}
+                                            className="w-16 px-2 py-1 bg-white border border-amber-300 rounded-lg text-sm font-bold text-amber-900 text-center focus:ring-2 focus:ring-amber-500"
+                                        />
+                                        <span className="text-xs font-bold text-amber-800">วัน</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="flex space-x-2 w-full md:w-auto">
                             <button
@@ -350,11 +529,45 @@ export const UserManagement = () => {
                         </div>
                     )}
 
+                    {/* Report Summary Banner */}
+                    {activityFilter !== 'all' && (
+                        <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-4 mb-4 flex items-center justify-between animate-in fade-in">
+                            <div className="flex items-center space-x-3">
+                                <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl">
+                                    <AlertTriangle size={20} />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-bold text-amber-900">
+                                        {activityFilter === 'custom_days' 
+                                            ? `รายงานสรุปเกษตรกรที่ไม่ได้มาขายน้ำยางเกิน ${customDaysThreshold} วัน`
+                                            : activityFilter === 'inactive_30'
+                                            ? 'รายงานสรุปเกษตรกรที่ขาดการติดต่อ 31 - 60 วัน'
+                                            : activityFilter === 'inactive_60'
+                                            ? 'รายงานสรุปเกษตรกรที่ขาดการติดต่อนานเกิน 60 วัน'
+                                            : activityFilter === 'never'
+                                            ? 'รายงานสรุปเกษตรกรที่ยังไม่เคยมีประวัติขาย'
+                                            : 'รายงานสรุปเกษตรกรที่มาขายปกติ'}
+                                    </h4>
+                                    <p className="text-xs text-amber-700 mt-0.5">
+                                        พบทั้งหมด <strong className="font-bold text-amber-900">{filteredFarmers.length} คน</strong> จากเกษตรกรในระบบ {farmers.length} คน
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => window.print()}
+                                className="px-3.5 py-2 bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center space-x-1.5 cursor-pointer"
+                            >
+                                <span>🖨️ พิมพ์รายงานสรุป</span>
+                            </button>
+                        </div>
+                    )}
+
                     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50 font-medium text-gray-500 text-[11px] uppercase tracking-wider">
                                 <tr>
                                     <th className="px-6 py-4 text-left">เกษตรกร</th>
+                                    <th className="px-6 py-4 text-left">ประวัติขายล่าสุด</th>
                                     <th className="px-6 py-4 text-left">สถานะ LINE</th>
                                     <th className="px-6 py-4 text-left">ติดต่อ / ที่อยู่</th>
                                     <th className="px-6 py-4 text-left text-center">รหัส FSC / ประเภท</th>
@@ -362,13 +575,9 @@ export const UserManagement = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 text-sm">
-                                {farmers
-                                    .filter(f => 
-                                        f.name?.toLowerCase().includes(farmerSearch.toLowerCase()) || 
-                                        f.phone?.includes(farmerSearch) ||
-                                        f.id?.toLowerCase().includes(farmerSearch.toLowerCase())
-                                    )
-                                    .map(f => (
+                                {filteredFarmers.map(f => {
+                                    const act = farmerActivityMap[f.id];
+                                    return (
                                     <tr key={f.id} className={`hover:bg-rubber-50/30 transition-colors group ${editingFarmer?.id === f.id ? 'bg-amber-50/30' : ''}`}>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center space-x-3">
@@ -384,6 +593,38 @@ export const UserManagement = () => {
                                                     <div className="text-[10px] text-gray-400 font-mono">ID: {f.id}</div>
                                                 </div>
                                             </div>
+                                        </td>
+                                        {/* Last Purchase Activity Column */}
+                                        <td className="px-6 py-4">
+                                            {act && act.lastDate ? (
+                                                <div className="flex flex-col space-y-1">
+                                                    <div className="flex items-center space-x-1.5">
+                                                        {act.daysAgo <= 30 ? (
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-1"></span>
+                                                                {act.daysAgo === 0 ? 'วันนี้' : `${act.daysAgo} วันที่แล้ว`}
+                                                            </span>
+                                                        ) : act.daysAgo <= 60 ? (
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                                                                <Clock size={11} className="mr-1 text-amber-600" />
+                                                                {act.daysAgo} วันที่แล้ว
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 animate-pulse">
+                                                                <AlertTriangle size={11} className="mr-1 text-red-600" />
+                                                                ไม่ได้มา {act.daysAgo} วันแล้ว
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[11px] text-gray-500">
+                                                        {format(act.lastDate, 'd MMM yyyy', { locale: th })} ({act.count} รายการ)
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-400 italic border border-gray-200">
+                                                    ยังไม่มีประวัติ
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             {f.lineName ? (
@@ -443,13 +684,14 @@ export const UserManagement = () => {
                                             </div>
                                         </td>
                                     </tr>
-                                ))}
-                                {farmers.length === 0 && !loading && (
+                                    );
+                                })}
+                                {filteredFarmers.length === 0 && !loading && (
                                     <tr>
-                                        <td colSpan="5" className="px-6 py-12 text-center text-gray-400">
+                                        <td colSpan="6" className="px-6 py-12 text-center text-gray-400">
                                             <div className="flex flex-col items-center">
                                                 <Leaf size={40} className="mb-2 opacity-20" />
-                                                <p>ยังไม่มีข้อมูลเกษตรกรในระบบ</p>
+                                                <p>ไม่พบข้อมูลเกษตรกรในเงื่อนไขที่เลือก</p>
                                             </div>
                                         </td>
                                     </tr>

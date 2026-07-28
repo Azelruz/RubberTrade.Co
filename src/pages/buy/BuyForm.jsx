@@ -4,11 +4,13 @@ import { truncateOneDecimal } from '../../utils/calculations';
 
 const BuyForm = ({
     register, handleSubmit, onSubmit, watch, setValue, errors,
-    watchRubberType, watchWeight, watchBucketWeight, watchBasePrice, watchBonusDrc, watchFarmerId, watchFarmerName,
+    watchRubberType, watchWeight, watchBucketWeight, watchBasePrice, watchBonusDrc, watchFarmerId, watchFarmerName, watchEnableFsc,
     farmers, employees, memberTypes, settings, selectedFarmer,
     farmerSearch, setFarmerSearch, showFarmerDropdown, setShowFarmerDropdown, farmerDropdownRef,
     submitting, calculateTotal, calculateDryRubber, getEmpPct, setShowCalculator,
-    templateConfig
+    templateConfig,
+    activeQueue, onOpenQueueModal, onClearQueue,
+    farmerDebt, employeeDebt, selectedEmployee
 }) => {
     return (
         <div className="lg:col-span-1">
@@ -19,6 +21,31 @@ const BuyForm = ({
                 </h2>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                    {/* Smart Queue integration button */}
+                    <div className="p-0.5">
+                        {activeQueue ? (
+                            <div className="bg-rubber-50 border border-rubber-100 rounded-xl p-3 flex justify-between items-center text-xs font-bold text-rubber-800">
+                                <span>กำลังใช้งานคิว Q{String(activeQueue.queue_no).padStart(2, '0')} ({activeQueue.farmer_name})</span>
+                                <button 
+                                    type="button" 
+                                    onClick={onClearQueue}
+                                    className="text-xs text-red-500 hover:underline"
+                                >
+                                    ยกเลิกคิวนี้
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={onOpenQueueModal}
+                                className="w-full py-2.5 px-4 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-2 border border-orange-200"
+                            >
+                                <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
+                                <span>ดึงข้อมูลจากจุดคิววัด % แล้ว</span>
+                            </button>
+                        )}
+                    </div>
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">วันที่ <span className="text-red-500">*</span></label>
                         <input 
@@ -231,12 +258,16 @@ const BuyForm = ({
                     </div>
 
                     {farmers.find(f => f.id === watchFarmerId)?.fscId && (
-                        <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between text-amber-800">
+                        <div className={`mb-2 p-2 ${watchEnableFsc !== false ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-gray-50 border-gray-200 text-gray-500'} border rounded-lg flex items-center justify-between transition-colors`}>
                             <div className="flex items-center text-xs font-bold">
-                                <Leaf size={14} className="mr-1.5 text-amber-600" />
-                                🌿 FSC โบนัส
+                                <Leaf size={14} className={`mr-1.5 ${watchEnableFsc !== false ? 'text-amber-600' : 'text-gray-400'}`} />
+                                FSC โบนัส
+                                <label className="inline-flex relative items-center cursor-pointer ml-3">
+                                    <input type="checkbox" className="sr-only peer" {...register('enableFsc')} />
+                                    <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+                                </label>
                             </div>
-                            <span className="text-xs font-black">+{Number(settings.fscBonus || 1).toLocaleString(undefined, { minimumFractionDigits: 1 })} บาท/กก.</span>
+                            <span className={`text-xs font-black ${watchEnableFsc === false ? 'line-through text-gray-400 opacity-50' : ''}`}>+{Number(settings.fscBonus || 1).toLocaleString(undefined, { minimumFractionDigits: 1 })} บาท/กก.</span>
                         </div>
                     )}
 
@@ -256,7 +287,7 @@ const BuyForm = ({
                             <span className="text-sm font-black text-gray-700 font-mono">
                                 ฿{(watchRubberType === 'cup_lump'
                                     ? Number(watchBasePrice || 0)
-                                    : (Number(watchBasePrice || 0) + Number(watchBonusDrc || 0) + (selectedFarmer?.fscId ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0))
+                                    : (Number(watchBasePrice || 0) + Number(watchBonusDrc || 0) + ((watchEnableFsc !== false && selectedFarmer?.fscId) ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0))
                                 ).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.
                             </span>
                         </div>
@@ -266,6 +297,60 @@ const BuyForm = ({
                         <label className="block text-sm font-medium text-gray-700 mb-1">หมายเหตุ</label>
                         <input type="text" placeholder="ข้อมูลเพิ่มเติม..." {...register('note')} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500" />
                     </div>
+
+                    {/* Debt Alert & Deduction Fields - ONLY SHOW if debt > 0 */}
+                    {(farmerDebt > 0 || employeeDebt > 0) && (
+                        <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl space-y-3 mt-4 text-left">
+                            <div className="flex items-center text-orange-800 font-bold text-xs">
+                                <span className="w-2 h-2 rounded-full bg-orange-500 mr-2 animate-ping"></span>
+                                <span>แจ้งเตือนหนี้สินค้างชำระคงเหลือ</span>
+                            </div>
+                            
+                            {farmerDebt > 0 && (
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-xs text-orange-700">
+                                        <span>หนี้สะสมคงเหลือ (ชาวสวน):</span>
+                                        <span className="font-bold">฿{farmerDebt.toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
+                                    </div>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            placeholder="ระบุจำนวนเงินที่หัก..."
+                                            {...register('farmerDeduction', {
+                                                validate: val => !val || parseFloat(val) <= farmerDebt || 'ยอดหักหนี้ต้องไม่เกินยอดหนี้สะสม'
+                                            })}
+                                            className="w-full pl-3 pr-8 py-2 bg-white border border-orange-200 rounded-lg text-xs focus:ring-orange-500 focus:border-orange-500 font-bold text-orange-800"
+                                        />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-orange-500 text-[10px] font-bold">หักหนี้</span>
+                                    </div>
+                                    {errors.farmerDeduction && <p className="text-red-500 text-[10px] font-medium">{errors.farmerDeduction.message}</p>}
+                                </div>
+                            )}
+
+                            {employeeDebt > 0 && selectedEmployee && (
+                                <div className="space-y-1 pt-2 border-t border-orange-200/50">
+                                    <div className="flex justify-between text-xs text-orange-700">
+                                        <span>หนี้สะสมคงเหลือ (ลูกจ้าง - {selectedEmployee.name}):</span>
+                                        <span className="font-bold">฿{employeeDebt.toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
+                                    </div>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            placeholder="ระบุจำนวนเงินที่หัก..."
+                                            {...register('employeeDeduction', {
+                                                validate: val => !val || parseFloat(val) <= employeeDebt || 'ยอดหักหนี้ต้องไม่เกินยอดหนี้สะสม'
+                                            })}
+                                            className="w-full pl-3 pr-8 py-2 bg-white border border-orange-200 rounded-lg text-xs focus:ring-orange-500 focus:border-orange-500 font-bold text-orange-800"
+                                        />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-orange-500 text-[10px] font-bold">หักหนี้</span>
+                                    </div>
+                                    {errors.employeeDeduction && <p className="text-red-500 text-[10px] font-medium">{errors.employeeDeduction.message}</p>}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <div className="bg-rubber-50 p-4 rounded-lg border border-rubber-100 mt-6 text-right">
                         <div className="flex justify-between items-center">
@@ -296,16 +381,36 @@ const BuyForm = ({
                                     <span className="font-bold text-rubber-800">{truncateOneDecimal(calculateDryRubber() || 0).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} กก.</span>
                                 </div>
                             )}
-                            <div className="flex justify-between items-center text-sm text-emerald-700">
-                                <span>{watchRubberType === 'cup_lump' ? 'ยอดสุทธิ' : `เกษตรกร (${100 - getEmpPct()}%)`}:</span>
-                                <span className="font-bold">฿ {truncateOneDecimal((calculateTotal() * (100 - getEmpPct())) / 100).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
-                            </div>
-                            {watchRubberType !== 'cup_lump' && getEmpPct() > 0 && (
-                                <div className="flex justify-between items-center text-sm text-purple-700">
-                                    <span>ลูกจ้าง ({getEmpPct()}%):</span>
-                                    <span className="font-bold">฿ {truncateOneDecimal((calculateTotal() * getEmpPct()) / 100).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
-                                </div>
-                            )}
+                            
+                            {(() => {
+                                const watchFarmerDeduction = parseFloat(watch('farmerDeduction')) || 0;
+                                const watchEmployeeDeduction = parseFloat(watch('employeeDeduction')) || 0;
+                                const farmerGrossShare = (calculateTotal() * (100 - getEmpPct())) / 100;
+                                const employeeGrossShare = (calculateTotal() * getEmpPct()) / 100;
+                                const netFarmerPay = farmerGrossShare - watchFarmerDeduction;
+                                const netEmployeePay = employeeGrossShare - watchEmployeeDeduction;
+                                
+                                return (
+                                    <>
+                                        <div className="flex justify-between items-center text-sm text-emerald-700">
+                                            <span>{watchRubberType === 'cup_lump' ? 'ยอดสุทธิ' : `เกษตรกร (${100 - getEmpPct()}%)`}:</span>
+                                            <span className="font-bold">
+                                                ฿ {truncateOneDecimal(netFarmerPay).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                                {watchFarmerDeduction > 0 ? '*' : ''}
+                                            </span>
+                                        </div>
+                                        {watchRubberType !== 'cup_lump' && getEmpPct() > 0 && (
+                                            <div className="flex justify-between items-center text-sm text-purple-700">
+                                                <span>ลูกจ้าง ({getEmpPct()}%):</span>
+                                                <span className="font-bold">
+                                                    ฿ {truncateOneDecimal(netEmployeePay).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                                    {watchEmployeeDeduction > 0 ? '*' : ''}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()}
                         </div>
                     </div>
                     <button

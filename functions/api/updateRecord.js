@@ -12,19 +12,22 @@ const TABLE_WHITELISTS = {
         'date', 'farmerId', 'farmerName', 'weight', 'drc', 'pricePerKg', 'total', 
         'dryRubber', 'empPct', 'employeeTotal', 'farmerTotal', 'note', 'status', 
         'farmerStatus', 'employeeStatus', 'receiptUrl', 'bucketWeight',
-        'basePrice', 'bonusDrc', 'actualPrice', 'bonusMemberType', 'rubberType'
+        'basePrice', 'bonusDrc', 'actualPrice', 'bonusMemberType', 'rubberType', 'createdBy'
     ],
     'sells': [
         'date', 'buyerName', 'factoryId', 'employeeId', 'truckId', 'truckInfo',
         'weight', 'drc', 'pricePerKg', 'lossWeight', 'total', 
         'profitShareAmount', 'receiptUrl', 'note', 'rubberType'
     ],
-    'expenses': ['date', 'title', 'category', 'amount', 'note', 'status'],
+    'expenses': ['date', 'title', 'category', 'amount', 'note', 'status', 'tax_type', 'tax_amount'],
     'wages': ['date', 'staffId', 'type', 'amount', 'status', 'note'],
     'promotions': ['title', 'description', 'isActive'],
     'trucks': ['plateNo', 'factoryId'],
     'factories': ['name', 'code'],
-    'chemical_usage': ['date', 'totalFreshWeight']
+    'chemical_usage': ['date', 'totalFreshWeight'],
+    'loans': ['remainingAmount'],
+    'service_catalog': ['name', 'unit_type', 'price_per_unit', 'description', 'is_active'],
+    'service_queues': ['service_no', 'farmer_id', 'customer_name', 'phone', 'service_id', 'service_name', 'unit_type', 'unit_price', 'quantity', 'total_amount', 'appointment_date', 'staff_id', 'staff_name', 'location_note', 'status', 'payment_status', 'payment_method', 'paid_at']
 };
 
 async function handleUpdate(context) {

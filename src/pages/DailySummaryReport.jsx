@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { format, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { 
@@ -16,10 +17,12 @@ import {
 import { truncateOneDecimal } from '../utils/calculations';
 
 const DailySummaryReport = () => {
+    const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [activeTab, setActiveTab] = useState('buys_latex'); // buys_latex, buys_cup_lump, sells, expenses
+    const [expandedCreator, setExpandedCreator] = useState(null);
     
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
@@ -86,6 +89,41 @@ const DailySummaryReport = () => {
             wages: filteredWages
         };
     }, [buys, sells, expenses, wages, startDate, endDate]);
+
+    const teamSummary = useMemo(() => {
+        const groups = {};
+        
+        dailyData.buys.forEach(b => {
+            const creator = b.createdBy || 'ไม่ระบุ (หรือเจ้าของร้าน)';
+            if (!groups[creator]) {
+                groups[creator] = {
+                    creator,
+                    billsCount: 0,
+                    totalWeight: 0,
+                    totalNetWeight: 0,
+                    totalDryRubber: 0,
+                    totalAmount: 0,
+                    records: []
+                };
+            }
+            const netW = Number(recNetWeight(b));
+            groups[creator].billsCount += 1;
+            groups[creator].totalWeight += Number(b.weight || 0);
+            groups[creator].totalNetWeight += netW;
+            if ((b.rubberType || 'latex') === 'latex') {
+                groups[creator].totalDryRubber += Number(b.dryRubber || b.dryWeight || 0);
+            }
+            groups[creator].totalAmount += Number(b.total || 0);
+            groups[creator].records.push(b);
+        });
+        
+        return Object.values(groups).sort((a, b) => b.totalAmount - a.totalAmount);
+    }, [dailyData.buys]);
+
+    // Helper helper to calculate net weight safely
+    function recNetWeight(b) {
+        return b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0));
+    }
 
     const handleExportCSV = () => {
         let data = [];
@@ -178,6 +216,22 @@ const DailySummaryReport = () => {
                 '-',
                 totalValue
             ]);
+        } else if (activeTab === 'buys_team') {
+            headers = ['ผู้บันทึกรายการ', 'จำนวนบิล', 'น้ำหนักสุทธิรวม (กก.)', 'เนื้อยางแห้งรวม (กก.)', 'ยอดเงินรวม (บาท)'];
+            data = teamSummary.map(t => [
+                t.creator,
+                t.billsCount,
+                t.totalNetWeight,
+                t.totalDryRubber,
+                t.totalAmount
+            ]);
+            
+            const totalBills = teamSummary.reduce((sum, t) => sum + t.billsCount, 0);
+            const totalNet = teamSummary.reduce((sum, t) => sum + t.totalNetWeight, 0);
+            const totalDry = teamSummary.reduce((sum, t) => sum + t.totalDryRubber, 0);
+            const totalAmount = teamSummary.reduce((sum, t) => sum + t.totalAmount, 0);
+            
+            data.push(['รวมทั้งหมด', totalBills, totalNet, totalDry, totalAmount]);
         } else {
             headers = ['รายการ', 'หมวดหมู่', 'จำนวนเงิน'];
             const ex = dailyData.expenses.map(e => [e.title, e.category || 'ทั่วไป', e.amount]);
@@ -237,7 +291,8 @@ const DailySummaryReport = () => {
         { id: 'buys_latex', name: 'น้ำยางสด', icon: <Droplets size={18} /> },
         { id: 'buys_cup_lump', name: 'ขี้ยาง', icon: <Droplets size={18} className="text-orange-500" /> },
         { id: 'sells', name: 'ยอดขาย', icon: <Truck size={18} /> },
-        { id: 'expenses', name: 'รายจ่าย', icon: <Wallet size={18} /> }
+        { id: 'expenses', name: 'รายจ่าย', icon: <Wallet size={18} /> },
+        { id: 'buys_team', name: 'สรุปยอดซื้อทีม', icon: <Users size={18} /> }
     ];
 
     if (loading) {
@@ -647,6 +702,129 @@ const DailySummaryReport = () => {
                         </div>
                     </div>
                 )}
+
+                {activeTab === 'buys_team' && (
+                    <div className="overflow-x-auto p-6">
+                        <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center space-x-3">
+                            <Users className="text-blue-600" size={24} />
+                            <div>
+                                <h3 className="text-sm font-black text-gray-900">สรุปยอดซื้อทีมน้ำยาง</h3>
+                                <p className="text-xs font-medium text-gray-500">แสดงผลงานยอดรวมสะสมของพนักงานแต่ละคนที่รับซื้อน้ำยางและขี้ยางสดในระบบ</p>
+                            </div>
+                        </div>
+
+                        <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+                            <table className="w-full text-sm text-left border-collapse">
+                                <thead className="bg-[#1e293b] text-white font-bold">
+                                    <tr>
+                                        <th className="px-6 py-4">ผู้บันทึกรายการ</th>
+                                        <th className="px-6 py-4 text-center">จำนวนบิล</th>
+                                        <th className="px-6 py-4 text-right">น้ำหนักสุทธิรวม (กก.)</th>
+                                        <th className="px-6 py-4 text-right">เนื้อยางแห้งรวม (กก.)</th>
+                                        <th className="px-6 py-4 text-right bg-rubber-600">ยอดเงินรวม</th>
+                                        <th className="px-6 py-4 text-center">จัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 bg-white">
+                                    {teamSummary.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="6" className="px-6 py-12 text-center text-gray-400 font-medium">ไม่พบข้อมูลการบันทึกของทีมงานในช่วงเวลานี้</td>
+                                        </tr>
+                                    ) : (
+                                        teamSummary.map((group, idx) => {
+                                            const isExpanded = expandedCreator === group.creator;
+                                            return (
+                                                <React.Fragment key={group.creator || idx}>
+                                                    <tr 
+                                                        onClick={() => setExpandedCreator(isExpanded ? null : group.creator)}
+                                                        className="hover:bg-gray-50/80 transition-colors cursor-pointer group"
+                                                    >
+                                                        <td className="px-6 py-4 border-r border-gray-50">
+                                                            <div className="flex items-center space-x-3">
+                                                                <div className="p-2 bg-gray-100 rounded-xl text-gray-600 group-hover:bg-rubber-50 group-hover:text-rubber-600 transition-all">
+                                                                    <User size={16} />
+                                                                </div>
+                                                                <span className="font-black text-gray-900">{group.creator}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-center font-mono font-bold text-gray-600">{group.billsCount}</td>
+                                                        <td className="px-6 py-4 text-right font-mono font-bold text-gray-600">{group.totalNetWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                        <td className="px-6 py-4 text-right font-mono text-blue-600 font-bold">{group.totalDryRubber.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                        <td className="px-6 py-4 text-right font-black text-gray-900 font-mono bg-rubber-50/30">฿{group.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                        <td className="px-6 py-4 text-center">
+                                                            <button className="text-rubber-600 hover:text-rubber-800 font-bold text-xs flex items-center justify-center space-x-1 mx-auto bg-rubber-50 group-hover:bg-rubber-100 px-3 py-1.5 rounded-lg transition-all">
+                                                                <span>{isExpanded ? 'ซ่อนรายละเอียด' : 'ดูบิลแยกตามบุคคล'}</span>
+                                                                <ChevronRight size={14} className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+
+                                                    {/* Expanded Row */}
+                                                    {isExpanded && (
+                                                        <tr>
+                                                            <td colSpan="6" className="p-0 bg-gray-50/50">
+                                                                <div className="p-6 border-t border-b border-gray-100">
+                                                                    <div className="bg-white rounded-xl border border-gray-100 shadow-inner overflow-hidden">
+                                                                        <table className="w-full text-xs text-left border-collapse">
+                                                                            <thead className="bg-gray-100 text-gray-700 font-bold border-b border-gray-200">
+                                                                                <tr>
+                                                                                    <th className="px-4 py-3">เลขที่บิล</th>
+                                                                                    <th className="px-4 py-3">วันที่</th>
+                                                                                    <th className="px-4 py-3">เกษตรกร</th>
+                                                                                    <th className="px-4 py-3 text-center">ประเภท</th>
+                                                                                    <th className="px-4 py-3 text-right">น้ำหนักสุทธิ (กก.)</th>
+                                                                                    <th className="px-4 py-3 text-center">%DRC</th>
+                                                                                    <th className="px-4 py-3 text-right">ยอดเงินรวม</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody className="divide-y divide-gray-100">
+                                                                                {group.records.map((rec, rIdx) => {
+                                                                                    const recNet = Number(rec.netWeight || (Number(rec.weight || 0) - Number(rec.bucketWeight || 0)));
+                                                                                    const typeLabel = (rec.rubberType === 'cup_lump' || rec.rubberType === 'ขี้ยาง') ? 'ขี้ยาง' : 'น้ำยางสด';
+                                                                                    return (
+                                                                                        <tr key={rec.id || rIdx} className="hover:bg-gray-50 transition-colors">
+                                                                                            <td className="px-4 py-3 font-bold text-gray-800">{rec.id}</td>
+                                                                                            <td className="px-4 py-3 text-gray-500">{rec.date}</td>
+                                                                                            <td className="px-4 py-3 font-bold text-gray-900">{rec.farmerName}</td>
+                                                                                            <td className="px-4 py-3 text-center">
+                                                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${typeLabel === 'ขี้ยาง' ? 'bg-orange-50 text-orange-700 border border-orange-100' : 'bg-blue-50 text-blue-700 border border-blue-100'}`}>
+                                                                                                    {typeLabel}
+                                                                                                </span>
+                                                                                            </td>
+                                                                                            <td className="px-4 py-3 text-right font-mono font-bold text-gray-600">{recNet.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                                                            <td className="px-4 py-3 text-center font-mono font-bold text-blue-600">{typeLabel === 'น้ำยางสด' ? `${Number(rec.drc || 0).toFixed(1)}%` : '-'}</td>
+                                                                                            <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700">฿{Number(rec.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                                                                        </tr>
+                                                                                    );
+                                                                                })}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </React.Fragment>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                                {teamSummary.length > 0 && (
+                                    <tfoot className="bg-gray-900 text-white font-black border-t-2 border-rubber-600">
+                                        <tr className="divide-x divide-white/10 uppercase text-sm tracking-tight">
+                                            <td className="px-6 py-4 text-rubber-400">รวมทั้งหมด ({teamSummary.length} คน)</td>
+                                            <td className="px-6 py-4 text-center font-mono">{teamSummary.reduce((sum, t) => sum + t.billsCount, 0)}</td>
+                                            <td className="px-6 py-4 text-right font-mono">{teamSummary.reduce((sum, t) => sum + t.totalNetWeight, 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-6 py-4 text-right font-mono text-blue-400">{teamSummary.reduce((sum, t) => sum + t.totalDryRubber, 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-6 py-4 text-right font-mono text-white bg-rubber-900/50">฿{teamSummary.reduce((sum, t) => sum + t.totalAmount, 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="px-6 py-4"></td>
+                                        </tr>
+                                    </tfoot>
+                                )}
+                            </table>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Daily Overall Summary Footer */}
@@ -662,6 +840,8 @@ const DailySummaryReport = () => {
                 const totalExpense = dailyData.expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
                 const totalWage = dailyData.wages.reduce((sum, w) => sum + Number(w.total || 0), 0);
                 const netProfit = totalSell - totalBuy - totalExpense - totalWage;
+                const isStaff = user?.role === 'staff';
+                const displayProfit = isStaff ? '***' : `฿${netProfit.toLocaleString(undefined, { minimumFractionDigits: 1 })}`;
 
                 return (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8 pb-10">
@@ -713,7 +893,7 @@ const DailySummaryReport = () => {
 
                         {/* Net Profit Card */}
                         <div className={`p-5 rounded-2xl border shadow-xl transition-all duration-500 flex flex-col
-                            ${netProfit >= 0
+                            ${isStaff || netProfit >= 0
                                 ? 'bg-gradient-to-br from-[#10b981] via-[#059669] to-[#047857] border-emerald-400 shadow-emerald-200/50' 
                                 : 'bg-gradient-to-br from-red-600 via-red-700 to-red-800 border-red-500 shadow-red-200/50'}`}>
                             <div className="flex items-center space-x-4 mb-3">
@@ -722,7 +902,7 @@ const DailySummaryReport = () => {
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-black text-white/70 uppercase tracking-widest leading-none mb-1">กำไรสุทธิ</p>
-                                    <p className="text-2xl font-black text-white leading-none">฿{netProfit.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
+                                    <p className="text-2xl font-black text-white leading-none">{displayProfit}</p>
                                 </div>
                             </div>
                             <div className="flex border-t border-white/10 pt-3 mt-auto">

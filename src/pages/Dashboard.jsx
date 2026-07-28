@@ -11,6 +11,7 @@ import { calculateWage, truncateOneDecimal } from '../utils/calculations';
 
 // Sub-components
 import DashboardStats from './dashboard/DashboardStats';
+import { DashboardForecast } from './dashboard/DashboardForecast';
 import DashboardCharts from './dashboard/DashboardCharts';
 import DashboardChemicals from './dashboard/DashboardChemicals';
 import DashboardRecent from './dashboard/DashboardRecent';
@@ -332,14 +333,15 @@ export const Dashboard = () => {
         setWageConfirmData({ show: true, unpaidStaff, bonus });
     };
 
-    const confirmAndRecordWages = async () => {
-        const { unpaidStaff, bonus } = wageConfirmData;
+    const confirmAndRecordWages = async (selectedStaff) => {
+        const staffToRecord = selectedStaff || wageConfirmData.unpaidStaff;
+        const { bonus } = wageConfirmData;
         setWageConfirmData({ show: false, unpaidStaff: [], bonus: 0 });
         setIsAutoRecording(true);
         const toastId = toast.loading('กำลังบันทึกค่าจ้างอัตโนมัติ...');
         const todayStr = format(new Date(), 'yyyy-MM-dd');
         try {
-            const payloads = unpaidStaff.map(s => {
+            const payloads = staffToRecord.map(s => {
                 const dailyWage = Number(s.salary) || 0;
                 return {
                     date: todayStr, staffId: s.id, staffName: s.name, workDays: 1,
@@ -461,6 +463,8 @@ export const Dashboard = () => {
             />
 
             <DashboardStats stats={stats} />
+
+            <DashboardForecast />
 
             <DashboardChemicals 
                 chemicalCalcs={chemicalCalcs} handleRecordChemical={handleRecordChemical} 

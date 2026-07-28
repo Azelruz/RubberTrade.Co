@@ -275,7 +275,7 @@ export const Payments = () => {
                                                                     </button>
                                                                 </>
                                                             ) : (
-                                                                user?.role === 'owner' && (
+                                                                (user?.role === 'owner' || user?.role === 'staff') && (
                                                                     <button 
                                                                         onClick={() => handleUpdateStatus(r.id, 'farmerStatus', 'Pending')}
                                                                         className="text-[10px] text-red-400 hover:underline"
@@ -318,7 +318,7 @@ export const Payments = () => {
                                                                         </button>
                                                                     </>
                                                                 ) : (
-                                                                    user?.role === 'owner' && (
+                                                                    (user?.role === 'owner' || user?.role === 'staff') && (
                                                                         <button 
                                                                             onClick={() => handleUpdateStatus(r.id, 'employeeStatus', 'Pending')}
                                                                             className="text-[10px] text-red-400 hover:underline"
@@ -343,7 +343,7 @@ export const Payments = () => {
                                                         <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
                                                             <CheckCircle2 size={12} /> จ่ายครบแล้ว
                                                         </span>
-                                                        {user?.role === 'owner' && (
+                                                        {(user?.role === 'owner' || user?.role === 'staff') && (
                                                             <button 
                                                                 onClick={async () => {
                                                                     await handleUpdateStatus(r.id, 'farmerStatus', 'Pending');

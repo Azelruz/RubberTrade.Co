@@ -49,6 +49,13 @@ async function handlePost(context) {
                     "INSERT INTO settings (key, value, userId, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key, userId) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP"
                 ).bind(key, value, context.user.storeId);
             });
+            
+            if (payload.factoryName !== undefined) {
+                stmts.push(context.env.DB.prepare(
+                    "UPDATE users SET store_name = ? WHERE id = ?"
+                ).bind(payload.factoryName, context.user.storeId));
+            }
+            
             if(stmts.length > 0) {
                await context.env.DB.batch(stmts);
             }

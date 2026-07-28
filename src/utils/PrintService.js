@@ -44,6 +44,65 @@ export const printRecord = (htmlContent) => {
         console.warn("[PrintService] Style extraction failed, falling back to basic styles.");
     }
 
+    // Detect iOS devices (iPhone, iPad, iPod) including iPadOS 13+ which registers as MacIntel
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (isIOS) {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.open();
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Print Receipt</title>
+                    <style>
+                        ${inlineStyles}
+                        @page { margin: 0; }
+                        body { 
+                            margin: 0; 
+                            padding: 0; 
+                            background: white; 
+                            width: 100%; 
+                            height: auto;
+                            font-family: 'Noto Sans Thai', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                        }
+                        .no-print { display: none !important; }
+                        /* Force standard thermal paper width */
+                        .print-receipt-container { 
+                            width: 100%; 
+                            max-width: 76mm;
+                            padding: 1mm; 
+                            box-sizing: border-box; 
+                            margin: 0;
+                            background: white;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="print-receipt-container">
+                        ${htmlContent}
+                    </div>
+                    <script>
+                        window.onload = function() {
+                            window.focus();
+                            setTimeout(function() {
+                                window.print();
+                                setTimeout(function() { window.close(); }, 500);
+                            }, 300);
+                        };
+                    </script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        } else {
+            alert("โปรดอนุญาตให้เบราว์เซอร์เปิดป๊อปอัป (Pop-ups) เพื่อแสดงและพิมพ์บิลใน iOS");
+        }
+        return;
+    }
+
     doc.open();
     doc.write(`
         <!DOCTYPE html>
@@ -64,11 +123,11 @@ export const printRecord = (htmlContent) => {
                 .no-print { display: none !important; }
                 /* Force standard thermal paper width (57mm for 58mm printer, or 72mm for 80mm) */
                 .print-receipt-container { 
-                    width: 57mm; 
-                    max-width: 100%;
+                    width: 100%; 
+                    max-width: 76mm;
                     padding: 1mm; 
                     box-sizing: border-box; 
-                    margin: 0 auto;
+                    margin: 0;
                     background: white;
                 }
             </style>

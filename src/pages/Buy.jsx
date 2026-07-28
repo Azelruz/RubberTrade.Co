@@ -3,7 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { addBuyRecord, fetchBuyRecords, deleteRecord, updateRecord, fetchFarmers, fetchDailyPrice, getSettings, fetchEmployees, saveReceiptImageToDrive, deleteReceiptFileToDrive, sendLineReceipt, fetchMemberTypes, isCached, addFarmer } from '../services/apiService';
+import { addBuyRecord, fetchBuyRecords, deleteRecord, updateRecord, fetchFarmers, fetchDailyPrice, getSettings, fetchEmployees, saveReceiptImageToDrive, deleteReceiptFileToDrive, sendLineReceipt, fetchMemberTypes, isCached, addFarmer, updateQueue, fetchQueues, fetchLoans, fetchLoanDeductions } from '../services/apiService';
+import { db } from '../services/db';
 import { truncateOneDecimal, calculateDrcBonus } from '../utils/calculations';
 import { printRecord } from '../utils/PrintService';
 
@@ -36,6 +37,54 @@ export const Buy = () => {
     const isDemo = false;
     const eslipRef = useRef(null);
 
+    const [activeQueue, setActiveQueue] = useState(null);
+    const [showQueueModal, setShowQueueModal] = useState(false);
+    const [waitingPaymentQueues, setWaitingPaymentQueues] = useState([]);
+    const [loans, setLoans] = useState([]);
+    const [loanDeductions, setLoanDeductions] = useState([]);
+
+    const handleSelectQueue = (q) => {
+        setActiveQueue(q);
+        setValue('farmerId', q.farmer_id);
+        setValue('farmerName', q.farmer_name);
+        setFarmerSearch(q.farmer_name);
+        
+        const mappedType = q.rubber_type === 'cup_lump' ? 'cup_lump' : 'latex';
+        setValue('rubberType', mappedType);
+        
+        setValue('weight', String(q.weight || ''));
+        setValue('bucketWeight', String(q.bucket_weight || ''));
+        setValue('drc', String(q.drc || ''));
+    };
+
+    const handleOpenQueueModal = async () => {
+        try {
+            const list = await fetchQueues();
+            const waiting = (list || []).filter(q => q.status === 'waiting_payment' || q.status === 'calling');
+            setWaitingPaymentQueues(waiting);
+            setShowQueueModal(true);
+        } catch (e) {
+            toast.error("ดึงข้อมูลคิวผิดพลาด");
+        }
+    };
+
+    const handleClearQueue = () => {
+        setActiveQueue(null);
+        reset({
+            date: format(new Date(), 'yyyy-MM-dd'),
+            farmerId: '',
+            farmerName: '',
+            weight: '',
+            bucketWeight: '',
+            drc: '',
+            pricePerKg: dailyPriceObj.price,
+            note: '',
+            rubberType: 'latex',
+            enableFsc: true
+        });
+        setFarmerSearch('');
+    };
+
     const [farmerSearch, setFarmerSearch] = useState('');
     const [showFarmerDropdown, setShowFarmerDropdown] = useState(false);
     const farmerDropdownRef = useRef(null);
@@ -64,7 +113,8 @@ export const Buy = () => {
             basePrice: '',
             bonusDrc: '',
             note: '',
-            rubberType: 'latex'
+            rubberType: 'latex',
+            enableFsc: true
         }
     });
 
@@ -88,6 +138,7 @@ export const Buy = () => {
     const watchDrc = watch('drc');
     const watchFarmerId = watch('farmerId');
     const watchFarmerName = watch('farmerName');
+    const watchEnableFsc = watch('enableFsc');
     const selectedFarmer = farmers.find(f => f.id === watchFarmerId);
 
     // Bonus Logic: Update PricePerKg when DRC, Farmer or Member Type changes
@@ -100,7 +151,7 @@ export const Buy = () => {
         const bonusDrc = calculateDrcBonus(drc, drcBonuses);
         
         const selectedFarmer = farmers.find(f => f.id === watchFarmerId);
-        const fscBonus = selectedFarmer?.fscId ? (Number(settings.fscBonus) || 1) : 0;
+        const fscBonus = (watchEnableFsc !== false && selectedFarmer?.fscId) ? (Number(settings.fscBonus) || 1) : 0;
 
         let memberBonus = 0;
         if (selectedFarmer?.memberTypeId) {
@@ -118,12 +169,11 @@ export const Buy = () => {
 
         const finalPrice = isCupLump ? base : (base + bonusDrc + fscBonus + memberBonus);
         setValue('pricePerKg', finalPrice.toString());
-    }, [watchDrc, watchFarmerId, watchRubberType, farmers, memberTypes, dailyPriceObj.price, settings.cupLumpPrice, setValue, drcBonuses, dirtyFields.basePrice, dirtyFields.bonusDrc, settings.fscBonus]);
+    }, [watchDrc, watchFarmerId, watchRubberType, farmers, memberTypes, dailyPriceObj.price, settings.cupLumpPrice, setValue, drcBonuses, dirtyFields.basePrice, dirtyFields.bonusDrc, settings.fscBonus, watchEnableFsc]);
 
     // Load data
     useEffect(() => {
         loadData();
-        loadLocalSettings();
 
         const handleClickOutside = (event) => {
             if (farmerDropdownRef.current && !farmerDropdownRef.current.contains(event.target)) {
@@ -148,19 +198,121 @@ export const Buy = () => {
         setCurrentPage(1);
     }, [searchTerm, selectedDate]);
 
-    const loadLocalSettings = async () => {
+    const getActiveStoreId = () => {
+        return localStorage.getItem('rt_active_store_id') || user?.storeId || user?.id || null;
+    };
+
+    const getLocalDateString = (dateInput) => {
+        if (!dateInput) return '';
+        const str = String(dateInput).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+            return str;
+        }
         try {
-            const res = await getSettings();
-            if (res.status === 'success' && res.data) {
-                setLocalSettings(prev => ({ ...prev, ...res.data }));
+            const d = new Date(str);
+            if (isNaN(d.getTime())) {
+                return str.split('T')[0].split(' ')[0];
             }
-        } catch (error) {
-            console.error('Error loading settings:', error);
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        } catch {
+            return str.split('T')[0].split(' ')[0];
+        }
+    };
+
+    const sortBuys = (arr) => {
+        if (!Array.isArray(arr)) return [];
+        return [...arr].sort((a, b) => {
+            const timeA = new Date(a.created_at || a.timestamp || a.date || 0).getTime();
+            const timeB = new Date(b.created_at || b.timestamp || b.date || 0).getTime();
+            if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+                return timeB - timeA;
+            }
+            return String(b.id || '').localeCompare(String(a.id || ''));
+        });
+    };
+
+    const isSameRecords = (a, b) => {
+        if (!Array.isArray(a) || !Array.isArray(b)) return false;
+        if (a.length !== b.length) return false;
+        const keyA = a.map(x => `${x.id}:${getLocalDateString(x.date)}:${x.weight}:${x.drc}:${x.total}`).join('|');
+        const keyB = b.map(x => `${x.id}:${getLocalDateString(x.date)}:${x.weight}:${x.drc}:${x.total}`).join('|');
+        return keyA === keyB;
+    };
+
+    const mergeRecords = (existingRecords, incomingRecords) => {
+        if (!Array.isArray(incomingRecords)) return incomingRecords || [];
+        
+        const currentStoreId = getActiveStoreId();
+        const recordMap = new Map();
+
+        // 1. Add all incoming records matching current store
+        incomingRecords.forEach(r => {
+            if (r && r.id) {
+                const matchesStore = !currentStoreId || !r.userId || String(r.userId) === String(currentStoreId);
+                if (matchesStore) {
+                    recordMap.set(r.id, r);
+                }
+            }
+        });
+
+        // 2. Keep existing records ONLY if they match current active store
+        if (Array.isArray(existingRecords)) {
+            existingRecords.forEach(r => {
+                if (r && r.id && !recordMap.has(r.id)) {
+                    const matchesStore = !currentStoreId || !r.userId || String(r.userId) === String(currentStoreId);
+                    if (matchesStore) {
+                        recordMap.set(r.id, r);
+                    }
+                }
+            });
+        }
+
+        return sortBuys(Array.from(recordMap.values()));
+    };
+
+    const isSameData = (a, b) => {
+        if (!Array.isArray(a) || !Array.isArray(b)) return false;
+        if (a.length !== b.length) return false;
+        try {
+            return JSON.stringify(a) === JSON.stringify(b);
+        } catch {
+            return false;
         }
     };
 
     const loadData = async () => {
-        if (!isCached('buys', 'farmers')) setLoading(true);
+        // Step 1: Read locally from Dexie (Instant - <10ms)
+        try {
+            const [localBuys, localFarmers, localEmployees, localLoans, localDeds, localMts] = await Promise.all([
+                db.buys.toArray(),
+                db.farmers.toArray(),
+                db.employees.toArray(),
+                db.loans.toArray(),
+                db.loan_deductions.toArray(),
+                db.farmer_types.toArray()
+            ]);
+            const currentStoreId = getActiveStoreId();
+            const storeLocalBuys = (localBuys || []).filter(r => 
+                !currentStoreId || !r.userId || String(r.userId) === String(currentStoreId)
+            );
+            setRecords(prev => mergeRecords(prev, storeLocalBuys));
+            setFarmers(localFarmers || []);
+            setEmployees(localEmployees || []);
+            setLoans(localLoans || []);
+            setLoanDeductions(localDeds || []);
+            setMemberTypes(localMts || []);
+            
+            if ((localBuys && localBuys.length > 0) || (localFarmers && localFarmers.length > 0)) {
+                setLoading(false);
+            }
+        } catch (localErr) {
+            console.error("Local load error", localErr);
+        }
+
+        // Step 2: Background network revalidation (Non-blocking)
         try {
             if (isDemo) {
                 setRecords([
@@ -178,34 +330,50 @@ export const Buy = () => {
                     try { setDrcBonuses(JSON.parse(demoDrc)); } catch (e) { }
                 }
                 setValue('pricePerKg', '50');
+                setLoading(false);
                 return;
             }
-            const [buyData, farmersData, priceData, settingsRes, employeesData, mtData] = await Promise.all([
+
+            const [buyData, farmersData, priceData, settingsRes, employeesData, mtData, loansData, dedsData] = await Promise.all([
                 fetchBuyRecords(),
                 fetchFarmers(),
                 fetchDailyPrice(),
                 getSettings(),
                 fetchEmployees(),
-                fetchMemberTypes()
+                fetchMemberTypes(),
+                fetchLoans(),
+                fetchLoanDeductions()
             ]);
-            setRecords(Array.isArray(buyData) ? buyData : []);
-            setFarmers(Array.isArray(farmersData) ? farmersData : []);
-            setEmployees(Array.isArray(employeesData) ? employeesData : []);
-            setMemberTypes(Array.isArray(mtData) ? mtData : []);
 
-            if (priceData && priceData.status === 'success') {
-                setDailyPriceObj(priceData.data);
-                setValue('pricePerKg', priceData.data.price);
-            }
-
-            if (settingsRes && settingsRes.status === 'success' && settingsRes.data) {
-                setLocalSettings(prev => ({ ...prev, ...settingsRes.data }));
-                if (settingsRes.data.drcBonuses) {
-                    try { setDrcBonuses(JSON.parse(settingsRes.data.drcBonuses)); } catch (e) { }
+            React.startTransition(() => {
+                if (Array.isArray(buyData)) {
+                    setRecords(prev => {
+                        const merged = mergeRecords(prev, buyData);
+                        return isSameRecords(prev, merged) ? prev : merged;
+                    });
                 }
-            }
+                if (Array.isArray(farmersData)) setFarmers(prev => isSameData(prev, farmersData) ? prev : farmersData);
+                if (Array.isArray(employeesData)) setEmployees(prev => isSameData(prev, employeesData) ? prev : employeesData);
+                if (Array.isArray(mtData)) setMemberTypes(prev => isSameData(prev, mtData) ? prev : mtData);
+                if (Array.isArray(loansData)) setLoans(prev => isSameData(prev, loansData) ? prev : loansData);
+                if (Array.isArray(dedsData)) setLoanDeductions(prev => isSameData(prev, dedsData) ? prev : dedsData);
+
+                if (priceData && priceData.status === 'success') {
+                    setDailyPriceObj(priceData.data);
+                    setValue('pricePerKg', priceData.data.price);
+                }
+
+                if (settingsRes && settingsRes.status === 'success' && settingsRes.data) {
+                    setLocalSettings(prev => ({ ...prev, ...settingsRes.data }));
+                    if (settingsRes.data.drcBonuses) {
+                        try { 
+                            setDrcBonuses(typeof settingsRes.data.drcBonuses === 'string' ? JSON.parse(settingsRes.data.drcBonuses) : settingsRes.data.drcBonuses); 
+                        } catch (e) { }
+                    }
+                }
+            });
         } catch (error) {
-            toast.error('โหลดข้อมูลล้มเหลว');
+            console.error('Background load failed:', error);
         } finally {
             setLoading(false);
         }
@@ -253,7 +421,7 @@ export const Buy = () => {
             let bDrc = Number(data.bonusDrc) || 0;
 
             const isCupLump = (data.rubberType || watchRubberType) === 'cup_lump';
-            const p = isCupLump ? bp : (bp + bDrc + (selectedFarmer?.fscId ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0));
+            const p = isCupLump ? bp : (bp + bDrc + ((data.enableFsc !== false && selectedFarmer?.fscId) ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0));
             const farmerEmps = employees.filter(e => e.farmerId === farmerId);
             const empPct = farmerEmps.length > 0 ? Number(farmerEmps[0].profitSharePct) : 0;
 
@@ -263,6 +431,28 @@ export const Buy = () => {
             const total = isCupLump ? Math.floor(netWeight * actualPrice) : Math.floor(dryRubber * actualPrice);
             const employeeTotal = Math.floor((total * empPct) / 100);
             const farmerTotal = Math.floor(total - employeeTotal);
+
+            const fDed = parseFloat(data.farmerDeduction) || 0;
+            const eDed = parseFloat(data.employeeDeduction) || 0;
+
+            const netFarmerTotal = farmerTotal - fDed;
+            const netEmployeeTotal = employeeTotal - eDed;
+
+            const loanDeductions = [];
+            if (fDed > 0) {
+                loanDeductions.push({
+                    borrowerType: 'farmer',
+                    borrowerId: farmerId,
+                    amount: fDed
+                });
+            }
+            if (eDed > 0 && selectedEmployee) {
+                loanDeductions.push({
+                    borrowerType: 'employee',
+                    borrowerId: selectedEmployee.id,
+                    amount: eDed
+                });
+            }
 
             // --- E-Slip Generation ---
             let receiptUrl = '';
@@ -309,11 +499,13 @@ export const Buy = () => {
                 actualPrice, pricePerKg: Number(actualPrice), total: Math.floor(total),
                 dryRubber: isCupLump ? Number(netWeight) : Number(dryRubber),
                 dryWeight: isCupLump ? Number(netWeight) : Number(dryRubber),
-                empPct: Number(empPct), employeeTotal: Math.floor(employeeTotal),
-                farmerTotal: Math.floor(farmerTotal), fscBonus: Number(selectedFarmer?.fscId ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0),
+                empPct: Number(empPct), employeeTotal: Math.floor(netEmployeeTotal),
+                farmerTotal: Math.floor(netFarmerTotal),
+                loanDeductions, fscBonus: Number((data.enableFsc !== false && selectedFarmer?.fscId) ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0),
                 bonusMemberType: Number(selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0), note: data.note,
                 rubberType: data.rubberType || 'latex', receiptUrl,
                 status: 'Completed', farmerStatus: 'Pending', employeeStatus: 'Pending',
+                createdBy: user?.username || 'Owner',
                 created_at: new Date().toISOString()
             };
 
@@ -330,14 +522,81 @@ export const Buy = () => {
                 const newRecord = { ...payload, id: newId, timestamp: new Date().toISOString() };
                 setRecords([newRecord, ...records]);
                 toast.success('บันทึกสำเร็จ (Demo)', { id: toastId });
-                reset({ date: format(new Date(), 'yyyy-MM-dd'), farmerId: '', farmerName: '', weight: '', bucketWeight: '', drc: '', pricePerKg: dailyPriceObj.price, note: '', rubberType: 'latex' });
+                reset({ date: format(new Date(), 'yyyy-MM-dd'), farmerId: '', farmerName: '', weight: '', bucketWeight: '', drc: '', pricePerKg: dailyPriceObj.price, note: '', rubberType: 'latex', enableFsc: true });
                 setFarmerSearch('');
             } else {
                 const res = await addBuyRecord(payload);
                 if (res.status === 'success') {
                     toast.success('บันทึกสำเร็จ', { id: toastId });
-                    const newRecord = { ...payload, id: res.id, timestamp: new Date().toISOString() };
-                    setRecords([newRecord, ...records]);
+                    const newRecord = { ...payload, id: res.id, isOptimistic: true, timestamp: new Date().toISOString() };
+                    setRecords(prev => sortBuys([newRecord, ...prev]));
+
+                    // Update local Dexie DB for loans and loan_deductions
+                    if (loanDeductions.length > 0) {
+                        try {
+                            for (const ded of loanDeductions) {
+                                const { borrowerType, borrowerId, amount: deductAmt } = ded;
+                                
+                                // Find active loans in local Dexie
+                                const activeLoans = await db.loans.where({ borrowerId }).toArray();
+                                // Sort them by date ASC, created_at ASC
+                                activeLoans.sort((a, b) => new Date(a.date) - new Date(b.date));
+                                
+                                let remainingToDeduct = deductAmt;
+                                for (const loan of activeLoans) {
+                                    if (loan.remainingAmount <= 0) continue;
+                                    if (remainingToDeduct <= 0) break;
+                                    
+                                    let deductionFromThisLoan = 0;
+                                    let newRemaining = 0;
+                                    
+                                    if (loan.remainingAmount >= remainingToDeduct) {
+                                        deductionFromThisLoan = remainingToDeduct;
+                                        newRemaining = loan.remainingAmount - remainingToDeduct;
+                                        remainingToDeduct = 0;
+                                    } else {
+                                        deductionFromThisLoan = loan.remainingAmount;
+                                        newRemaining = 0;
+                                        remainingToDeduct -= loan.remainingAmount;
+                                    }
+                                    
+                                    // Update Dexie loan
+                                    await db.loans.update(loan.id, { remainingAmount: newRemaining });
+                                }
+                                
+                                // Query total remaining debt in Dexie after updates
+                                const allLoans = await db.loans.where({ borrowerId }).toArray();
+                                const remainingDebtAfter = allLoans.reduce((sum, l) => sum + l.remainingAmount, 0);
+                                
+                                // Insert deduction record in Dexie
+                                const deductionId = crypto.randomUUID();
+                                await db.loan_deductions.put({
+                                    id: deductionId,
+                                    buyId: res.id,
+                                    borrowerType,
+                                    borrowerId,
+                                    amount: deductAmt,
+                                    remainingDebtAfter,
+                                    userId: user.storeId || 'SYSTEM',
+                                    created_at: new Date().toISOString()
+                                });
+                            }
+                            
+                            // Refresh local state
+                            setTimeout(loadData, 500);
+                        } catch (dexieErr) {
+                            console.error("Dexie loan sync error:", dexieErr);
+                        }
+                    }
+
+                    if (activeQueue) {
+                        try {
+                            await updateQueue({ id: activeQueue.id, status: 'completed' });
+                        } catch (qErr) {
+                            console.error("[Queue completion error]", qErr);
+                        }
+                        setActiveQueue(null);
+                    }
 
                     if (receiptUrl && farmerId) {
                         sendLineReceipt(farmerId, receiptUrl)
@@ -348,7 +607,8 @@ export const Buy = () => {
                     reset({
                         date: format(new Date(), 'yyyy-MM-dd'), farmerId: '', farmerName: '',
                         weight: '', bucketWeight: '', drc: '',
-                        pricePerKg: dailyPriceObj.price || '0', note: ''
+                        pricePerKg: dailyPriceObj.price || '0', note: '', enableFsc: true,
+                        rubberType: 'latex'
                     });
                     setFarmerSearch('');
                     setSubmitting(false);
@@ -386,6 +646,43 @@ export const Buy = () => {
             const targetRecord = records.find(r => String(r.id) === String(id));
             const res = await deleteRecord('buys', id);
             if (res && res.status === 'success') {
+                // Revert loans locally in Dexie
+                try {
+                    const localDeds = await db.loan_deductions.where({ buyId: id }).toArray();
+                    if (localDeds.length > 0) {
+                        for (const ded of localDeds) {
+                            const { borrowerId, amount: refundAmt } = ded;
+                            const borrowerLoans = await db.loans.where({ borrowerId }).toArray();
+                            borrowerLoans.sort((a, b) => new Date(b.date) - new Date(a.date)); // DESC
+                            
+                            let remainingToRefund = refundAmt;
+                            for (const loan of borrowerLoans) {
+                                if (remainingToRefund <= 0) break;
+                                
+                                const maxRefundable = loan.amount - loan.remainingAmount;
+                                if (maxRefundable <= 0) continue;
+                                
+                                let refundToThisLoan = 0;
+                                if (maxRefundable >= remainingToRefund) {
+                                    refundToThisLoan = remainingToRefund;
+                                    remainingToRefund = 0;
+                                } else {
+                                    refundToThisLoan = maxRefundable;
+                                    remainingToRefund -= maxRefundable;
+                                }
+                                
+                                await db.loans.update(loan.id, { remainingAmount: loan.remainingAmount + refundToThisLoan });
+                            }
+                        }
+                        await db.loan_deductions.where({ buyId: id }).delete();
+                        
+                        // Reload state
+                        setTimeout(loadData, 500);
+                    }
+                } catch (dexieErr) {
+                    console.error("Dexie loan delete revert error:", dexieErr);
+                }
+
                 if (targetRecord && targetRecord.receiptUrl) {
                     deleteReceiptFileToDrive(targetRecord.receiptUrl)
                         .then(r => console.log('[Delete Drive File]', r))
@@ -427,7 +724,7 @@ export const Buy = () => {
             return Math.floor(netWeight * actualPrice);
         }
 
-        const fscBonus = sf?.fscId ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0;
+        const fscBonus = (watchEnableFsc !== false && sf?.fscId) ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0;
         let memberBonus = 0;
         if (sf?.memberTypeId) {
             const mType = memberTypes.find(mt => mt.id === sf.memberTypeId);
@@ -452,10 +749,81 @@ export const Buy = () => {
         return truncateOneDecimal((netWeight * d) / 100);
     };
 
+    // --- Loan & Auto-Deduction Calculations ---
+    const grossTotal = calculateTotal ? calculateTotal() : 0;
+    const empPct = getEmpPct ? getEmpPct() : 0;
+    
+    const farmerGrossShare = (grossTotal * (100 - empPct)) / 100;
+    const employeeGrossShare = (grossTotal * empPct) / 100;
+
+    const farmerActiveLoans = React.useMemo(() => {
+        if (!watchFarmerId) return [];
+        return loans.filter(l => l.borrowerType === 'farmer' && l.borrowerId === watchFarmerId && l.remainingAmount > 0);
+    }, [loans, watchFarmerId]);
+
+    const farmerDebt = React.useMemo(() => {
+        return farmerActiveLoans.reduce((sum, l) => sum + l.remainingAmount, 0);
+    }, [farmerActiveLoans]);
+
+    const selectedEmployee = React.useMemo(() => {
+        if (!watchFarmerId) return null;
+        return employees.find(e => e.farmerId === watchFarmerId);
+    }, [employees, watchFarmerId]);
+
+    const employeeActiveLoans = React.useMemo(() => {
+        if (!selectedEmployee) return [];
+        return loans.filter(l => l.borrowerType === 'employee' && l.borrowerId === selectedEmployee.id && l.remainingAmount > 0);
+    }, [loans, selectedEmployee]);
+
+    const employeeDebt = React.useMemo(() => {
+        return employeeActiveLoans.reduce((sum, l) => sum + l.remainingAmount, 0);
+    }, [employeeActiveLoans]);
+
+    useEffect(() => {
+        // Suggested deduction for Farmer
+        let suggestedFarmerDed = 0;
+        if (farmerDebt > 0 && farmerGrossShare > 0) {
+            farmerActiveLoans.forEach(l => {
+                let ded = 0;
+                if (l.deductionMethod === 'full') {
+                    ded = l.remainingAmount;
+                } else if (l.deductionMethod === 'percent') {
+                    ded = farmerGrossShare * (l.deductionValue / 100);
+                } else if (l.deductionMethod === 'fixed') {
+                    ded = l.deductionValue;
+                }
+                suggestedFarmerDed += Math.min(ded, l.remainingAmount);
+            });
+            suggestedFarmerDed = Math.min(suggestedFarmerDed, farmerGrossShare);
+            suggestedFarmerDed = Math.round(suggestedFarmerDed);
+        }
+        setValue('farmerDeduction', suggestedFarmerDed || '');
+
+        // Suggested deduction for Employee
+        let suggestedEmployeeDed = 0;
+        if (employeeDebt > 0 && employeeGrossShare > 0) {
+            employeeActiveLoans.forEach(l => {
+                let ded = 0;
+                if (l.deductionMethod === 'full') {
+                    ded = l.remainingAmount;
+                } else if (l.deductionMethod === 'percent') {
+                    ded = employeeGrossShare * (l.deductionValue / 100);
+                } else if (l.deductionMethod === 'fixed') {
+                    ded = l.deductionValue;
+                }
+                suggestedEmployeeDed += Math.min(ded, l.remainingAmount);
+            });
+            suggestedEmployeeDed = Math.min(suggestedEmployeeDed, employeeGrossShare);
+            suggestedEmployeeDed = Math.round(suggestedEmployeeDed);
+        }
+        setValue('employeeDeduction', suggestedEmployeeDed || '');
+    }, [watchFarmerId, farmerGrossShare, employeeGrossShare, farmerDebt, employeeDebt, farmerActiveLoans, employeeActiveLoans]);
+
     const filteredRecords = records.filter(r => {
         const matchesSearch = (r.farmerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (r.id || '').toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesDate = (r.date || '').split('T')[0] === selectedDate;
+        const recordDateStr = getLocalDateString(r.date);
+        const matchesDate = recordDateStr === selectedDate;
         return matchesSearch && matchesDate;
     });
 
@@ -497,15 +865,57 @@ export const Buy = () => {
             <style dangerouslySetInnerHTML={{
                 __html: `
                 @media print {
-                    @page { size: 48mm 210mm; margin: 0; }
+                    @page { size: auto; margin: 0; }
                     body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; }
-                    .receipt-content { width: 48mm; padding: 2mm; margin: 0 auto; font-family: 'Noto Sans Thai', sans-serif; }
+                    .receipt-content { width: 100%; max-width: 76mm; padding: 2mm; margin: 0; font-family: 'Noto Sans Thai', sans-serif; }
                     .no-print { display: none !important; }
                 }
             ` }} />
 
             {/* Modals & Overlays */}
             <DeleteConfirmDialog confirmDeleteId={confirmDeleteId} setConfirmDeleteId={setConfirmDeleteId} confirmDelete={confirmDelete} />
+
+            {showQueueModal && (
+                <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center">
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-lg w-full mx-4 border border-gray-100 animate-in fade-in duration-200">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4">ดึงข้อมูลคิวที่วัด % ยางเสร็จแล้ว</h3>
+                        <div className="divide-y divide-gray-100 max-h-60 overflow-y-auto mb-5">
+                            {waitingPaymentQueues.length === 0 ? (
+                                <p className="text-sm text-gray-400 py-6 text-center italic">ไม่มีคิวที่รอชำระเงินในขณะนี้</p>
+                            ) : (
+                                waitingPaymentQueues.map(q => (
+                                    <div 
+                                        key={q.id} 
+                                        onClick={() => {
+                                            handleSelectQueue(q);
+                                            setShowQueueModal(false);
+                                        }}
+                                        className="p-3 text-sm hover:bg-rubber-50 hover:text-rubber-700 cursor-pointer transition-colors flex justify-between items-center"
+                                    >
+                                        <div className="flex items-center space-x-3">
+                                            <span className="font-mono font-black text-rubber-700 text-lg">
+                                                Q{String(q.queue_no).padStart(2, '0')}
+                                            </span>
+                                            <span className="font-bold text-gray-900">{q.farmer_name}</span>
+                                        </div>
+                                        <div className="text-right text-xs text-gray-500 font-mono">
+                                            น้ำยางดิบ: {(Number(q.weight) - Number(q.bucket_weight || 0)).toLocaleString()} กก. | <span className="text-rubber-600 font-bold">%DRC: {q.drc}%</span>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        <div className="flex justify-end">
+                            <button 
+                                onClick={() => setShowQueueModal(false)}
+                                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold"
+                            >
+                                ปิดหน้าต่าง
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Hidden Print Container */}
             <BuyPaperReceipt 
@@ -527,7 +937,7 @@ export const Buy = () => {
                         watch={watch} setValue={setValue} errors={errors}
                         watchRubberType={watchRubberType} watchWeight={watchWeight} watchBucketWeight={watchBucketWeight}
                         watchBasePrice={watchBasePrice} watchBonusDrc={watchBonusDrc}
-                        watchFarmerId={watchFarmerId} watchFarmerName={watchFarmerName}
+                        watchFarmerId={watchFarmerId} watchFarmerName={watchFarmerName} watchEnableFsc={watchEnableFsc}
                         farmers={farmers} employees={employees} memberTypes={memberTypes}
                         settings={settings} selectedFarmer={selectedFarmer}
                         farmerSearch={farmerSearch} setFarmerSearch={setFarmerSearch}
@@ -537,6 +947,12 @@ export const Buy = () => {
                         calculateDryRubber={calculateDryRubber} getEmpPct={getEmpPct}
                         setShowCalculator={setShowCalculator}
                         templateConfig={templateConfig} 
+                        activeQueue={activeQueue}
+                        onOpenQueueModal={handleOpenQueueModal}
+                        onClearQueue={handleClearQueue}
+                        farmerDebt={farmerDebt}
+                        employeeDebt={employeeDebt}
+                        selectedEmployee={selectedEmployee}
                     />
 
                     {/* Records Table */}
@@ -553,6 +969,7 @@ export const Buy = () => {
                             pageSize: ITEMS_PER_PAGE
                         }}
                         onPageChange={setCurrentPage}
+                        loanDeductions={loanDeductions}
                     />
                 </div>
 
@@ -561,6 +978,7 @@ export const Buy = () => {
                     viewingEslip={viewingEslip} setViewingEslip={setViewingEslip} 
                     settings={settings} farmers={farmers} memberTypes={memberTypes}
                     paperSlipConfig={paperSlipConfig}
+                    loanDeductions={loanDeductions}
                 />
 
                 {/* Weight Calculator Modal */}

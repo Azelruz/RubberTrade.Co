@@ -7,6 +7,7 @@ import { clearAllCache, validateRecordData, triggerDataRefresh } from './apiServ
 const directFetch = async (endpoint, options = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
+    const switchedStoreId = localStorage.getItem('rt_active_store_id');
 
     const config = {
         ...options,
@@ -14,6 +15,7 @@ const directFetch = async (endpoint, options = {}) => {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
             'X-User-Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone,
+            ...(switchedStoreId ? { 'X-Switch-Store-ID': switchedStoreId } : {}),
             ...options.headers,
         },
     };
@@ -32,6 +34,46 @@ const directFetch = async (endpoint, options = {}) => {
     return await response.json();
 };
 
+const cascadeUpdateLocalDBIds = async (table, oldId, newId) => {
+    try {
+        if (table === 'farmers') {
+            await db.buys.where('farmerId').equals(oldId).modify({ farmerId: newId });
+            await db.employees.where('farmerId').equals(oldId).modify({ farmerId: newId });
+            const promos = await db.promotions.toArray();
+            for (const p of promos) {
+                if (p.farmerId === oldId) {
+                    await db.promotions.update(p.id, { farmerId: newId });
+                }
+            }
+        } else if (table === 'staff') {
+            await db.wages.where('staffId').equals(oldId).modify({ staffId: newId });
+            const sells = await db.sells.toArray();
+            for (const s of sells) {
+                if (s.employeeId === oldId) {
+                    await db.sells.update(s.id, { employeeId: newId });
+                }
+            }
+        } else if (table === 'factories') {
+            await db.trucks.where('factoryId').equals(oldId).modify({ factoryId: newId });
+            const sells = await db.sells.toArray();
+            for (const s of sells) {
+                if (s.factoryId === oldId) {
+                    await db.sells.update(s.id, { factoryId: newId });
+                }
+            }
+        } else if (table === 'trucks') {
+            const sells = await db.sells.toArray();
+            for (const s of sells) {
+                if (s.truckId === oldId) {
+                    await db.sells.update(s.id, { truckId: newId });
+                }
+            }
+        }
+    } catch (e) {
+        console.error("[SyncService] Cascade update failed:", e);
+    }
+};
+
 
 export const hydrateLocalDB = async () => {
     try {
@@ -47,9 +89,14 @@ export const hydrateLocalDB = async () => {
             { path: '/sells', table: 'sells' },
             { path: '/wages', table: 'wages' },
             { path: '/expenses', table: 'expenses' },
+            { path: '/queue', table: 'queues' },
+            { path: '/loans', table: 'loans' },
+            { path: '/loans/deductions', table: 'loan_deductions' },
             { path: '/chemicals', table: 'chemicals' },
             { path: '/promotions', table: 'promotions' },
-            { path: '/settings', table: 'settings' }
+            { path: '/settings', table: 'settings' },
+            { path: '/services/catalog', table: 'service_catalog' },
+            { path: '/services/queues', table: 'service_queues' }
         ];
 
         for (const ep of endpoints) {
@@ -108,7 +155,8 @@ export const syncQueueToServer = async () => {
 
     try {
         const allItems = await db.sync_queue.orderBy('createdAt').toArray();
-        const queue = allItems.filter(item => (item.retryCount || 0) < 5);
+        // Skip failed items and items with max retries
+        const queue = allItems.filter(item => (item.retryCount || 0) < 5 && item.status !== 'failed');
         
         if (queue.length === 0) {
             isSyncing = false;
@@ -117,6 +165,7 @@ export const syncQueueToServer = async () => {
 
         console.log(`[SyncService] Starting sync of ${queue.length} items`);
         let syncedCount = 0;
+        let failedCount = 0;
 
         for (const item of queue) {
             try {
@@ -126,7 +175,10 @@ export const syncQueueToServer = async () => {
                 
                 if (item.action !== 'DELETE' && !validation.valid) {
                     console.error(`[SyncService] Data incomplete for item ${item.uuid}:`, validation.message);
-                    await db.sync_queue.delete(item.uuid); // Remove invalid data to unblock sync
+                    // Mark as failed and keep in queue instead of silent deletion
+                    await db.sync_queue.update(item.uuid, { status: 'failed', note: validation.message });
+                    failedCount++;
+                    window.dispatchEvent(new CustomEvent('sync-item-failed', { detail: { item, reason: validation.message } }));
                     continue;
                 }
 
@@ -161,6 +213,10 @@ export const syncQueueToServer = async () => {
                                 await db[table].put({ ...record, id: newId });
                             }
                             
+                            // Cascade foreign key updates to other local tables
+                            await cascadeUpdateLocalDBIds(table, oldId, newId);
+                            
+                            // Update remaining items in queue
                             const remainingQueue = await db.sync_queue.toArray();
                             for (const qEntry of remainingQueue) {
                                 let payloadStr = JSON.stringify(qEntry.payload);
@@ -179,29 +235,59 @@ export const syncQueueToServer = async () => {
                 } else {
                     console.error(`[SyncService] Sync failed for item ${item.uuid}:`, data);
                     
-                    // Increment retry count
                     const currentRetry = item.retryCount || 0;
-                    await db.sync_queue.update(item.uuid, { retryCount: currentRetry + 1 });
+                    const nextRetry = currentRetry + 1;
+                    const httpStatus = data?.httpStatus;
 
-                    if (is404) {
-                        console.warn("[SyncService] Skipping invalid endpoint/resource 404");
-                        await db.sync_queue.delete(item.uuid);
-                        continue;
+                    // If it is a client-side permanent error (4xx) or max retry reached
+                    const isPermanentError = httpStatus >= 400 && httpStatus < 500;
+                    const isMaxRetried = nextRetry >= 5;
+
+                    if (isPermanentError || isMaxRetried) {
+                        await db.sync_queue.update(item.uuid, { 
+                            retryCount: nextRetry, 
+                            status: 'failed', 
+                            note: data?.message || `HTTP Error ${httpStatus}` 
+                        });
+                        failedCount++;
+                        window.dispatchEvent(new CustomEvent('sync-item-failed', { 
+                            detail: { item, reason: data?.message || `HTTP Error ${httpStatus}` } 
+                        }));
+                        continue; // Proceed with next item
+                    } else {
+                        // For 5xx or server timeout issues, increment retry count and break to wait
+                        await db.sync_queue.update(item.uuid, { retryCount: nextRetry });
+                        break; 
                     }
-                    break;
                 }
             } catch (e) {
                 console.error(`[SyncService] Unexpected error for item ${item.uuid}:`, e);
-                // Increment retry count even on unexpected errors
                 const currentRetry = item.retryCount || 0;
-                await db.sync_queue.update(item.uuid, { retryCount: currentRetry + 1 });
-                break; 
+                const nextRetry = currentRetry + 1;
+                
+                // Differentiate Network Errors
+                const isNetworkError = e.name === 'TypeError' || e.message?.toLowerCase().includes('fetch');
+
+                if (isNetworkError) {
+                    await db.sync_queue.update(item.uuid, { retryCount: nextRetry });
+                    break; // Stop and retry later when connection is stable
+                } else {
+                    // Internal JS error or data parsing issue, mark as failed and continue
+                    await db.sync_queue.update(item.uuid, { 
+                        retryCount: nextRetry, 
+                        status: 'failed', 
+                        note: e.message 
+                    });
+                    failedCount++;
+                    window.dispatchEvent(new CustomEvent('sync-item-failed', { detail: { item, reason: e.message } }));
+                    continue;
+                }
             }
         }
 
-        if (syncedCount > 0) {
+        if (syncedCount > 0 || failedCount > 0) {
             triggerDataRefresh();
-            window.dispatchEvent(new CustomEvent('sync-complete', { detail: { count: syncedCount } }));
+            window.dispatchEvent(new CustomEvent('sync-complete', { detail: { count: syncedCount, failedCount } }));
         }
 
     } finally {

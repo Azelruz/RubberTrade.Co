@@ -125,9 +125,9 @@ async function handleGet(context) {
         }).slice(0, 5);
 
         const isStaff = role === 'staff';
-        const monthIncome = isStaff ? 0 : Number(sellsStats?.monthTotal || 0);
-        const monthCost = isStaff ? 0 : (Number(buysStats?.monthTotal || 0) + Number(expensesStats?.monthTotal || 0) + Number(wagesStats?.monthTotal || 0));
-        const monthProfit = isStaff ? 0 : (monthIncome - monthCost);
+        const monthIncome = Number(sellsStats?.monthTotal || 0);
+        const monthCost = (Number(buysStats?.monthTotal || 0) + Number(expensesStats?.monthTotal || 0) + Number(wagesStats?.monthTotal || 0));
+        const monthProfit = isStaff ? '***' : (monthIncome - monthCost);
 
         return jsonResponse({
             farmers: [], 
@@ -155,8 +155,8 @@ async function handleGet(context) {
             },
             
             charts: {
-                buys: isStaff ? [] : (buysChart?.results || []),
-                sells: isStaff ? [] : (sellsChart?.results || [])
+                buys: buysChart?.results || [],
+                sells: sellsChart?.results || []
             },
             
             recentTransactions: mixedRecent,

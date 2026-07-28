@@ -2,6 +2,22 @@ import { RefreshCw, Search, User, Printer, Eye, ChevronLeft, ChevronRight } from
 import { format, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 
+const getDryWeight = (r) => {
+    if (r.dry_weight !== undefined && r.dry_weight !== null) return Number(r.dry_weight);
+    if (r.dryWeight !== undefined && r.dryWeight !== null) return Number(r.dryWeight);
+    if (r.dryRubber !== undefined && r.dryRubber !== null) return Number(r.dryRubber);
+    
+    const weight = Number(r.weight || 0);
+    const bucketWeight = Number(r.bucket_weight ?? r.bucketWeight ?? 0);
+    const netWeight = Math.max(0, weight - bucketWeight);
+    
+    const isCupLump = (r.rubberType === 'cup_lump' || r.rubber_type === 'cup_lump');
+    if (isCupLump) return netWeight;
+    
+    const drc = Number(r.drc || 0);
+    return Math.trunc(((netWeight * drc) / 100) * 10) / 10;
+};
+
 const HistoryTable = ({ 
     loading, 
     filteredRecords, 
@@ -29,6 +45,7 @@ const HistoryTable = ({
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-100">{activeTab === 'buy' ? 'เกษตรกร' : 'โรงงาน/ผู้ซื้อ'}</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-100 text-center">น้ำหนัก (กก.)</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-100 text-center">% DRC</th>
+                                    <th className="px-6 py-5 text-[11px] font-black text-emerald-600 uppercase tracking-[0.2em] border-b border-gray-100 text-center">ยางแห้ง (กก.)</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-100 text-center">ราคา/กก.</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-100 text-right">ยอดรวม (฿)</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-100 text-center">จัดการ</th>
@@ -37,7 +54,7 @@ const HistoryTable = ({
                             <tbody className="divide-y divide-gray-50">
                                 {filteredRecords.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" className="px-6 py-24 text-center">
+                                        <td colSpan="8" className="px-6 py-24 text-center">
                                             <Search size={48} className="mx-auto mb-4 text-gray-200" />
                                             <p className="text-gray-400 font-black text-lg">ไม่พบข้อมูลประจำวันที่คุณเลือก</p>
                                         </td>
@@ -83,6 +100,11 @@ const HistoryTable = ({
                                                 <span className="font-bold text-gray-600">{Number(r.drc || 0).toFixed(1)}%</span>
                                             </td>
                                             <td className="px-6 py-5 text-center">
+                                                <span className="font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 text-sm">
+                                                    {getDryWeight(r).toFixed(1)}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-5 text-center">
                                                 <span className="font-bold text-gray-600">
                                                     {Number(activeTab === 'buy' 
                                                         ? (r.actual_price ?? r.actualPrice ?? r.price_per_kg ?? r.pricePerKg ?? 0) 
@@ -118,6 +140,52 @@ const HistoryTable = ({
                                     ))
                                 )}
                             </tbody>
+                            {filteredRecords.length > 0 && (() => {
+                                const totalNetWeight = filteredRecords.reduce((sum, r) => sum + Math.max(0, Number(r.weight || 0) - Number(r.bucket_weight ?? r.bucketWeight ?? 0)), 0);
+                                const totalDryWeight = filteredRecords.reduce((sum, r) => sum + getDryWeight(r), 0);
+                                const totalAmount = filteredRecords.reduce((sum, r) => sum + Number(r.total || 0), 0);
+
+                                const validDrcs = filteredRecords.filter(r => Number(r.drc) > 0);
+                                const avgDrc = validDrcs.length > 0 ? (validDrcs.reduce((sum, r) => sum + Number(r.drc), 0) / validDrcs.length) : 0;
+
+                                const sumPrice = filteredRecords.reduce((sum, r) => {
+                                    const price = Number(activeTab === 'buy' 
+                                        ? (r.actual_price ?? r.actualPrice ?? r.price_per_kg ?? r.pricePerKg ?? 0) 
+                                        : (r.pricePerKg ?? r.price_per_kg ?? 0));
+                                    return sum + price;
+                                }, 0);
+                                const avgPrice = filteredRecords.length > 0 ? (sumPrice / filteredRecords.length) : 0;
+
+                                return (
+                                    <tfoot className="bg-gray-50/90 font-bold border-t-2 border-gray-200">
+                                        <tr>
+                                            <td colSpan="2" className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest text-center">
+                                                สรุปเฉลี่ยหน้านี้ ({filteredRecords.length} รายการ)
+                                            </td>
+                                            <td className="px-6 py-4 text-center text-sm font-black text-gray-900">
+                                                <div>{totalNetWeight.toFixed(1)}</div>
+                                                <div className="text-[10px] text-gray-400 font-bold">กก. สุทธิ</div>
+                                            </td>
+                                            <td className="px-6 py-4 text-center text-sm font-black text-blue-600 bg-blue-50/30">
+                                                <div>{avgDrc.toFixed(1)}%</div>
+                                                <div className="text-[10px] text-blue-500 font-bold">เฉลี่ย %DRC</div>
+                                            </td>
+                                            <td className="px-6 py-4 text-center text-sm font-black text-emerald-600 bg-emerald-50/30">
+                                                <div>{totalDryWeight.toFixed(1)}</div>
+                                                <div className="text-[10px] text-emerald-500 font-bold">กก. ยางแห้ง</div>
+                                            </td>
+                                            <td className="px-6 py-4 text-center text-sm font-black text-amber-600 bg-amber-50/30">
+                                                <div>฿{avgPrice.toFixed(2)}</div>
+                                                <div className="text-[10px] text-amber-500 font-bold">เฉลี่ย ราคา/กก.</div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-base font-black text-rubber-600">
+                                                ฿{totalAmount.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                            </td>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
+                                );
+                            })()}
                         </table>
 
                         {/* Pagination Footer */}

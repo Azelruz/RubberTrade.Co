@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
     Settings as SettingsIcon, Building2, UserCircle, Leaf, 
     Users, DollarSign, Truck, Shield, MessageSquare, ClipboardList, Beaker,
-    ChevronRight, Layout, Database, Radio, Receipt
+    ChevronRight, Layout, Database, Radio, Receipt, Wrench
 } from 'lucide-react';
 
 // Sub-components (Self-contained)
@@ -16,6 +16,7 @@ import { FactoryManagement } from './settings/FactoryManagement';
 import { TruckManagement } from './settings/TruckManagement';
 import { ChemicalManagement } from './settings/ChemicalManagement';
 import { PaperSlipSettings } from './settings/PaperSlipSettings';
+import { ServiceManagement } from './settings/ServiceManagement';
 
 const Settings = () => {
     const [activeTab, setActiveTab] = useState('price'); // Default to price as it's most common
@@ -41,6 +42,7 @@ const Settings = () => {
         {
             title: 'ทรัพยากรและระบบ',
             items: [
+                { id: 'services', icon: <Wrench size={20} />, label: 'รายการบริการและราคา', desc: 'ตั้งค่าการคิดราคาตัดหญ้า, ฉีดพ่นยา, ไถสวน' },
                 { id: 'factories', icon: <Building2 size={20} />, label: 'โรงงานส่งขาย', desc: 'จัดการโรงงานปลายทาง' },
                 { id: 'trucks', icon: <Truck size={20} />, label: 'รถส่งน้ำยาง', desc: 'ข้อมูลทะเบียนรถขนส่ง' },
                 { id: 'chemicals', icon: <Beaker size={20} />, label: 'สารเคมี', desc: 'จัดการหน่วยและราคา' },
@@ -68,31 +70,31 @@ const Settings = () => {
             </div>
 
             {/* Navigation Tabs Bar (Top) */}
-            <div className="bg-white rounded-[2rem] shadow-xl shadow-gray-200/30 border border-gray-50 overflow-hidden mb-6 p-2">
-                <div className="flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-gray-100">
+            <div className="bg-white rounded-2xl lg:rounded-[2rem] shadow-xl shadow-gray-200/30 border border-gray-100 mb-6 p-2 md:p-3 overflow-x-auto">
+                <div className="flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-gray-100 min-w-max lg:min-w-0">
                     {groups.map((group, gIdx) => (
-                        <div key={gIdx} className="p-2 flex-1">
-                            <h3 className="px-3 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 mt-1">
+                        <div key={gIdx} className="p-2 flex-1 min-w-[280px] lg:min-w-0">
+                            <h3 className="px-2 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 mt-1">
                                 {group.title}
                             </h3>
-                            <div className="flex flex-wrap md:flex-nowrap gap-1">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:flex xl:flex-wrap gap-1.5">
                                 {group.items.map(item => (
                                     <button
                                         key={item.id}
                                         onClick={() => setActiveTab(item.id)}
-                                        className={`flex-1 min-w-[120px] flex items-center p-2.5 rounded-xl transition-all duration-300 group ${
+                                        className={`flex items-center p-2.5 rounded-xl transition-all duration-300 group whitespace-nowrap ${
                                             activeTab === item.id 
-                                                ? 'bg-rubber-600 text-white shadow-lg shadow-rubber-200 ring-1 ring-rubber-500' 
-                                                : 'hover:bg-gray-50 text-gray-500 hover:text-gray-900 border border-transparent'
+                                                ? 'bg-rubber-600 text-white shadow-lg shadow-rubber-200 ring-1 ring-rubber-500 font-bold' 
+                                                : 'hover:bg-gray-50 text-gray-600 hover:text-gray-900 border border-transparent font-semibold'
                                         }`}
                                     >
-                                        <div className={`mr-2.5 p-1.5 rounded-lg transition-colors ${
+                                        <div className={`mr-2 p-1.5 rounded-lg transition-colors flex-shrink-0 ${
                                             activeTab === item.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-400 group-hover:bg-white group-hover:text-gray-600'
                                         }`}>
-                                            {React.cloneElement(item.icon, { size: 16 })}
+                                            {React.cloneElement(item.icon, { size: 15 })}
                                         </div>
-                                        <div className="text-left">
-                                            <p className={`text-[11px] font-bold leading-none ${activeTab === item.id ? 'text-white' : 'text-gray-700'}`}>
+                                        <div className="text-left overflow-hidden truncate">
+                                            <p className={`text-[11px] leading-tight truncate ${activeTab === item.id ? 'text-white' : 'text-gray-700'}`}>
                                                 {item.label}
                                             </p>
                                         </div>
@@ -129,12 +131,14 @@ const Settings = () => {
                     {/* Content Section */}
                     <div className="flex-1 p-6 md:p-10">
                         <div className="max-w-4xl mx-auto">
-                             {activeTab === 'general' && <GeneralSettings />}
+                            {/* Content Area */}
+                            {activeTab === 'general' && <GeneralSettings />}
                             {activeTab === 'paper_slip' && <PaperSlipSettings />}
                             {activeTab === 'price' && <PriceSettings />}
                             {activeTab === 'farmers_employees' && <UserManagement />}
                             {activeTab === 'staff' && <StaffManagement />}
                             {activeTab === 'team' && <TeamManagement />}
+                            {activeTab === 'services' && <ServiceManagement />}
                             {activeTab === 'factories' && <FactoryManagement />}
                             {activeTab === 'trucks' && <TruckManagement />}
                             {activeTab === 'chemicals' && <ChemicalManagement />}

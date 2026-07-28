@@ -2,7 +2,7 @@ import React from 'react';
 import { Leaf, User, Coins } from 'lucide-react';
 import { format, addYears } from 'date-fns';
 import { th } from 'date-fns/locale';
-import { formatReceiptDate } from '../../utils/dateUtils';
+import { formatReceiptDate, formatSelectedDate, formatRecordingDate } from '../../utils/dateUtils';
 
 const BuyESlipCapture = ({ eslipRef, settings, watch, watchRubberType, printingReceipt, editingRecord, selectedFarmer, farmers, memberTypes, currentEmpPct, calculateDryRubber, calculateTotal, paperSlipConfig, selectedTemplateId }) => {
     const isCupLump = watchRubberType === 'cup_lump' || printingReceipt?.rubberType === 'cup_lump';
@@ -25,7 +25,7 @@ const BuyESlipCapture = ({ eslipRef, settings, watch, watchRubberType, printingR
 
     const config = resolveConfig() || { 
         showLogo: true, showStoreName: true, showAddress: true, showPhone: true, 
-        showBillType: true, showBillId: true, showDateTime: true, showFarmerName: true, 
+        showBillType: true, showBillId: true, showDateTime: true, showSelectedDate: true, showRecordingTime: true, showFarmerName: true, 
         showRawWeight: true, showBucketWeight: true, showNetWeight: true, showDrc: true, 
         showDryWeight: true, showBasePrice: true, showBonusDrc: true, showBonusFsc: true, 
         showBonusMember: true, showActualPrice: true, showSplits: true,
@@ -51,6 +51,23 @@ const BuyESlipCapture = ({ eslipRef, settings, watch, watchRubberType, printingR
     const labels = config.labels;
     const headerTitle = config.headerTitle;
     const rawWeightLabel = labels.rawWeight;
+    const farmerId = printingReceipt?.farmerId || watch('farmerId');
+    const farmer = farmers.find(f => f.id === farmerId);
+    const fscId = printingReceipt?.fscId || printingReceipt?.fsc_id || farmer?.fscId || farmer?.fsc_id;
+
+    let finalFscBonus = 0;
+    if (printingReceipt) {
+        if (printingReceipt.fscBonus !== undefined) {
+            finalFscBonus = Number(printingReceipt.fscBonus);
+        } else {
+            const derived = Number(printingReceipt.basePrice) > 0 
+                ? Math.max(0, Math.round((Number(printingReceipt.actualPrice || printingReceipt.pricePerKg) - Number(printingReceipt.basePrice) - Number(printingReceipt.bonusDrc || 0) - Number(printingReceipt.memberTypeId ? (memberTypes?.find(mt => mt.id === printingReceipt.memberTypeId)?.bonus || 0) : (printingReceipt.bonusMemberType || 0))) * 10) / 10)
+                : (fscId ? (settings.fscBonus || 1) : 0);
+            finalFscBonus = derived;
+        }
+    } else {
+        finalFscBonus = (fscId && watch('enableFsc') !== false) ? (Number(settings.fscBonus) || 1) : 0;
+    }
 
     return (
         <div style={{ display: 'none', position: 'fixed', left: '-9999px', top: '0', zIndex: 9999 }} ref={eslipRef}>
@@ -90,9 +107,25 @@ const BuyESlipCapture = ({ eslipRef, settings, watch, watchRubberType, printingR
 
                 <div className="px-8 pt-6 pb-8 bg-white">
                     {/* Transaction ID & Date Bar */}
-                        <div className="flex justify-between items-center mb-4 text-[18px] font-black text-gray-500 bg-gray-100/80 px-4 py-2 rounded-lg">
-                            {config.showBillId !== false ? <span>เลขที่: <span className="text-gray-700">{(editingRecord?.id || printingReceipt?.id || ('buy_' + Date.now())).substring(0, 14)}</span></span> : <span></span>}
-                            {config.showDateTime !== false && <span>{formatReceiptDate(printingReceipt, 'dd MMM yy HH:mm')}</span>}
+                        <div className="flex flex-col mb-4 text-[18px] font-black text-gray-500 bg-gray-100/80 px-4 py-2 rounded-lg gap-1">
+                            {config.showBillId !== false && (
+                                <div className="flex justify-between border-b border-gray-200/50 pb-1">
+                                    <span>เลขที่:</span>
+                                    <span className="text-gray-700">{(editingRecord?.id || printingReceipt?.id || ('buy_' + Date.now())).substring(0, 14)}</span>
+                                </div>
+                            )}
+                            {config.showSelectedDate !== false && (
+                                <div className="flex justify-between">
+                                    <span>{(config.labels?.selectedDate || 'วันที่ทำรายการ')}:</span>
+                                    <span className="text-gray-700">{formatSelectedDate(printingReceipt, 'dd MMM yy')}</span>
+                                </div>
+                            )}
+                            {config.showRecordingTime !== false && (
+                                <div className="flex justify-between">
+                                    <span>{(config.labels?.recordingTime || 'เวลาบันทึก')}:</span>
+                                    <span className="text-gray-700">{formatRecordingDate(printingReceipt, 'dd MMM yy HH:mm')}</span>
+                                </div>
+                            )}
                         </div>
 
                     {/* Customer Info Card */}
@@ -104,9 +137,17 @@ const BuyESlipCapture = ({ eslipRef, settings, watch, watchRubberType, printingR
                                     <h2 style={{ fontSize: `${(config.fontSizeStoreName || 14) * 3}px` }} className="font-black text-gray-800 leading-tight">
                                         {printingReceipt?.farmerName || farmers.find(f => f.id === watch('farmerId'))?.name || 'ลูกค้าทั่วไป'}
                                     </h2>
-                                    <p className="text-[20px] font-bold text-gray-400">
-                                        รหัส: {printingReceipt?.farmerId || watch('farmerId') || '-'}
-                                    </p>
+                                    <div className="flex items-center gap-3 mt-1">
+                                        <p className="text-[20px] font-bold text-gray-400">
+                                            รหัส: {printingReceipt?.farmerId || watch('farmerId') || '-'}
+                                        </p>
+                                        {(config.showFscCode !== false && fscId) && (
+                                            <div className="bg-[#fff9eb] text-[#d97706] border border-[#fde68a] px-2.5 py-0.5 rounded-lg font-mono text-[14px] font-black flex items-center gap-1 select-none">
+                                                <Leaf size={12} className="text-[#d97706]" />
+                                                <span>{fscId}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="p-3 bg-gray-50 rounded-2xl">
                                     <User size={40} className="text-gray-400" />
@@ -173,10 +214,10 @@ const BuyESlipCapture = ({ eslipRef, settings, watch, watchRubberType, printingR
                                         <span className="font-bold text-green-600 font-mono">+฿{(Number(printingReceipt?.bonusDrc ?? watch('bonusDrc')) || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
                                     </div>
                                 )}
-                                {config.showBonusFsc !== false && (Number(printingReceipt?.fscBonus || (farmers.find(f => f.id === watch('farmerId'))?.fscId ? (settings.fscBonus || 1) : 0))) > 0 && (
+                                {config.showBonusFsc !== false && finalFscBonus > 0 && (
                                     <div className="flex justify-between items-center text-[24px] text-amber-600">
                                         <span className="font-bold">{labels.bonusFsc}</span>
-                                        <span className="font-bold font-mono">+฿{Number(printingReceipt?.fscBonus || (farmers.find(f => f.id === watch('farmerId'))?.fscId ? (settings.fscBonus || 1) : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                        <span className="font-bold font-mono">+฿{finalFscBonus.toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
                                     </div>
                                 )}
 
@@ -192,7 +233,7 @@ const BuyESlipCapture = ({ eslipRef, settings, watch, watchRubberType, printingR
                         {config.showActualPrice !== false && (
                             <div style={{ fontSize: `${(config.fontSizeBody || 10) * 2.8}px` }} className="flex justify-between items-center pt-2 border-t border-dotted border-gray-100 mt-2 font-black">
                                 <span className="text-gray-800">{labels.actualPrice}</span>
-                                <span className="text-gray-900 font-mono">฿{(Number(printingReceipt?.actualPrice ?? (Number(watch('basePrice') || 0) + Number(watch('bonusDrc') || 0) + (selectedFarmer?.fscId ? (Number(settings.fscBonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0))) || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                <span className="text-gray-900 font-mono">฿{(Number(printingReceipt?.actualPrice ?? (Number(watch('basePrice') || 0) + Number(watch('bonusDrc') || 0) + ((watch('enableFsc') !== false && selectedFarmer?.fscId) ? (Number(settings.fscBonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0))) || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
                             </div>
                         )}
                     </div>
@@ -205,25 +246,58 @@ const BuyESlipCapture = ({ eslipRef, settings, watch, watchRubberType, printingR
                                 <p className="text-[14px] font-black text-rubber-700 uppercase tracking-widest">การจัดสรรเงิน</p>
                             </div>
 
-                            <div className="space-y-4 pt-6 mt-6 border-t border-dotted border-gray-100">
-                                <div className="flex justify-between items-center text-[22px]">
-                                    <div className="flex items-center space-x-3">
-                                        <Coins size={32} className="text-orange-400" />
-                                        <span className="font-bold text-orange-400">{labels.farmerSplit} ({(100 - currentEmpPct)}%)</span>
-                                    </div>
-                                    <span className="font-black text-[#5ba2d7] font-mono italic">฿{Math.floor((calculateTotal() * (100 - currentEmpPct)) / 100).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
-                                </div>
+                            {(() => {
+                                // Deductions checking
+                                let hasFarmerDed = false;
+                                let hasEmployeeDed = false;
+                                let farmerNet = 0;
+                                let employeeNet = 0;
 
-                                {currentEmpPct > 0 && (
-                                    <div className="flex justify-between items-center text-[22px]">
-                                        <div className="flex items-center space-x-3">
-                                            <User size={32} className="text-[#a855f7]" />
-                                            <span className="font-bold text-[#a855f7]">{labels.employeeSplit} ({currentEmpPct}%)</span>
+                                if (printingReceipt) {
+                                    farmerNet = Number(printingReceipt.farmerTotal || 0);
+                                    employeeNet = Number(printingReceipt.employeeTotal || 0);
+                                    hasFarmerDed = Array.isArray(printingReceipt.loanDeductions) && printingReceipt.loanDeductions.some(d => d.borrowerType === 'farmer');
+                                    hasEmployeeDed = Array.isArray(printingReceipt.loanDeductions) && printingReceipt.loanDeductions.some(d => d.borrowerType === 'employee');
+                                } else {
+                                    const fDed = parseFloat(watch('farmerDeduction')) || 0;
+                                    const eDed = parseFloat(watch('employeeDeduction')) || 0;
+                                    const gross = calculateTotal() || 0;
+                                    const fGross = (gross * (100 - currentEmpPct)) / 100;
+                                    const eGross = (gross * currentEmpPct) / 100;
+                                    farmerNet = Math.floor(fGross - fDed);
+                                    employeeNet = Math.floor(eGross - eDed);
+                                    hasFarmerDed = fDed > 0;
+                                    hasEmployeeDed = eDed > 0;
+                                }
+
+                                return (
+                                    <div className="space-y-4 pt-6 mt-6 border-t border-dotted border-gray-100">
+                                        <div className="flex justify-between items-center text-[22px]">
+                                            <div className="flex items-center space-x-3">
+                                                <Coins size={32} className="text-orange-400" />
+                                                <span className="font-bold text-orange-400">{labels.farmerSplit} ({(100 - currentEmpPct)}%)</span>
+                                            </div>
+                                            <span className="font-black text-[#5ba2d7] font-mono italic">
+                                                ฿{Math.floor(farmerNet).toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                                {hasFarmerDed ? '*' : ''}
+                                            </span>
                                         </div>
-                                        <span className="font-black text-[#a855f7] font-mono italic">฿{Math.floor((calculateTotal() * currentEmpPct) / 100).toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+
+                                        {currentEmpPct > 0 && (
+                                            <div className="flex justify-between items-center text-[22px]">
+                                                <div className="flex items-center space-x-3">
+                                                    <User size={32} className="text-[#a855f7]" />
+                                                    <span className="font-bold text-[#a855f7]">{labels.employeeSplit} ({currentEmpPct}%)</span>
+                                                </div>
+                                                <span className="font-black text-[#a855f7] font-mono italic">
+                                                    ฿{Math.floor(employeeNet).toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                                    {hasEmployeeDed ? '*' : ''}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
+                                );
+                            })()}
                         </div>
                     )}
 
@@ -242,15 +316,33 @@ const BuyESlipCapture = ({ eslipRef, settings, watch, watchRubberType, printingR
                     )}
                 </div>
 
-                <div className="bg-[#2d5a3f] p-6 flex justify-between items-center text-white">
-                    <span style={{ fontSize: `${(config.fontSizeTotal || 20) * 1.4}px` }} className="font-black uppercase">ยอดรวมจ่าย</span>
-                    <div className="text-right">
-                        <span style={{ fontSize: `${(config.fontSizeTotal || 20) * 4}px` }} className="font-black leading-none tabular-nums tracking-tighter">
-                            ฿{Math.floor(calculateTotal()).toLocaleString(undefined, { minimumFractionDigits: 0 })}
-                        </span>
-                        <p style={{ fontSize: `${(config.fontSizeFooter || 8) * 1.5}px` }} className="font-bold opacity-60">{config.footerText}</p>
-                    </div>
-                </div>
+                {(() => {
+                    let totalNet = 0;
+                    let hasAnyDed = false;
+                    if (printingReceipt) {
+                        totalNet = Number(printingReceipt.total || 0);
+                        hasAnyDed = Array.isArray(printingReceipt.loanDeductions) && printingReceipt.loanDeductions.length > 0;
+                    } else {
+                        const fDed = parseFloat(watch('farmerDeduction')) || 0;
+                        const eDed = parseFloat(watch('employeeDeduction')) || 0;
+                        const gross = calculateTotal() || 0;
+                        totalNet = Math.floor(gross - fDed - eDed);
+                        hasAnyDed = fDed > 0 || eDed > 0;
+                    }
+
+                    return (
+                        <div className="bg-[#2d5a3f] p-6 flex justify-between items-center text-white">
+                            <span style={{ fontSize: `${(config.fontSizeTotal || 20) * 1.4}px` }} className="font-black uppercase">ยอดรวมจ่าย</span>
+                            <div className="text-right">
+                                <span style={{ fontSize: `${(config.fontSizeTotal || 20) * 4}px` }} className="font-black leading-none tabular-nums tracking-tighter">
+                                    ฿{Math.floor(totalNet).toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                                    {hasAnyDed ? '*' : ''}
+                                </span>
+                                <p style={{ fontSize: `${(config.fontSizeFooter || 8) * 1.5}px` }} className="font-bold opacity-60">{config.footerText}</p>
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
         </div>
     );

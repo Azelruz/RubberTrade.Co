@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { Building2, Save, Trash2, Database, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Building2, Save, Trash2, Database, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { 
     getSettings, 
@@ -16,11 +16,13 @@ export const GeneralSettings = () => {
     const [saving, setSaving] = useState(false);
     const [logoUrl, setLogoUrl] = useState('');
     
-    const { register, handleSubmit, reset } = useForm({
+    const { register, handleSubmit, reset, setValue } = useForm({
         defaultValues: {
             factoryName: '',
             address: '',
             phone: '',
+            latitude: '',
+            longitude: '',
             pointsPerKg: '10',
             station_code: '',
             format_buy_bill: 'B-{STATION}{YYYY}-{SEQ4}',
@@ -32,6 +34,25 @@ export const GeneralSettings = () => {
             showPrizeDraw: true
         }
     });
+
+    const handleGetCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            toast.error("เบราว์เซอร์ของคุณไม่รองรับการดึงพิกัด GPS");
+            return;
+        }
+        const toastId = toast.loading("กำลังดึงพิกัดผ่าน GPS...");
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                setValue('latitude', position.coords.latitude.toFixed(6));
+                setValue('longitude', position.coords.longitude.toFixed(6));
+                toast.success("ดึงพิกัดปัจจุบันสำเร็จ", { id: toastId });
+            },
+            (error) => {
+                toast.error("ไม่สามารถดึงพิกัดได้: " + error.message, { id: toastId });
+            },
+            { enableHighAccuracy: true }
+        );
+    };
 
     useEffect(() => {
         loadSettings();
@@ -50,6 +71,8 @@ export const GeneralSettings = () => {
                     factoryName: res.data.factoryName || '',
                     address: res.data.address || '',
                     phone: res.data.phone || '',
+                    latitude: res.data.latitude || '',
+                    longitude: res.data.longitude || '',
                     pointsPerKg: res.data.pointsPerKg || '10',
                     lineChannelAccessToken: res.data.lineChannelAccessToken || '',
                     lineChannelSecret: res.data.lineChannelSecret || '',
@@ -210,6 +233,34 @@ export const GeneralSettings = () => {
                                             className="w-full px-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rubber-500 focus:bg-white transition-all font-mono font-bold text-gray-800 text-sm"
                                             placeholder="RTB"
                                         />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">พิกัดละติจูด (Latitude)</label>
+                                        <input
+                                            type="text"
+                                            {...register('latitude')}
+                                            className="w-full px-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rubber-500 focus:bg-white transition-all font-mono font-bold text-gray-800 text-sm"
+                                            placeholder="เช่น 8.450123"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">พิกัดลองจิจูด (Longitude)</label>
+                                        <input
+                                            type="text"
+                                            {...register('longitude')}
+                                            className="w-full px-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-rubber-500 focus:bg-white transition-all font-mono font-bold text-gray-800 text-sm"
+                                            placeholder="เช่น 99.963124"
+                                        />
+                                    </div>
+                                    <div className="flex items-end pb-1">
+                                        <button
+                                            type="button"
+                                            onClick={handleGetCurrentLocation}
+                                            className="flex items-center space-x-1.5 px-4 py-2.5 border border-rubber-200 text-rubber-600 bg-rubber-50/30 rounded-xl text-xs font-bold hover:bg-rubber-50 transition-all active:scale-95 shadow-sm"
+                                        >
+                                            <MapPin size={14} />
+                                            <span>ดึงพิกัดปัจจุบัน (GPS)</span>
+                                        </button>
                                     </div>
                                     <div className="md:col-span-2 space-y-1.5">
                                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">ที่อยู่สำหรับการออกใบเสร็จ</label>

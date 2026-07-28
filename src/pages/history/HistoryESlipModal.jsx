@@ -2,7 +2,7 @@ import React from 'react';
 import { X, Leaf, User, Package, ChevronDown, Coins, Eye } from 'lucide-react';
 import { format, parseISO, addYears } from 'date-fns';
 import { th } from 'date-fns/locale';
-import { formatReceiptDate } from '../../utils/dateUtils';
+import { formatReceiptDate, formatSelectedDate, formatRecordingDate } from '../../utils/dateUtils';
 
 const HistoryESlipModal = ({ viewingEslip, handleCloseEslip, activeTab, settings, farmers, memberTypes, paperSlipConfig }) => {
     if (!viewingEslip) return null;
@@ -27,7 +27,7 @@ const HistoryESlipModal = ({ viewingEslip, handleCloseEslip, activeTab, settings
 
     const config = resolveConfig() || { 
         showLogo: true, showStoreName: true, showAddress: true, showPhone: true, 
-        showBillType: true, showBillId: true, showDateTime: true, showFarmerName: true, 
+        showBillType: true, showBillId: true, showDateTime: true, showSelectedDate: true, showRecordingTime: true, showFarmerName: true, 
         showRawWeight: true, showBucketWeight: true, showNetWeight: true, showDrc: true, 
         showDryWeight: true, showBasePrice: true, showBonusDrc: true, showBonusFsc: true, 
         showBonusMember: true, showActualPrice: true, showSplits: true,
@@ -54,6 +54,9 @@ const HistoryESlipModal = ({ viewingEslip, handleCloseEslip, activeTab, settings
     const labels = config.labels;
     const headerTitle = config.headerTitle;
     const rawWeightLabel = labels.rawWeight;
+    const farmerId = viewingEslip.farmerId || viewingEslip.farmer_id;
+    const farmer = (farmers || []).find(f => f.id === farmerId);
+    const fscId = viewingEslip.fscId || viewingEslip.fsc_id || farmer?.fscId || farmer?.fsc_id;
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-2 no-print sm:p-4">
@@ -107,10 +110,26 @@ const HistoryESlipModal = ({ viewingEslip, handleCloseEslip, activeTab, settings
 
                     <div className="px-3 pt-3 pb-4 bg-white">
                         {/* Transaction ID & Date Bar */}
-                        {(config.showBillId !== false || config.showDateTime !== false) && (
-                            <div className="flex justify-between items-center mb-3 font-black text-gray-400 bg-gray-50/80 px-2 py-1.5 rounded-lg border border-gray-100">
-                                {config.showBillId !== false ? <span style={{ fontSize: `${config.fontSizeBillIdValue || config.fontSizeBillId || 7}px` }} className="flex items-center"><span style={{ fontSize: `${config.fontSizeBillIdLabel || config.fontSizeBillId || 7}px` }} className="opacity-40 mr-1 font-bold small-caps">ID:</span> <span className="text-gray-900 mono">{viewingEslip.id?.substring(0, 14)}</span></span> : <span></span>}
-                                {config.showDateTime !== false && <span style={{ fontSize: `${config.fontSizeDateTimeValue || config.fontSizeDateTime || 7}px` }}>{formatReceiptDate(viewingEslip, 'dd MMM yy HH:mm')}</span>}
+                        {(config.showBillId !== false || config.showSelectedDate !== false || config.showRecordingTime !== false) && (
+                            <div className="flex flex-col mb-3 font-black text-gray-400 bg-gray-50/80 px-2 py-1.5 rounded-lg border border-gray-100 gap-0.5">
+                                {config.showBillId !== false && (
+                                    <div className="flex justify-between items-center border-b border-gray-100 pb-0.5 mb-0.5">
+                                        <span style={{ fontSize: `${config.fontSizeBillIdLabel || config.fontSizeBillId || 7}px` }} className="opacity-40 font-bold small-caps">ID:</span>
+                                        <span style={{ fontSize: `${config.fontSizeBillIdValue || config.fontSizeBillId || 7}px` }} className="text-gray-900 mono">{viewingEslip.id?.substring(0, 14)}</span>
+                                    </div>
+                                )}
+                                {config.showSelectedDate !== false && (
+                                    <div className="flex justify-between items-center">
+                                        <span style={{ fontSize: `${(config.fontSizeDateTimeLabel || config.fontSizeDateTime || 7)}px` }} className="opacity-40">{(config.labels?.selectedDate || 'วันที่ทำรายการ')}:</span>
+                                        <span style={{ fontSize: `${config.fontSizeDateTimeValue || config.fontSizeDateTime || 7}px` }} className="text-gray-900">{formatSelectedDate(viewingEslip, 'dd MMM yy')}</span>
+                                    </div>
+                                )}
+                                {config.showRecordingTime !== false && (
+                                    <div className="flex justify-between items-center">
+                                        <span style={{ fontSize: `${(config.fontSizeDateTimeLabel || config.fontSizeDateTime || 7)}px` }} className="opacity-40">{(config.labels?.recordingTime || 'เวลาบันทึก')}:</span>
+                                        <span style={{ fontSize: `${config.fontSizeDateTimeValue || config.fontSizeDateTime || 7}px` }} className="text-gray-900">{formatRecordingDate(viewingEslip, 'dd MMM yy HH:mm')}</span>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -125,8 +144,16 @@ const HistoryESlipModal = ({ viewingEslip, handleCloseEslip, activeTab, settings
                                     <h2 style={{ fontSize: `${config.fontSizeFarmerNameValue || config.fontSizeFarmerName || 18}px` }} className="font-black text-gray-800 leading-none mb-0.5">
                                         {activeTab === 'buy' ? (viewingEslip.farmerName || 'ลูกค้าทั่วไป') : (viewingEslip.buyerName || '-')}
                                     </h2>
-                                    <div style={{ fontSize: `${(config.fontSizeSubData || 8) - 1}px` }} className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded font-bold text-gray-500">
-                                        รหัส: {activeTab === 'buy' ? (viewingEslip.farmerId || '-') : (viewingEslip.factoryId || '-')}
+                                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                        <div style={{ fontSize: `${(config.fontSizeSubData || 8) - 1}px` }} className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded font-bold text-gray-500">
+                                            รหัส: {activeTab === 'buy' ? (viewingEslip.farmerId || '-') : (viewingEslip.factoryId || '-')}
+                                        </div>
+                                        {(activeTab === 'buy' && config.showFscCode !== false && fscId) && (
+                                            <div style={{ fontSize: `${(config.fontSizeSubData || 8) - 1}px` }} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#fff9eb] text-[#d97706] border border-[#fde68a] rounded font-bold">
+                                                <Leaf size={10} className="text-[#d97706]" />
+                                                <span>{fscId}</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-100">

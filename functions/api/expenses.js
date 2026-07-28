@@ -30,18 +30,30 @@ async function handlePost(context) {
         }
 
         const id = payload.id || crypto.randomUUID();
-        const { date, category, description, amount, note } = payload;
+        const { date, category, description, amount, note, tax_type, tax_amount } = payload;
         
         await context.env.DB.prepare(`
-            INSERT INTO expenses (id, date, category, description, amount, note, userId) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO expenses (id, date, category, description, amount, note, userId, tax_type, tax_amount) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 date = excluded.date,
                 category = excluded.category,
                 description = excluded.description,
                 amount = excluded.amount,
-                note = excluded.note
-        `).bind(id, date || null, category || null, description || null, amount || 0, note || null, context.user.storeId).run();
+                note = excluded.note,
+                tax_type = excluded.tax_type,
+                tax_amount = excluded.tax_amount
+        `).bind(
+            id, 
+            date || null, 
+            category || null, 
+            description || null, 
+            amount || 0, 
+            note || null, 
+            context.user.storeId,
+            tax_type || 'none',
+            tax_amount || 0
+        ).run();
         
         return jsonResponse({ status: 'success', id });
     } catch (e) {

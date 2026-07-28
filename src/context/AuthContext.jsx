@@ -32,6 +32,7 @@ export const AuthProvider = ({ children }) => {
                 // Fallback from localStorage if offline
                 subscriptionStatus: localStorage.getItem('rt_subscription_status') || 'trial',
                 subscriptionExpiry: localStorage.getItem('rt_subscription_expiry'),
+                storeName: localStorage.getItem('rt_store_name') || '',
                 lastSync: localStorage.getItem('rt_last_sync')
             };
 
@@ -43,18 +44,21 @@ export const AuthProvider = ({ children }) => {
                 if (subRes && subRes.status === 'success') {
                     const status = subRes.subscription?.subscription_status || 'trial';
                     const expiry = subRes.subscription?.subscription_expiry;
+                    const storeName = subRes.subscription?.store_name || '';
                     const role = subRes.subscription?.role || baseUser.role;
                     const now = new Date().toISOString();
 
                     // Persist to localStorage for offline security checks
                     localStorage.setItem('rt_subscription_status', status);
                     if (expiry) localStorage.setItem('rt_subscription_expiry', expiry);
+                    localStorage.setItem('rt_store_name', storeName);
                     localStorage.setItem('rt_last_sync', now);
 
                     setUser(prev => ({
                         ...prev,
                         subscriptionStatus: status,
                         subscriptionExpiry: expiry,
+                        storeName: storeName,
                         lastSync: now,
                         role: role
                     }));

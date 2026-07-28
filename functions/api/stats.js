@@ -76,10 +76,10 @@ async function handleGet(context) {
             settingsMap.chemicalSettings = settings.results.find(s => s.key === 'chemicalSettings')?.value || null;
         }
 
-        const income = isStaff ? '***' : ((monthSellsLatex?.totalAmount || 0) + (monthSellsCupLump?.totalAmount || 0));
+        const income = ((monthSellsLatex?.totalAmount || 0) + (monthSellsCupLump?.totalAmount || 0));
         const buyCost = ((monthBuysLatex?.totalAmount || 0) + (monthBuysCupLump?.totalAmount || 0));
         const otherCost = ((monthExp?.total || 0) + (monthWage?.total || 0));
-        const cost = isStaff ? '***' : (buyCost + otherCost);
+        const cost = (buyCost + otherCost);
         const profit = isStaff ? '***' : (income - cost);
 
         return jsonResponse({
@@ -88,15 +88,15 @@ async function handleGet(context) {
                 buys: {
                     latex: todayBuysLatex || { totalWeight: 0, totalAmount: 0, count: 0, avgDrc: 0 },
                     cupLump: todayBuysCupLump || { totalWeight: 0, totalAmount: 0, count: 0 },
-                    totalAmount: isStaff ? '***' : ((todayBuysLatex?.totalAmount || 0) + (todayBuysCupLump?.totalAmount || 0)),
+                    totalAmount: ((todayBuysLatex?.totalAmount || 0) + (todayBuysCupLump?.totalAmount || 0)),
                     totalWeight: (todayBuysLatex?.totalWeight || 0) + (todayBuysCupLump?.totalWeight || 0)
                 },
                 sells: {
                     latex: todaySellsLatex || { totalAmount: 0 },
                     cupLump: todaySellsCupLump || { totalAmount: 0 },
-                    totalAmount: isStaff ? '***' : ((todaySellsLatex?.totalAmount || 0) + (todaySellsCupLump?.totalAmount || 0))
+                    totalAmount: ((todaySellsLatex?.totalAmount || 0) + (todaySellsCupLump?.totalAmount || 0))
                 },
-                expenses: isStaff ? '***' : ((todayExp?.total || 0) + (todayWage?.total || 0)),
+                expenses: ((todayExp?.total || 0) + (todayWage?.total || 0)),
                 month: { income, cost, profit },
                 unpaid: unpaid?.count || 0,
                 dailyPrice: settingsMap.dailyPrice,

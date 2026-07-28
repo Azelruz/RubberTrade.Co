@@ -1,4 +1,5 @@
 import { jsonResponse, errorResponse, withAuth, withRateLimit, recordAuditLog } from './_utils.js';
+import { refundLoanDeductions } from './_loan_helpers.js';
 
 async function handleDelete(context) {
     try {
@@ -11,12 +12,8 @@ async function handleDelete(context) {
             return errorResponse('Missing required fields (sheetName, id)', 400);
         }
 
-        // Block Staff from deleting anything
-        if (user.role === 'staff') {
-            return errorResponse('Permission Denied: Staff cannot delete records', 403);
-        }
 
-        const validTables = ['farmers', 'staff', 'employees', 'buys', 'sells', 'expenses', 'wages', 'promotions', 'trucks', 'factories', 'chemicals'];
+        const validTables = ['farmers', 'staff', 'employees', 'buys', 'sells', 'expenses', 'wages', 'promotions', 'trucks', 'factories', 'chemicals', 'loans', 'loan_deductions', 'service_catalog', 'service_queues'];
         let tableName = sheetName.toLowerCase();
         
         // Map frontend table names to actual database table names if they differ
@@ -41,6 +38,10 @@ async function handleDelete(context) {
             oldRecord = await context.env.DB.prepare(`SELECT * FROM ${tableName} WHERE id = ?`).bind(id).first();
         } catch (e) {
             console.error("[Audit Fetch Error]", e);
+        }
+
+        if (tableName === 'buys' && oldRecord) {
+            await refundLoanDeductions(context.env.DB, id, oldRecord.userId);
         }
 
         if (isSuperAdmin) {

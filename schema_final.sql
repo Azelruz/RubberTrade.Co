@@ -68,6 +68,7 @@ CREATE TABLE buys (
     bonusDrc REAL DEFAULT 0,
     actualPrice REAL DEFAULT 0,
     rubberType TEXT DEFAULT 'latex',
+    createdBy TEXT,
     userId TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (farmerId) REFERENCES farmers(id) ON DELETE SET NULL
@@ -107,6 +108,8 @@ CREATE TABLE expenses (
     amount REAL,
     note TEXT,
     userId TEXT,
+    tax_type TEXT DEFAULT 'none',
+    tax_amount REAL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -165,6 +168,12 @@ INSERT OR IGNORE INTO settings (key, value) VALUES ('daily_price', '50.00');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('factoryName', 'ร้านรับซื้อน้ำยางพารา');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('pointsPerKg', '10');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('address', 'เลขที่ 123 หมู่ 4 ต.ยางพารา อ.เมือง จ.สุราษฎร์ธานี');
+
+-- Default payment/bank settings
+INSERT OR IGNORE INTO settings (key, value, userId) VALUES ('bank_name', 'พร้อมเพย์ (PromptPay)', 'SYSTEM');
+INSERT OR IGNORE INTO settings (key, value, userId) VALUES ('bank_account', '0858959641', 'SYSTEM');
+INSERT OR IGNORE INTO settings (key, value, userId) VALUES ('bank_owner', 'ผู้ดูแลระบบ RubberTrade', 'SYSTEM');
+INSERT OR IGNORE INTO settings (key, value, userId) VALUES ('promptpay_id', '0858959641', 'SYSTEM');
 
 DROP TABLE IF EXISTS users;
 CREATE TABLE users (
@@ -260,4 +269,71 @@ CREATE TABLE api_rate_limits (
     count INTEGER,
     PRIMARY KEY (key, minute)
 );
+
+-- Table for caching weather forecasts and yield prediction calculations
+CREATE TABLE IF NOT EXISTS weather_forecasts (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    forecast_date DATE NOT NULL,
+    rain_probability REAL,
+    tapping_hours_rain REAL,
+    weather_code INTEGER,
+    estimated_yield_pct REAL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(userId, forecast_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_weather_forecasts_user_date ON weather_forecasts(userId, forecast_date);
+
+-- Table for 3-Station Smart Queue workflow
+CREATE TABLE IF NOT EXISTS queues (
+    id TEXT PRIMARY KEY,
+    queue_no INTEGER NOT NULL,
+    farmer_id TEXT NOT NULL,
+    farmer_name TEXT NOT NULL,
+    rubber_type TEXT DEFAULT 'fresh_latex',
+    weight REAL DEFAULT 0,
+    bucket_weight REAL DEFAULT 0,
+    drc REAL DEFAULT 0,
+    status TEXT DEFAULT 'waiting_drc',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    called_at DATETIME,
+    completed_at DATETIME,
+    userId TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_queues_user_status ON queues(userId, status);
+CREATE INDEX IF NOT EXISTS idx_queues_date ON queues(userId, created_at);
+
+-- Tables for Cash Advance & Auto-Deduction workflow
+CREATE TABLE IF NOT EXISTS loans (
+    id TEXT PRIMARY KEY,
+    borrowerType TEXT NOT NULL,
+    borrowerId TEXT NOT NULL,
+    borrowerName TEXT NOT NULL,
+    date TEXT NOT NULL,
+    amount REAL NOT NULL,
+    remainingAmount REAL NOT NULL,
+    deductionMethod TEXT DEFAULT 'full',
+    deductionValue REAL DEFAULT 0,
+    note TEXT,
+    userId TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_loans_borrower ON loans(userId, borrowerId);
+
+CREATE TABLE IF NOT EXISTS loan_deductions (
+    id TEXT PRIMARY KEY,
+    buyId TEXT NOT NULL,
+    borrowerType TEXT NOT NULL,
+    borrowerId TEXT NOT NULL,
+    amount REAL NOT NULL,
+    remainingDebtAfter REAL NOT NULL,
+    userId TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_loan_deductions_buy ON loan_deductions(userId, buyId);
+CREATE INDEX IF NOT EXISTS idx_loan_deductions_borrower ON loan_deductions(userId, borrowerId);
 

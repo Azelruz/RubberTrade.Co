@@ -8,9 +8,11 @@ const API_BASE = '/api';
 export const getScriptUrl = () => 'cloudflare-d1';
 export const updateScriptUrl = (url) => {};
 
-// --- Simple in-session cache ---
+// --- Simple in-session cache with fast in-memory RAM layer ---
 const TTL_SHORT = 3 * 60 * 1000;  // 3 minutes (Dashboard, Transactions)
 const TTL_LONG = 10 * 60 * 1000; // 10 minutes (Farmers, Factories, Employees, Staff, Trucks)
+
+const memoryCache = new Map();
 
 const getTTL = (key) => {
     const longTTLKeys = ['farmers', 'employees', 'staff', 'factories', 'trucks', 'settings', 'farmer_types'];
@@ -19,10 +21,21 @@ const getTTL = (key) => {
 
 const getCache = (key) => {
     try {
+        const item = memoryCache.get(key);
+        if (item) {
+            if (Date.now() > item.expires) {
+                memoryCache.delete(key);
+                try { sessionStorage.removeItem('gc_' + key); } catch {}
+                return null;
+            }
+            return item.data;
+        }
+
         const raw = sessionStorage.getItem('gc_' + key);
         if (!raw) return null;
         const { data, expires } = JSON.parse(raw);
         if (Date.now() > expires) { sessionStorage.removeItem('gc_' + key); return null; }
+        memoryCache.set(key, { data, expires });
         return data;
     } catch { return null; }
 };
@@ -30,12 +43,17 @@ const getCache = (key) => {
 const setCache = (key, data) => {
     try {
         const ttl = getTTL(key);
-        sessionStorage.setItem('gc_' + key, JSON.stringify({ data, expires: Date.now() + ttl }));
+        const expires = Date.now() + ttl;
+        memoryCache.set(key, { data, expires });
+        sessionStorage.setItem('gc_' + key, JSON.stringify({ data, expires }));
     } catch {}
 };
 
 export const clearCache = (...keys) => {
-    keys.forEach(k => { try { sessionStorage.removeItem('gc_' + k); } catch {} });
+    keys.forEach(k => { 
+        memoryCache.delete(k);
+        try { sessionStorage.removeItem('gc_' + k); } catch {} 
+    });
 };
 
 export const clearAllCache = () => {
@@ -361,6 +379,34 @@ export const deleteBackup = async (id) => {
     return await fetchAPI(`/backup?id=${id}`, { method: 'DELETE' });
 };
 
+export const fetchWeatherForecast = async () => {
+    return await fetchAPI('/forecast');
+};
+
+export const fetchQueues = async () => {
+    return await fetchAPI('/queue');
+};
+
+export const addQueue = async (payload) => {
+    return await fetchAPI('/queue', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+    });
+};
+
+export const updateQueue = async (payload) => {
+    return await fetchAPI('/queue', {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+    });
+};
+
+export const fetchPublicQueues = async (storeId) => {
+    const response = await fetch(`/api/queue/public?storeId=${storeId}`);
+    if (!response.ok) throw new Error("Failed to fetch public queues");
+    return await response.json();
+};
+
 export const getSettings = async () => {
     const switchedStoreId = localStorage.getItem('rt_active_store_id');
     
@@ -429,6 +475,7 @@ export const updateSettingsAPI = async (payload) => {
 
 export const deleteRecord = async (sheetName, id) => {
     const table = sheetName.toLowerCase();
+    const switchedStoreId = localStorage.getItem('rt_active_store_id');
     
     // ONLINE: Delete via API directly
     if (navigator.onLine) {
@@ -442,7 +489,11 @@ export const deleteRecord = async (sheetName, id) => {
         }
     }
 
-    // OFFLINE: Queue for later sync
+    // OFFLINE: Queue for later sync (BLOCK IF SWITCHED)
+    if (switchedStoreId) {
+        throw new Error('ไม่สามารถลบข้อมูลแบบออฟไลน์ขณะแก้ไขข้อมูลแทนร้านค้าอื่นได้ กรุณาเชื่อมต่ออินเทอร์เน็ต');
+    }
+
     await db.sync_queue.put({
         type: 'deleteRecord',
         action: 'POST',
@@ -460,6 +511,7 @@ export const deleteRecord = async (sheetName, id) => {
 
 export const updateRecord = async (sheetName, id, updates) => {
     const table = sheetName.toLowerCase();
+    const switchedStoreId = localStorage.getItem('rt_active_store_id');
     
     // ONLINE: Update via API directly
     if (navigator.onLine) {
@@ -473,7 +525,11 @@ export const updateRecord = async (sheetName, id, updates) => {
         }
     }
 
-    // OFFLINE: Queue for later sync
+    // OFFLINE: Queue for later sync (BLOCK IF SWITCHED)
+    if (switchedStoreId) {
+        throw new Error('ไม่สามารถแก้ไขข้อมูลแบบออฟไลน์ขณะแก้ไขข้อมูลแทนร้านค้าอื่นได้ กรุณาเชื่อมต่ออินเทอร์เน็ต');
+    }
+
     await db.sync_queue.put({
         type: 'updateRecord',
         action: 'POST',
@@ -650,6 +706,53 @@ export const inviteTeamMember = async (email) => {
 export const removeTeamMember = async (userId) => {
     return await fetchAPI('/team', { method: 'POST', body: { action: 'remove', userId } });
 };
+
+// --- Cash Advance & Loans API ---
+export const fetchLoans = async () => {
+    return await fetchAPI('/loans');
+};
+
+export const addLoan = async (payload) => await offlineWrite('loans', '/loans', payload);
+
+export const addLoanDeduction = async (payload) => await offlineWrite('loan_deductions', '/loans/deductions', payload);
+
+export const fetchLoanDeductions = async () => {
+    return await fetchAPI('/loans/deductions');
+};
+
+// --- General Services & Service Queues API ---
+export const fetchServiceCatalog = async () => {
+    return await offlineRead('service_catalog', '/services/catalog');
+};
+
+export const addServiceCatalog = async (payload) => {
+    return await offlineWrite('service_catalog', '/services/catalog', payload);
+};
+
+export const updateServiceCatalog = async (id, payload) => {
+    return await offlineWrite('service_catalog', `/services/catalog/${id}`, payload, 'POST');
+};
+
+export const deleteServiceCatalog = async (id) => {
+    return await deleteRecord('service_catalog', id);
+};
+
+export const fetchServiceQueues = async () => {
+    return await offlineRead('service_queues', '/services/queues');
+};
+
+export const addServiceQueue = async (payload) => {
+    return await offlineWrite('service_queues', '/services/queues', payload);
+};
+
+export const updateServiceQueue = async (id, payload) => {
+    return await offlineWrite('service_queues', `/services/queues/${id}`, payload, 'POST');
+};
+
+export const deleteServiceQueue = async (id) => {
+    return await deleteRecord('service_queues', id);
+};
+
 
 
 

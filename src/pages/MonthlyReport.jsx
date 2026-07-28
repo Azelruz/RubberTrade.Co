@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { 
@@ -10,6 +11,8 @@ import { fetchBuyRecords, fetchSellRecords, fetchExpenses, fetchWages, isCached 
 import { truncateOneDecimal } from '../utils/calculations';
 
 export const MonthlyReport = () => {
+    const { user } = useAuth();
+    const isStaff = user?.role === 'staff';
     const [loading, setLoading] = useState(true);
     const [buys, setBuys] = useState([]);
     const [sells, setSells] = useState([]);
@@ -102,7 +105,7 @@ export const MonthlyReport = () => {
             d.buyTotal.toFixed(2),
             d.sellTotal.toFixed(2),
             d.expTotal.toFixed(2),
-            d.profit.toFixed(2)
+            isStaff ? '***' : d.profit.toFixed(2)
         ]);
 
         const csvContent = [
@@ -198,15 +201,15 @@ export const MonthlyReport = () => {
                             </div>
                         </div>
 
-                        <div className={`p-5 rounded-2xl border shadow-sm relative overflow-hidden group transition-all ${reportData.totals.profit >= 0 ? 'bg-white border-gray-100' : 'bg-red-50 border-red-100'}`}>
-                            <div className={`absolute -right-6 -bottom-6 w-20 h-20 rounded-full group-hover:scale-150 transition-transform duration-500 z-0 ${reportData.totals.profit >= 0 ? 'bg-green-50' : 'bg-red-100/50'}`}></div>
+                        <div className={`p-5 rounded-2xl border shadow-sm relative overflow-hidden group transition-all ${reportData.totals.profit >= 0 || isStaff ? 'bg-white border-gray-100' : 'bg-red-50 border-red-100'}`}>
+                            <div className={`absolute -right-6 -bottom-6 w-20 h-20 rounded-full group-hover:scale-150 transition-transform duration-500 z-0 ${reportData.totals.profit >= 0 || isStaff ? 'bg-green-50' : 'bg-red-100/50'}`}></div>
                             <div className="relative z-10">
                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center">
-                                    {reportData.totals.profit >= 0 ? <TrendingUp size={12} className="mr-2 text-green-500" /> : <TrendingDown size={12} className="mr-2 text-red-500" />}
+                                    {reportData.totals.profit >= 0 || isStaff ? <TrendingUp size={12} className="mr-2 text-green-500" /> : <TrendingDown size={12} className="mr-2 text-red-500" />}
                                     กำไรสุทธิจริง
                                 </p>
-                                <p className={`text-2xl font-black italic ${reportData.totals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {reportData.totals.profit >= 0 ? '+' : ''}฿{reportData.totals.profit.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                <p className={`text-2xl font-black italic ${reportData.totals.profit >= 0 || isStaff ? 'text-green-600' : 'text-red-600'}`}>
+                                    {isStaff ? '***' : (reportData.totals.profit >= 0 ? '+' : '') + '฿' + reportData.totals.profit.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                                 </p>
                             </div>
                         </div>
@@ -252,8 +255,8 @@ export const MonthlyReport = () => {
                                                 {day.expTotal > 0 ? day.expTotal.toLocaleString(undefined, { minimumFractionDigits: 1 }) : '-'}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-right">
-                                                <div className={`text-sm font-black ${day.profit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                                    {day.profit !== 0 ? (day.profit > 0 ? '+' : '') + day.profit.toLocaleString(undefined, { minimumFractionDigits: 1 }) : '0.0'}
+                                                <div className={`text-sm font-black ${day.profit >= 0 || isStaff ? 'text-green-600' : 'text-red-500'}`}>
+                                                    {isStaff ? '***' : (day.profit !== 0 ? (day.profit > 0 ? '+' : '') + day.profit.toLocaleString(undefined, { minimumFractionDigits: 1 }) : '0.0')}
                                                 </div>
                                             </td>
                                         </tr>
@@ -278,8 +281,8 @@ export const MonthlyReport = () => {
                                         <td className="px-6 py-4 text-right font-black text-sm text-red-400">
                                             {reportData.totals.expenses.toLocaleString(undefined, { minimumFractionDigits: 1 })}
                                         </td>
-                                        <td className={`px-6 py-4 text-right font-black text-sm ${reportData.totals.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {reportData.totals.profit.toLocaleString(undefined, { minimumFractionDigits: 1 })}
+                                        <td className={`px-6 py-4 text-right font-black text-sm ${reportData.totals.profit >= 0 || isStaff ? 'text-green-400' : 'text-red-400'}`}>
+                                            {isStaff ? '***' : reportData.totals.profit.toLocaleString(undefined, { minimumFractionDigits: 1 })}
                                         </td>
                                     </tr>
                                 </tfoot>

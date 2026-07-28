@@ -37,8 +37,19 @@ export const Expenses = () => {
     const [editingRecord, setEditingRecord] = useState(null); // { id, sheetName }
     const isDemo = false;
 
-    const expenseForm = useForm({ defaultValues: { date: format(new Date(), 'yyyy-MM-dd') } });
+    const expenseForm = useForm({ defaultValues: { date: format(new Date(), 'yyyy-MM-dd'), tax_type: 'none', tax_amount: 0 } });
     const wageForm = useForm({ defaultValues: { date: format(new Date(), 'yyyy-MM-dd'), workDays: 1, bonus: 0 } });
+
+    const watchAmount = expenseForm.watch('amount');
+    const watchTaxType = expenseForm.watch('tax_type');
+    const computedTax = React.useMemo(() => {
+        const amt = parseFloat(watchAmount) || 0;
+        if (watchTaxType === 'vat_7') return parseFloat((amt * 7 / 107).toFixed(2));
+        if (watchTaxType === 'wht_1') return parseFloat((amt * 0.01).toFixed(2));
+        if (watchTaxType === 'wht_3') return parseFloat((amt * 0.03).toFixed(2));
+        if (watchTaxType === 'wht_5') return parseFloat((amt * 0.05).toFixed(2));
+        return 0;
+    }, [watchAmount, watchTaxType]);
 
     // For auto-bonus calc
     const buyRecordsRef = React.useRef([]); // cache without triggering re-renders
@@ -110,28 +121,32 @@ export const Expenses = () => {
     const onAddExpense = async (data) => {
         setSubmitting(true);
         try {
+            const finalPayload = {
+                ...data,
+                tax_amount: computedTax
+            };
             if (editingRecord) {
                 if (isDemo) {
-                    setExpenses(prev => prev.map(r => r.id === editingRecord.id ? { ...r, ...data } : r));
+                    setExpenses(prev => prev.map(r => r.id === editingRecord.id ? { ...r, ...finalPayload } : r));
                     toast.success('อัปเดตสำเร็จ (Demo)');
                 } else {
-                    const res = await updateRecord('Expenses', editingRecord.id, data);
+                    const res = await updateRecord('Expenses', editingRecord.id, finalPayload);
                     if (res.status === 'success') {
                         toast.success('อัปเดตสำเร็จ');
                     } else throw new Error(res.message);
                 }
             } else {
                 if (isDemo) {
-                    const newRec = { ...data, id: Date.now().toString(), timestamp: new Date().toISOString() };
+                    const newRec = { ...finalPayload, id: Date.now().toString(), timestamp: new Date().toISOString() };
                     setExpenses(prev => [newRec, ...prev]);
                     toast.success('บันทึกสำเร็จ (Demo)');
                 } else {
-                    const res = await addExpense(data);
+                    const res = await addExpense(finalPayload);
                     if (res.status === 'success') toast.success('บันทึกสำเร็จ');
                     else throw new Error(res.message);
                 }
             }
-            expenseForm.reset({ date: format(new Date(), 'yyyy-MM-dd') });
+            expenseForm.reset({ date: format(new Date(), 'yyyy-MM-dd'), tax_type: 'none', tax_amount: 0 });
             setShowExpenseForm(false);
             setEditingRecord(null);
             loadData();
@@ -198,6 +213,8 @@ export const Expenses = () => {
                 category: record.category || '',
                 description: record.description || '',
                 amount: record.amount || 0,
+                tax_type: record.tax_type || 'none',
+                tax_amount: record.tax_amount || 0,
                 note: record.note || ''
             });
             setShowExpenseForm(true);
@@ -390,6 +407,33 @@ export const Expenses = () => {
                                             {expenseForm.formState.errors.amount && <p className="text-red-500 text-[10px] mt-1 font-medium">{expenseForm.formState.errors.amount.message}</p>}
                                         </div>
                                         <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">ประเภทภาษี</label>
+                                            <select {...expenseForm.register('tax_type')}
+                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rubber-500">
+                                                <option value="none">ไม่มีภาษี (None)</option>
+                                                <option value="vat_7">VAT 7% (รวมภาษีมูลค่าเพิ่ม)</option>
+                                                <option value="wht_1">หัก ณ ที่จ่าย 1% (ค่าขนส่ง)</option>
+                                                <option value="wht_3">หัก ณ ที่จ่าย 3% (ค่าบริการ/โฆษณา)</option>
+                                                <option value="wht_5">หัก ณ ที่จ่าย 5% (ค่าเช่า)</option>
+                                            </select>
+                                        </div>
+                                        {watchTaxType && watchTaxType !== 'none' && (
+                                            <div className="sm:col-span-2 p-3 bg-rubber-50/50 rounded-xl border border-rubber-100/50 flex flex-wrap gap-x-6 gap-y-1.5 text-xs text-gray-600 font-bold">
+                                                {watchTaxType === 'vat_7' && (
+                                                    <>
+                                                        <span>ยอดก่อน VAT: {(parseFloat(watchAmount || 0) - computedTax).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท</span>
+                                                        <span className="text-rubber-600">ภาษีมูลค่าเพิ่ม (VAT 7%): {computedTax.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท</span>
+                                                    </>
+                                                )}
+                                                {watchTaxType.startsWith('wht_') && (
+                                                    <>
+                                                        <span className="text-red-500">ภาษีหัก ณ ที่จ่าย: {computedTax.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท</span>
+                                                        <span className="text-emerald-600 font-extrabold">ยอดจ่ายโอนจริง: {(parseFloat(watchAmount || 0) - computedTax).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท</span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+                                        <div className="sm:col-span-2">
                                             <label className="block text-xs font-medium text-gray-700 mb-1">หมายเหตุ</label>
                                             <input {...expenseForm.register('note')}
                                                 placeholder="หมายเหตุเพิ่มเติม"
@@ -435,11 +479,19 @@ export const Expenses = () => {
                                                         <Tag size={10} className="mr-1" />{r.category}
                                                     </span>
                                                 </td>
-                                                <td className="px-5 py-4 text-gray-900">{r.description}<br />{r.note && <span className="text-xs text-gray-400">{r.note}</span>}</td>
+                                                <td className="px-5 py-4 text-gray-900">
+                                                    <div>{r.description}</div>
+                                                    {r.tax_type && r.tax_type !== 'none' && (
+                                                        <div className="text-[10px] font-bold text-rubber-600 mt-0.5">
+                                                            {r.tax_type === 'vat_7' ? `VAT 7% (฿${Number(r.tax_amount || 0).toLocaleString()})` : `หัก ณ ที่จ่าย ${r.tax_type === 'wht_1' ? '1%' : r.tax_type === 'wht_3' ? '3%' : '5%'} (฿${Number(r.tax_amount || 0).toLocaleString()})`}
+                                                        </div>
+                                                    )}
+                                                    {r.note && <span className="text-xs text-gray-400">{r.note}</span>}
+                                                </td>
                                                 <td className="px-5 py-4 text-right font-bold text-red-600">{Number(r.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
                                                 <td className="px-5 py-4 text-center">
                                                     <div className="flex items-center justify-center space-x-2">
-                                                        {user?.role === 'owner' && (
+                                                        {(user?.role === 'owner' || user?.role === 'staff') && (
                                                             <>
                                                                 <button onClick={() => handleEdit('Expenses', r)}
                                                                     className="text-gray-300 hover:text-blue-500 transition-colors p-1"><Edit2 size={17} /></button>
@@ -447,7 +499,7 @@ export const Expenses = () => {
                                                                     className="text-gray-300 hover:text-red-500 transition-colors p-1"><Trash2 size={17} /></button>
                                                             </>
                                                         )}
-                                                        {user?.role !== 'owner' && <span className="text-gray-300 text-xs">อ่านอย่างเดียว</span>}
+                                                        {(user?.role !== 'owner' && user?.role !== 'staff') && <span className="text-gray-300 text-xs">อ่านอย่างเดียว</span>}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -613,7 +665,7 @@ export const Expenses = () => {
                                                 <td className="px-5 py-4 text-right font-black text-blue-700">{Number(r.total || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
                                                 <td className="px-5 py-4 text-center">
                                                     <div className="flex items-center justify-center space-x-2">
-                                                        {user?.role === 'owner' && (
+                                                        {(user?.role === 'owner' || user?.role === 'staff') && (
                                                             <>
                                                                 <button onClick={() => handleEdit('Wages', r)}
                                                                     className="text-gray-300 hover:text-blue-500 transition-colors p-1"><Edit2 size={17} /></button>
@@ -621,7 +673,7 @@ export const Expenses = () => {
                                                                     className="text-gray-300 hover:text-red-500 transition-colors p-1"><Trash2 size={17} /></button>
                                                             </>
                                                         )}
-                                                        {user?.role !== 'owner' && <span className="text-gray-300 text-xs">อ่านอย่างเดียว</span>}
+                                                        {(user?.role !== 'owner' && user?.role !== 'staff') && <span className="text-gray-300 text-xs">อ่านอย่างเดียว</span>}
                                                     </div>
                                                 </td>
                                             </tr>

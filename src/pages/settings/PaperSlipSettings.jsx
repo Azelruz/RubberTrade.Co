@@ -25,11 +25,14 @@ export const PaperSlipSettings = () => {
             showStoreName: true,
             showAddress: true,
             showPhone: true,
+            showFscCode: true,
             // Header
             headerTitle: isLatex ? 'ใบรับซื้อน้ำยางพารา' : 'ใบรับซื้อขี้ยางพารา',
             showBillType: true,
             showBillId: true,
             showDateTime: true,
+            showSelectedDate: true,
+            showRecordingTime: true,
             showFarmerName: true,
             // Detail fields
             showRawWeight: true,
@@ -61,7 +64,10 @@ export const PaperSlipSettings = () => {
                 bonusMember: 'โบนัสสมาชิก',
                 actualPrice: 'ราคาจริง (สุทธิ)',
                 farmerSplit: 'เกษตรกร',
-                employeeSplit: 'ลูกจ้าง'
+                employeeSplit: 'ลูกจ้าง',
+                selectedDate: 'วันที่ทำรายการ',
+                recordingTime: 'เวลาบันทึก',
+                fscCode: 'รหัส FSC'
             },
             // [NEW] Granular Font Sizes (Thermal Paper default)
             fontSizeStoreName: 12,
@@ -223,6 +229,18 @@ export const PaperSlipSettings = () => {
                                     if (!source) return p;
                                     // Map legacy generic keys to new granular keys if they exist in source
                                     const m = { ...p, ...source };
+                                    m.labels = {
+                                        selectedDate: 'วันที่ทำรายการ',
+                                        recordingTime: 'เวลาบันทึก',
+                                        fscCode: 'รหัส FSC',
+                                        ...(p.labels || {}),
+                                        ...(source.labels || {}),
+                                        ...(m.labels || {})
+                                    };
+                                    if ('showDateTime' in source) {
+                                        if (!('showSelectedDate' in source)) m.showSelectedDate = source.showDateTime;
+                                        if (!('showRecordingTime' in source)) m.showRecordingTime = source.showDateTime;
+                                    }
                                     if (source.fontSizeBillId) { m.fontSizeBillIdValue = source.fontSizeBillId; m.fontSizeBillIdLabel = source.fontSizeBillId; }
                                     if (source.fontSizeDateTime) { m.fontSizeDateTimeValue = source.fontSizeDateTime; m.fontSizeDateTimeLabel = source.fontSizeDateTime; }
                                     if (source.fontSizeFarmerName) { m.fontSizeFarmerNameValue = source.fontSizeFarmerName; }
@@ -440,55 +458,55 @@ export const PaperSlipSettings = () => {
 
     const fontSizeControls = {
         header: [
-            { key: 'fontSizeStoreName', label: 'ชื่อร้านค้า', rec: activePlatform === 'paper' ? 12 : 14, min: 8, max: 32 },
-            { key: 'fontSizeAddress', label: 'ที่อยู่ร้าน', rec: activePlatform === 'paper' ? 7 : 8, min: 6, max: 20 },
-            { key: 'fontSizePhone', label: 'เบอร์โทรศัพท์', rec: activePlatform === 'paper' ? 8 : 9, min: 6, max: 20 },
-            { key: 'fontSizeTopNote', label: 'ข้อความโปรยหัว', rec: 7, min: 6, max: 16 },
-            { key: 'fontSizeHeaderTitle', label: 'ชื่อหัวบิล', rec: 10, min: 8, max: 24 },
+            { key: 'fontSizeStoreName', label: 'ชื่อร้านค้า', rec: activePlatform === 'paper' ? 12 : 14, min: 3, max: 32 },
+            { key: 'fontSizeAddress', label: 'ที่อยู่ร้าน', rec: activePlatform === 'paper' ? 7 : 8, min: 3, max: 20 },
+            { key: 'fontSizePhone', label: 'เบอร์โทรศัพท์', rec: activePlatform === 'paper' ? 8 : 9, min: 3, max: 20 },
+            { key: 'fontSizeTopNote', label: 'ข้อความโปรยหัว', rec: 7, min: 3, max: 16 },
+            { key: 'fontSizeHeaderTitle', label: 'ชื่อหัวบิล', rec: 10, min: 3, max: 24 },
         ],
         meta: [
-            { key: 'fontSizeBillIdLabel', label: 'คำว่า "เลขที่บิล"', rec: 7, min: 6, max: 16 },
-            { key: 'fontSizeBillIdValue', label: 'ตัวเลขเลขที่บิล', rec: 7, min: 6, max: 16 },
-            { key: 'fontSizeDateTimeLabel', label: 'คำว่า "วันที่/เวลา"', rec: 7, min: 6, max: 16 },
-            { key: 'fontSizeDateTimeValue', label: 'ข้อมูลวันที่/เวลา', rec: 7, min: 6, max: 16 },
-            { key: 'fontSizeFarmerNameLabel', label: 'คำว่า "ชื่อลูกค้า"', rec: 9, min: 7, max: 18 },
-            { key: 'fontSizeFarmerNameValue', label: 'ชื่อเกษตรกร (ตัวหนา)', rec: 10, min: 8, max: 24 },
+            { key: 'fontSizeBillIdLabel', label: 'คำว่า "เลขที่บิล"', rec: 7, min: 3, max: 16 },
+            { key: 'fontSizeBillIdValue', label: 'ตัวเลขเลขที่บิล', rec: 7, min: 3, max: 16 },
+            { key: 'fontSizeDateTimeLabel', label: 'คำว่า "วันที่/เวลา"', rec: 7, min: 3, max: 16 },
+            { key: 'fontSizeDateTimeValue', label: 'ข้อมูลวันที่/เวลา', rec: 7, min: 3, max: 16 },
+            { key: 'fontSizeFarmerNameLabel', label: 'คำว่า "ชื่อลูกค้า"', rec: 9, min: 3, max: 18 },
+            { key: 'fontSizeFarmerNameValue', label: 'ชื่อเกษตรกร (ตัวหนา)', rec: 10, min: 3, max: 24 },
         ],
         data: [
-            { key: 'fontSizeRawWeightLabel', label: 'ป้าย: น้ำหนักยางดิบ', rec: 9, min: 7, max: 18 },
-            { key: 'fontSizeRawWeightValue', label: 'เลข: น้ำหนักยางดิบ', rec: 10, min: 7, max: 20 },
-            { key: 'fontSizeBucketWeightLabel', label: 'ป้าย: หักถัง', rec: 8, min: 6, max: 16 },
-            { key: 'fontSizeBucketWeightValue', label: 'เลข: หักถัง', rec: 8, min: 6, max: 16 },
-            { key: 'fontSizeNetWeightLabel', label: 'ป้าย: น้ำหนักสุทธิ', rec: 9, min: 7, max: 18 },
-            { key: 'fontSizeNetWeightValue', label: 'เลข: น้ำหนักสุทธิ', rec: 11, min: 7, max: 20 },
-            { key: 'fontSizeDrcLabel', label: 'ป้าย: %DRC', rec: 9, min: 7, max: 18 },
-            { key: 'fontSizeDrcValue', label: 'เลข: %DRC', rec: 10, min: 7, max: 20 },
-            { key: 'fontSizeDryWeightLabel', label: 'ป้าย: น้ำหนักแห้ง', rec: 9, min: 7, max: 18 },
-            { key: 'fontSizeDryWeightValue', label: 'เลข: น้ำหนักแห้ง', rec: 11, min: 7, max: 20 },
+            { key: 'fontSizeRawWeightLabel', label: 'ป้าย: น้ำหนักยางดิบ', rec: 9, min: 3, max: 18 },
+            { key: 'fontSizeRawWeightValue', label: 'เลข: น้ำหนักยางดิบ', rec: 10, min: 3, max: 20 },
+            { key: 'fontSizeBucketWeightLabel', label: 'ป้าย: หักถัง', rec: 8, min: 3, max: 16 },
+            { key: 'fontSizeBucketWeightValue', label: 'เลข: หักถัง', rec: 8, min: 3, max: 16 },
+            { key: 'fontSizeNetWeightLabel', label: 'ป้าย: น้ำหนักสุทธิ', rec: 9, min: 3, max: 18 },
+            { key: 'fontSizeNetWeightValue', label: 'เลข: น้ำหนักสุทธิ', rec: 11, min: 3, max: 20 },
+            { key: 'fontSizeDrcLabel', label: 'ป้าย: %DRC', rec: 9, min: 3, max: 18 },
+            { key: 'fontSizeDrcValue', label: 'เลข: %DRC', rec: 10, min: 3, max: 20 },
+            { key: 'fontSizeDryWeightLabel', label: 'ป้าย: น้ำหนักแห้ง', rec: 9, min: 3, max: 18 },
+            { key: 'fontSizeDryWeightValue', label: 'เลข: น้ำหนักแห้ง', rec: 11, min: 3, max: 20 },
         ],
         pricing: [
-            { key: 'fontSizeBasePriceLabel', label: 'ป้าย: ราคากลาง', rec: 8, min: 7, max: 16 },
-            { key: 'fontSizeBasePriceValue', label: 'เลข: ราคากลาง', rec: 10, min: 7, max: 20 },
-            { key: 'fontSizeBonusDrcLabel', label: 'ป้าย: โบนัส DRC', rec: 8, min: 6, max: 14 },
-            { key: 'fontSizeBonusDrcValue', label: 'เลข: โบนัส DRC', rec: 8, min: 6, max: 14 },
-            { key: 'fontSizeBonusFscLabel', label: 'ป้าย: โบนัส FSC', rec: 8, min: 6, max: 14 },
-            { key: 'fontSizeBonusFscValue', label: 'เลข: โบนัส FSC', rec: 8, min: 6, max: 14 },
-            { key: 'fontSizeBonusMemberLabel', label: 'ป้าย: โบนัสสมาชิก', rec: 8, min: 6, max: 14 },
-            { key: 'fontSizeBonusMemberValue', label: 'เลข: โบนัสสมาชิก', rec: 8, min: 6, max: 14 },
-            { key: 'fontSizeActualPriceLabel', label: 'ป้าย: ราคาจริงสุทธิ', rec: 10, min: 8, max: 20 },
-            { key: 'fontSizeActualPriceValue', label: 'เลข: ราคาจริงสุทธิ', rec: 12, min: 8, max: 24 },
+            { key: 'fontSizeBasePriceLabel', label: 'ป้าย: ราคากลาง', rec: 8, min: 3, max: 16 },
+            { key: 'fontSizeBasePriceValue', label: 'เลข: ราคากลาง', rec: 10, min: 3, max: 20 },
+            { key: 'fontSizeBonusDrcLabel', label: 'ป้าย: โบนัส DRC', rec: 8, min: 3, max: 16 },
+            { key: 'fontSizeBonusDrcValue', label: 'เลข: โบนัส DRC', rec: 8, min: 3, max: 16 },
+            { key: 'fontSizeBonusFscLabel', label: 'ป้าย: โบนัส FSC', rec: 8, min: 3, max: 16 },
+            { key: 'fontSizeBonusFscValue', label: 'เลข: โบนัส FSC', rec: 8, min: 3, max: 16 },
+            { key: 'fontSizeBonusMemberLabel', label: 'ป้าย: โบนัสสมาชิก', rec: 8, min: 3, max: 16 },
+            { key: 'fontSizeBonusMemberValue', label: 'เลข: โบนัสสมาชิก', rec: 8, min: 3, max: 16 },
+            { key: 'fontSizeActualPriceLabel', label: 'ป้าย: ราคาจริงสุทธิ', rec: 10, min: 3, max: 20 },
+            { key: 'fontSizeActualPriceValue', label: 'เลข: ราคาจริงสุทธิ', rec: 12, min: 3, max: 24 },
         ],
         summary: [
-            { key: 'fontSizeFarmerSplitLabel', label: 'ป้าย: ยอดเกษตรกร', rec: 9, min: 7, max: 18 },
-            { key: 'fontSizeFarmerSplitValue', label: 'เลข: ยอดเกษตรกร', rec: 11, min: 8, max: 24 },
-            { key: 'fontSizeEmployeeSplitLabel', label: 'ป้าย: ยอดลูกจ้าง', rec: 8, min: 6, max: 16 },
-            { key: 'fontSizeEmployeeSplitValue', label: 'เลข: ยอดลูกจ้าง', rec: 9, min: 7, max: 18 },
-            { key: 'fontSizeTotalLabel', label: 'คำว่า "ยอดร่วมสุทธิ"', rec: 10, min: 8, max: 20 },
-            { key: 'fontSizeTotalValue', label: 'ตัวเลขยอดสุทธิ (ใหญ่)', rec: 14, min: 10, max: 40 },
+            { key: 'fontSizeFarmerSplitLabel', label: 'ป้าย: ยอดเกษตรกร', rec: 9, min: 3, max: 18 },
+            { key: 'fontSizeFarmerSplitValue', label: 'เลข: ยอดเกษตรกร', rec: 11, min: 3, max: 24 },
+            { key: 'fontSizeEmployeeSplitLabel', label: 'ป้าย: ยอดลูกจ้าง', rec: 8, min: 3, max: 16 },
+            { key: 'fontSizeEmployeeSplitValue', label: 'เลข: ยอดลูกจ้าง', rec: 9, min: 3, max: 18 },
+            { key: 'fontSizeTotalLabel', label: 'คำว่า "ยอดร่วมสุทธิ"', rec: 10, min: 3, max: 20 },
+            { key: 'fontSizeTotalValue', label: 'ตัวเลขยอดสุทธิ (ใหญ่)', rec: 14, min: 3, max: 40 },
         ],
         footer: [
-            { key: 'fontSizeExtraMessage', label: 'ข้อความในกรอบ', rec: 7, min: 6, max: 16 },
-            { key: 'fontSizeFooterText', label: 'ข้อความปิดท้าย', rec: 8, min: 6, max: 16 },
+            { key: 'fontSizeExtraMessage', label: 'ข้อความในกรอบ', rec: 7, min: 3, max: 16 },
+            { key: 'fontSizeFooterText', label: 'ข้อความปิดท้าย', rec: 8, min: 3, max: 16 },
         ]
     };
 
@@ -499,8 +517,10 @@ export const PaperSlipSettings = () => {
         { key: 'showPhone', label: 'เบอร์โทรศัพท์', icon: <Phone size={14} />, group: 'identity' },
         { key: 'showBillType', label: 'ประเภทบิล', icon: <CreditCard size={14} />, group: 'info' },
         { key: 'showBillId', label: 'เลขที่บิล', icon: <Hash size={14} />, group: 'info' },
-        { key: 'showDateTime', label: 'วันที่-เวลา', icon: <Calendar size={14} />, group: 'info' },
+        { key: 'showSelectedDate', label: 'วันที่ทำรายการ (ปฏิทิน)', icon: <Calendar size={14} />, group: 'info', labelKey: 'selectedDate' },
+        { key: 'showRecordingTime', label: 'เวลาบันทึก (ระบบ)', icon: <Calendar size={14} />, group: 'info', labelKey: 'recordingTime' },
         { key: 'showFarmerName', label: 'ชื่อเกษตรกร', icon: <User size={14} />, group: 'info' },
+        { key: 'showFscCode', label: 'รหัส FSC ของลูกค้า', icon: <Leaf size={14} />, group: 'info', labelKey: 'fscCode' },
         { key: 'showPurchaseDetailsHeader', label: 'หัวรายละเอียดรับซื้อ', icon: <Type size={14} />, group: 'info' },
         
         { key: 'showRawWeight', label: 'น้ำหนักยางดิบ/ขี้ยาง', icon: <Scale size={14} />, group: 'details', labelKey: 'rawWeight' },
@@ -522,6 +542,7 @@ export const PaperSlipSettings = () => {
         id: 'B-RTB2024-0001',
         date: new Date(),
         farmerName: 'ใจเย็น มีสุข',
+        fscId: 'FSC-98765-RTB',
         weight: 150.5,
         bucketWeight: 2.0,
         netWeight: 148.5,
@@ -807,13 +828,42 @@ export const PaperSlipSettings = () => {
                             </div>
 
                             {/* === PAPER PREVIEW: Invoice Info === */}
-                            <div className="flex justify-between mb-2 font-mono border-b border-black pb-1">
-                                {activeSub.showBillId && <span style={{ fontSize: `${activeSub.fontSizeBillIdValue || 8}px` }}><span style={{ fontSize: `${activeSub.fontSizeBillIdLabel || 7}px` }}>เลขที่: </span>{mockData.id}</span>}
-                                {activeSub.showDateTime && <span style={{ fontSize: `${activeSub.fontSizeDateTimeValue || 8}px` }}><span style={{ fontSize: `${activeSub.fontSizeDateTimeLabel || 7}px` }}>วันที่: </span>{format(addYears(mockData.date, 543), 'dd/MM/yyyy HH:mm')}</span>}
+                            <div className="mb-2 font-mono border-b border-black pb-1">
+                                {activeSub.showBillId && (
+                                    <div className="flex justify-between" style={{ fontSize: `${activeSub.fontSizeBillIdValue || 8}px` }}>
+                                        <span style={{ fontSize: `${activeSub.fontSizeBillIdLabel || 7}px` }}>เลขที่:</span>
+                                        <span className="font-bold">{mockData.id}</span>
+                                    </div>
+                                )}
+                                {activeSub.showSelectedDate && (
+                                    <div className="flex justify-between" style={{ fontSize: `${activeSub.fontSizeDateTimeValue || 8}px` }}>
+                                        <span style={{ fontSize: `${activeSub.fontSizeDateTimeLabel || 7}px` }}>{(activeSub.labels?.selectedDate || 'วันที่ทำรายการ')}:</span>
+                                        <span className="font-bold">{format(addYears(mockData.date, 543), 'dd/MM/yyyy')}</span>
+                                    </div>
+                                )}
+                                {activeSub.showRecordingTime && (
+                                    <div className="flex justify-between" style={{ fontSize: `${activeSub.fontSizeDateTimeValue || 8}px` }}>
+                                        <span style={{ fontSize: `${activeSub.fontSizeDateTimeLabel || 7}px` }}>{(activeSub.labels?.recordingTime || 'เวลาบันทึก')}:</span>
+                                        <span className="font-bold">{format(addYears(mockData.date, 543), 'dd/MM/yyyy HH:mm')}</span>
+                                    </div>
+                                )}
                             </div>
 
                             {/* === PAPER PREVIEW: Farmer === */}
-                            {activeSub.showFarmerName && <div className="mb-2"><span style={{ fontSize: `${activeSub.fontSizeFarmerNameLabel || 9}px` }}>ชื่อลูกค้า: </span><span style={{ fontSize: `${activeSub.fontSizeFarmerNameValue || 10}px` }} className="font-bold">{mockData.farmerName}</span></div>}
+                            {activeSub.showFarmerName && (
+                                <div className="mb-2">
+                                    <div>
+                                        <span style={{ fontSize: `${activeSub.fontSizeFarmerNameLabel || 9}px` }}>ชื่อลูกค้า: </span>
+                                        <span style={{ fontSize: `${activeSub.fontSizeFarmerNameValue || 10}px` }} className="font-bold">{mockData.farmerName}</span>
+                                    </div>
+                                    {(activeSub.showFscCode && mockData.fscId) && (
+                                        <div className="text-gray-600 font-mono mt-0.5" style={{ fontSize: `${(activeSub.fontSizeFarmerNameValue || 10) - 2}px` }}>
+                                            <span>{(activeSub.labels?.fscCode || 'รหัส FSC')}: </span>
+                                            <span className="font-bold">{mockData.fscId}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* === PAPER PREVIEW: Details === */}
                             <div className="border-t border-black border-dashed pt-2 space-y-1">
@@ -933,24 +983,44 @@ export const PaperSlipSettings = () => {
 
                             <div className="px-3 pt-3 pb-3">
                                 {/* === ESLIP PREVIEW: Invoice Info === */}
-                                {(activeSub.showBillId || activeSub.showDateTime) && (
-                                    <div className="flex justify-between items-center mb-2 font-black text-gray-400 bg-gray-50 px-2 py-1 rounded-lg">
-                                        {activeSub.showBillId && <span className="text-gray-700">
-                                            <span style={{ fontSize: `${activeSub.fontSizeBillIdLabel || 7}px` }}>เลขที่ </span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeBillIdValue || 7}px` }}>{mockData.id}</span>
-                                        </span>}
-                                        {activeSub.showDateTime && <span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeDateTimeLabel || 7}px` }}>วันที่ </span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeDateTimeValue || 7}px` }}>{format(addYears(mockData.date, 543), 'dd MMM yy HH:mm')}</span>
-                                        </span>}
+                                {(activeSub.showBillId || activeSub.showSelectedDate || activeSub.showRecordingTime) && (
+                                    <div className="flex flex-col mb-2 font-black text-gray-400 bg-gray-50 px-2 py-1 rounded-lg gap-0.5">
+                                        {activeSub.showBillId && (
+                                            <div className="flex justify-between items-center border-b border-gray-100 pb-0.5 mb-0.5">
+                                                <span style={{ fontSize: `${activeSub.fontSizeBillIdLabel || 7}px` }}>ID:</span>
+                                                <span style={{ fontSize: `${activeSub.fontSizeBillIdValue || 7}px` }} className="text-gray-700">{mockData.id}</span>
+                                            </div>
+                                        )}
+                                        {activeSub.showSelectedDate && (
+                                            <div className="flex justify-between items-center">
+                                                <span style={{ fontSize: `${activeSub.fontSizeDateTimeLabel || 7}px` }}>{(activeSub.labels?.selectedDate || 'วันที่ทำรายการ')}:</span>
+                                                <span style={{ fontSize: `${activeSub.fontSizeDateTimeValue || 7}px` }} className="text-gray-700">{format(addYears(mockData.date, 543), 'dd MMM yy')}</span>
+                                            </div>
+                                        )}
+                                        {activeSub.showRecordingTime && (
+                                            <div className="flex justify-between items-center">
+                                                <span style={{ fontSize: `${activeSub.fontSizeDateTimeLabel || 7}px` }}>{(activeSub.labels?.recordingTime || 'เวลาบันทึก')}:</span>
+                                                <span style={{ fontSize: `${activeSub.fontSizeDateTimeValue || 7}px` }} className="text-gray-700">{format(addYears(mockData.date, 543), 'dd MMM yy HH:mm')}</span>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
                                 {/* === ESLIP PREVIEW: Farmer === */}
                                 {activeSub.showFarmerName && (
                                     <div className="mb-2 pb-2 border-b border-dotted border-gray-100">
-                                        <p style={{ fontSize: `${activeSub.fontSizeFarmerNameLabel || 6}px` }} className="font-bold text-gray-400 uppercase">ข้อมูลลูกค้า</p>
-                                        <h2 style={{ fontSize: `${activeSub.fontSizeFarmerNameValue || 16}px` }} className="font-black text-gray-800 leading-tight">{mockData.farmerName}</h2>
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p style={{ fontSize: `${activeSub.fontSizeFarmerNameLabel || 6}px` }} className="font-bold text-gray-400 uppercase">ข้อมูลลูกค้า</p>
+                                                <h2 style={{ fontSize: `${activeSub.fontSizeFarmerNameValue || 16}px` }} className="font-black text-gray-800 leading-tight">{mockData.farmerName}</h2>
+                                            </div>
+                                            {(activeSub.showFscCode && mockData.fscId) && (
+                                                <div className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md font-mono text-[9px] font-black flex items-center gap-1 shrink-0 mt-1">
+                                                    <Leaf size={10} className="text-amber-600" />
+                                                    <span>{mockData.fscId}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
 

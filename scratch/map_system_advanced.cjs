@@ -2,15 +2,18 @@ const fs = require('fs');
 const path = require('path');
 
 const srcDir = 'd:/pond/Antigravity/Rubertrade-Co-Ltd/src';
+const apiDir = 'd:/pond/Antigravity/Rubertrade-Co-Ltd/functions/api';
 const vaultBaseDir = 'D:/PonD_Azelruz/AzelRuz/Antigravity/Rubbertrade.Co.LTD/Structure';
 
 const tables = [
     'farmers', 'staff', 'employees', 'factories', 'trucks', 'farmer_types', 
     'buys', 'sells', 'wages', 'expenses', 'chemicals', 'promotions', 
-    'settings', 'sync_queue'
+    'settings', 'sync_queue', 'loans', 'loan_deductions', 'queues',
+    'services', 'service_queues', 'weather_forecasts', 'chemical_usage',
+    'users', 'subscription_packages', 'subscription_requests', 'backups',
+    'audit_logs', 'atomic_counters'
 ];
 
-// Mapping service functions to tables
 const serviceToTable = {
     'fetchFarmers': ['farmers'],
     'addFarmer': ['farmers'],
@@ -45,9 +48,14 @@ const serviceToTable = {
     'fetchMemberTypes': ['farmer_types'],
     'addMemberType': ['farmer_types'],
     'deleteMemberType': ['farmer_types'],
-    'fetchDashboardData': ['dashboard_cache', 'buys', 'sells'], // Dashboard uses multiple
-    'adminExportTable': (table) => table,
-    'adminImportTable': (table) => table,
+    'fetchLoans': ['loans'],
+    'addLoan': ['loans'],
+    'fetchLoanDeductions': ['loan_deductions'],
+    'fetchQueues': ['queues'],
+    'addQueue': ['queues'],
+    'updateQueueStatus': ['queues'],
+    'fetchWeatherForecast': ['weather_forecasts'],
+    'fetchDashboardData': ['dashboard_cache', 'buys', 'sells']
 };
 
 const results = {};
@@ -66,9 +74,8 @@ function getAllFiles(dir, fileList = []) {
     return fileList;
 }
 
-const allFiles = getAllFiles(srcDir);
-
-allFiles.forEach(filePath => {
+const srcFiles = getAllFiles(srcDir);
+srcFiles.forEach(filePath => {
     const relPath = path.relative(srcDir, filePath).replace(/\\/g, '/');
     const content = fs.readFileSync(filePath, 'utf-8');
     
@@ -106,8 +113,6 @@ allFiles.forEach(filePath => {
             const mapped = serviceToTable[func];
             if (Array.isArray(mapped)) {
                 mapped.forEach(t => dbUsage.push(t));
-            } else if (typeof mapped === 'function') {
-               // Dynamic mapping like adminExportTable(table) might need more regex, skipping for now
             }
         }
     });
@@ -136,21 +141,32 @@ if (!fs.existsSync(codeDir)) fs.mkdirSync(codeDir, { recursive: true });
 if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
 const tableSchema = {
-    farmers: 'id, name, fscId, phone, userId, updated_at',
-    staff: 'id, name, phone, userId',
-    employees: 'id, name, farmerId, userId',
-    factories: 'id, name, code, userId',
-    trucks: 'id, plateNo, factoryId, userId',
+    farmers: 'id, name, fscId, phone, bankAccount, userId, updated_at',
+    staff: 'id, name, phone, salary, bonus, userId',
+    employees: 'id, name, farmerId, profitSharePct, userId',
+    factories: 'id, name, code, shortName, userId',
+    trucks: 'id, licensePlate, driverName, capacity, userId',
     farmer_types: 'id, name, bonus, userId',
-    buys: 'id, date, farmerId, farmerName, status, created_at, userId',
-    sells: 'id, date, factoryId, buyerName, userId',
-    wages: 'id, date, staffId, type, status, userId',
-    expenses: 'id, date, title, category, userId',
-    chemicals: 'id, date, totalFreshWeight, userId',
-    promotions: 'id, title, isActive, userId',
+    buys: 'id, date, farmerId, farmerName, weight, drc, total, rubberType, createdBy, userId',
+    sells: 'id, date, factoryId, buyerName, weight, drc, lossWeight, total, rubberType, userId',
+    wages: 'id, date, staffId, dailyWage, bonus, workDays, total, userId',
+    expenses: 'id, date, category, description, amount, tax_type, tax_amount, userId',
+    chemicals: 'id, date, chemicalId, amount, unit, userId',
+    promotions: 'id, farmerId, pointsUsed, rewardName, userId',
     settings: 'key, value, userId',
-    dashboard_cache: 'id',
-    sync_queue: '++uuid, type, action, payload, status, retryCount, createdAt'
+    sync_queue: '++uuid, type, action, payload, status, retryCount, createdAt',
+    loans: 'id, borrowerType, borrowerId, borrowerName, date, amount, remainingAmount, deductionMethod, userId',
+    loan_deductions: 'id, buyId, borrowerType, borrowerId, amount, remainingDebtAfter, userId',
+    queues: 'id, queue_no, farmer_id, farmer_name, rubber_type, weight, drc, status, created_at, userId',
+    services: 'id, name, price, category, userId',
+    service_queues: 'id, queue_no, customer_name, service_id, status, created_at, userId',
+    weather_forecasts: 'id, userId, forecast_date, rain_probability, tapping_hours_rain, estimated_yield_pct',
+    users: 'id, username, email, role, subscription_status, subscription_expiry, maxStaffLimit',
+    subscription_packages: 'id, name, days, price, maxStaff',
+    subscription_requests: 'id, userId, slipUrl, amount, status, package_name',
+    backups: 'id, filename, size, created_at, userId',
+    audit_logs: 'id, store_id, user_id, action, target_type, target_id, details, created_at',
+    atomic_counters: 'counter_key, store_id, last_value'
 };
 
 function formatNoteName(relPath) { return relPath.replace(/\//g, '_').replace(/\.jsx?$/, ''); }
@@ -172,7 +188,7 @@ Object.keys(results).forEach(relPath => {
         content += `- **Input/UI**: User interacts with ${fileName}.\n`;
         content += `- **Service**: Calls relevant functions in [[services_apiService]].\n`;
         content += `- **Local Storage**: Data is persisted to [[Database_${data.dbUsage[0]}]] via Dexie (Offline-first).\n`;
-        content += `- **Cloud Sync**: [[services_syncService]] periodically pushes from \`sync_queue\` to Cloudflare D1/Supabase.\n`;
+        content += `- **Cloud Sync**: [[services_syncService]] periodically pushes from \`sync_queue\` to Cloudflare D1.\n`;
     } else {
         content += `- This is a structural or UI component with no direct data lifecycle management.\n`;
     }
@@ -197,26 +213,33 @@ Object.keys(results).forEach(relPath => {
     fs.writeFileSync(path.join(codeDir, `${noteName}.md`), content);
 });
 
-// Database and Index generation (similar logic)
+// Database Note Generation
 Object.keys(tableSchema).forEach(table => {
     const noteName = `Database_${table}`;
     let content = `# Table: ${table}\n\n**Schema**: \`${tableSchema[table]}\`\n\n## 🔄 Data Flow\n- **Write**: Initiated by pages via \`apiService\`. Saved to Dexie locally.\n- **Sync**: Picked up by \`syncService\` if online.\n- **Read**: \`apiService\` reads from API (online) or fallback to this table (offline).\n\n## Used By\n`;
     const usedBy = Object.keys(results).filter(file => results[file].dbUsage.includes(table));
     if (usedBy.length > 0) usedBy.forEach(file => content += `- [[${formatNoteName(file)}]]\n`);
-    else content += `- No direct usage.\n`;
+    else content += `- No direct frontend usage detected.\n`;
     fs.writeFileSync(path.join(dbDir, `${noteName}.md`), content);
 });
 
-// Master Index
+// Master Index Generation
 let indexContent = `# RubberTrade System Map\n\n## 🏗️ Architecture Layers\n\n`;
-const cats = { Pages: 'pages/', Components: 'components/', Services: 'services/', Utils: 'utils/', Contexts: 'context/' };
+const cats = { 
+    Pages: 'pages/', 
+    Components: 'components/', 
+    Services: 'services/', 
+    Utils: 'utils/', 
+    Contexts: 'context/' 
+};
+
 Object.entries(cats).forEach(([label, prefix]) => {
     indexContent += `### ${label}\n`;
     Object.keys(results).sort().filter(p => p.startsWith(prefix)).forEach(p => indexContent += `- [[${formatNoteName(p)}]]\n`);
     indexContent += `\n`;
 });
-indexContent += `## 🗄️ Database\n`;
+indexContent += `## 🗄️ Database Tables\n`;
 Object.keys(tableSchema).sort().forEach(t => indexContent += `- [[Database_${t}]]\n`);
 fs.writeFileSync(path.join(vaultBaseDir, '00_System_Map.md'), indexContent);
 
-console.log('Mapping completed with Data Flow and Deep Linking.');
+console.log('Advanced system mapping completed successfully for all files and tables.');

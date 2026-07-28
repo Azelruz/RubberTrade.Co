@@ -11,16 +11,54 @@ import { th } from 'date-fns/locale';
 export const parseReceiptDate = (record) => {
     if (!record) return new Date();
     
-    // Prioritize precise fields
+    const dateValue = record.date;
     const preciseValue = record.timestamp || record.created_at || record.createdAt;
+    
+    let baseDate = null;
+    
+    // 1. Try to get the date from record.date first (since it is the user-selected date)
+    if (dateValue) {
+        if (typeof dateValue === 'string' && dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            const [y, m, d] = dateValue.split('-').map(Number);
+            baseDate = new Date(y, m - 1, d); // local midnight
+        } else {
+            const parsedDate = new Date(dateValue);
+            if (isValid(parsedDate)) {
+                baseDate = parsedDate;
+            }
+        }
+    }
+    
+    // 2. If we got a base date, we can optionally merge the time from preciseValue if available
+    if (baseDate && isValid(baseDate)) {
+        if (preciseValue) {
+            let preciseDate = null;
+            if (typeof preciseValue === 'string') {
+                const sqliteFormat = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/;
+                if (sqliteFormat.test(preciseValue) && !preciseValue.includes('Z') && !preciseValue.includes('+')) {
+                    preciseDate = new Date(preciseValue.replace(' ', 'T') + 'Z');
+                }
+            }
+            if (!preciseDate || !isValid(preciseDate)) {
+                preciseDate = new Date(preciseValue);
+            }
+            
+            if (preciseDate && isValid(preciseDate)) {
+                // Merge date from baseDate and time from preciseDate
+                baseDate.setHours(preciseDate.getHours());
+                baseDate.setMinutes(preciseDate.getMinutes());
+                baseDate.setSeconds(preciseDate.getSeconds());
+                baseDate.setMilliseconds(preciseDate.getMilliseconds());
+            }
+        }
+        return baseDate;
+    }
+    
+    // 3. Fallback to preciseValue only if dateValue was not present
     if (preciseValue) {
-        // If it's a string like "2024-04-18 03:46:00" (SQLite format without Z),
-        // we assume it is UTC if it comes from the server.
         if (typeof preciseValue === 'string') {
-            // Check for SQLite datetime format: YYYY-MM-DD HH:MM:SS
             const sqliteFormat = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/;
             if (sqliteFormat.test(preciseValue) && !preciseValue.includes('Z') && !preciseValue.includes('+')) {
-                // Force interpretation as UTC by adding Z
                 const parsed = new Date(preciseValue.replace(' ', 'T') + 'Z');
                 if (isValid(parsed)) return parsed;
             }
@@ -30,21 +68,71 @@ export const parseReceiptDate = (record) => {
         if (isValid(parsed)) return parsed;
     }
     
-    // Fallback to date-only field
+    return new Date();
+};
+
+/**
+ * Parses only the user-selected date (record.date).
+ * Fallback to precise timestamp if record.date is missing.
+ */
+export const parseSelectedDate = (record) => {
+    if (!record) return new Date();
     const dateValue = record.date;
     if (dateValue) {
-        // If it's a date-only string like "2024-04-18", 
-        // parse as local midnight to avoid UTC shift.
         if (typeof dateValue === 'string' && dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
             const [y, m, d] = dateValue.split('-').map(Number);
-            return new Date(y, m - 1, d); 
+            return new Date(y, m - 1, d); // local midnight
         }
-        
         const parsedDate = new Date(dateValue);
         if (isValid(parsedDate)) return parsedDate;
     }
     
+    const preciseValue = record.timestamp || record.created_at || record.createdAt;
+    if (preciseValue) {
+        const parsed = new Date(preciseValue);
+        if (isValid(parsed)) return parsed;
+    }
     return new Date();
+};
+
+/**
+ * Parses only the system recording date/time (record.created_at / record.timestamp).
+ * Fallback to selected date if precise timestamp is missing.
+ */
+export const parseRecordingDate = (record) => {
+    if (!record) return new Date();
+    const preciseValue = record.timestamp || record.created_at || record.createdAt;
+    if (preciseValue) {
+        if (typeof preciseValue === 'string') {
+            const sqliteFormat = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/;
+            if (sqliteFormat.test(preciseValue) && !preciseValue.includes('Z') && !preciseValue.includes('+')) {
+                const parsed = new Date(preciseValue.replace(' ', 'T') + 'Z');
+                if (isValid(parsed)) return parsed;
+            }
+        }
+        const parsed = new Date(preciseValue);
+        if (isValid(parsed)) return parsed;
+    }
+    
+    return parseSelectedDate(record);
+};
+
+/**
+ * Formats only the selected date portion.
+ */
+export const formatSelectedDate = (record, formatStr = 'dd/MM/yyyy', addThaiYears = true) => {
+    const dateObj = parseSelectedDate(record);
+    const finalDate = addThaiYears ? addYears(dateObj, 543) : dateObj;
+    return format(finalDate, formatStr, { locale: th });
+};
+
+/**
+ * Formats only the recording date and time.
+ */
+export const formatRecordingDate = (record, formatStr = 'dd/MM/yyyy HH:mm', addThaiYears = true) => {
+    const dateObj = parseRecordingDate(record);
+    const finalDate = addThaiYears ? addYears(dateObj, 543) : dateObj;
+    return format(finalDate, formatStr, { locale: th });
 };
 
 /**

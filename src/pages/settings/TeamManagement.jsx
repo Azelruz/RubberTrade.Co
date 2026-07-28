@@ -62,7 +62,7 @@ export const TeamManagement = () => {
         }
     };
 
-    const isOwner = user?.role === 'owner' || user?.role === 'super_admin';
+    const isOwner = user?.role === 'owner' || user?.role === 'super_admin' || user?.role === 'staff';
 
     return (
         <div className="space-y-6">
