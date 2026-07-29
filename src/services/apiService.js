@@ -58,6 +58,7 @@ export const clearCache = (...keys) => {
 
 export const clearAllCache = () => {
     try {
+        memoryCache.clear();
         Object.keys(sessionStorage)
             .filter(k => k.startsWith('gc_'))
             .forEach(k => sessionStorage.removeItem(k));
