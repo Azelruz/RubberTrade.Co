@@ -473,9 +473,35 @@ export const updateSettingsAPI = async (payload) => {
     return res;
 };
 
+const pendingDeletesSet = new Set();
+const pendingUpdatesMap = new Map();
+
+export const getPendingDeletes = (sheetName) => {
+    const table = (sheetName || '').toLowerCase();
+    const result = new Set();
+    pendingDeletesSet.forEach(key => {
+        const [tbl, id] = key.split(':');
+        if (tbl === table) result.add(String(id));
+    });
+    return result;
+};
+
+export const getPendingUpdates = (sheetName) => {
+    const table = (sheetName || '').toLowerCase();
+    const result = new Map();
+    pendingUpdatesMap.forEach((val, key) => {
+        const [tbl, id] = key.split(':');
+        if (tbl === table) result.set(String(id), val);
+    });
+    return result;
+};
+
 export const deleteRecord = async (sheetName, id) => {
     const table = sheetName.toLowerCase();
     const switchedStoreId = localStorage.getItem('rt_active_store_id');
+    
+    // Record deletion in local pending set to prevent stale API revalidation from re-adding it
+    pendingDeletesSet.add(`${table}:${String(id)}`);
     
     // ONLINE: Delete via API directly
     if (navigator.onLine) {
@@ -513,6 +539,11 @@ export const updateRecord = async (sheetName, id, updates) => {
     const table = sheetName.toLowerCase();
     const switchedStoreId = localStorage.getItem('rt_active_store_id');
     
+    // Record updates in local pending map so stale API revalidation preserves edits
+    const key = `${table}:${String(id)}`;
+    const existing = pendingUpdatesMap.get(key) || {};
+    pendingUpdatesMap.set(key, { ...existing, ...updates });
+
     // ONLINE: Update via API directly
     if (navigator.onLine) {
         try {

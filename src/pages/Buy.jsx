@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { addBuyRecord, fetchBuyRecords, deleteRecord, updateRecord, fetchFarmers, fetchDailyPrice, getSettings, fetchEmployees, saveReceiptImageToDrive, deleteReceiptFileToDrive, sendLineReceipt, fetchMemberTypes, isCached, addFarmer, updateQueue, fetchQueues, fetchLoans, fetchLoanDeductions } from '../services/apiService';
+import { addBuyRecord, fetchBuyRecords, deleteRecord, updateRecord, fetchFarmers, fetchDailyPrice, getSettings, fetchEmployees, saveReceiptImageToDrive, deleteReceiptFileToDrive, sendLineReceipt, fetchMemberTypes, isCached, addFarmer, updateQueue, fetchQueues, fetchLoans, fetchLoanDeductions, getPendingDeletes, getPendingUpdates } from '../services/apiService';
 import { db } from '../services/db';
 import { truncateOneDecimal, calculateDrcBonus } from '../utils/calculations';
 import { printRecord } from '../utils/PrintService';
@@ -237,8 +237,8 @@ export const Buy = () => {
     const isSameRecords = (a, b) => {
         if (!Array.isArray(a) || !Array.isArray(b)) return false;
         if (a.length !== b.length) return false;
-        const keyA = a.map(x => `${x.id}:${getLocalDateString(x.date)}:${x.weight}:${x.drc}:${x.total}`).join('|');
-        const keyB = b.map(x => `${x.id}:${getLocalDateString(x.date)}:${x.weight}:${x.drc}:${x.total}`).join('|');
+        const keyA = a.map(x => `${x.id}:${getLocalDateString(x.date)}:${x.farmerId || ''}:${x.farmerName || ''}:${x.weight}:${x.drc}:${x.pricePerKg}:${x.total}:${x.note || ''}:${x.updated_at || ''}`).join('|');
+        const keyB = b.map(x => `${x.id}:${getLocalDateString(x.date)}:${x.farmerId || ''}:${x.farmerName || ''}:${x.weight}:${x.drc}:${x.pricePerKg}:${x.total}:${x.note || ''}:${x.updated_at || ''}`).join('|');
         return keyA === keyB;
     };
 
@@ -246,25 +246,35 @@ export const Buy = () => {
         if (!Array.isArray(incomingRecords)) return incomingRecords || [];
         
         const currentStoreId = getActiveStoreId();
+        const pendingDeletes = getPendingDeletes('buys');
+        const pendingUpdates = getPendingUpdates('buys');
         const recordMap = new Map();
 
-        // 1. Add all incoming records matching current store
+        // 1. Add all incoming records matching current store AND NOT deleted locally
         incomingRecords.forEach(r => {
-            if (r && r.id) {
+            if (r && r.id && !pendingDeletes.has(String(r.id))) {
                 const matchesStore = !currentStoreId || !r.userId || String(r.userId) === String(currentStoreId);
                 if (matchesStore) {
-                    recordMap.set(r.id, r);
+                    let finalRecord = r;
+                    if (pendingUpdates.has(String(r.id))) {
+                        finalRecord = { ...r, ...pendingUpdates.get(String(r.id)) };
+                    }
+                    recordMap.set(String(r.id), finalRecord);
                 }
             }
         });
 
-        // 2. Keep existing records ONLY if they match current active store
+        // 2. Keep existing records ONLY if they match current active store AND NOT deleted locally
         if (Array.isArray(existingRecords)) {
             existingRecords.forEach(r => {
-                if (r && r.id && !recordMap.has(r.id)) {
+                if (r && r.id && !pendingDeletes.has(String(r.id))) {
                     const matchesStore = !currentStoreId || !r.userId || String(r.userId) === String(currentStoreId);
-                    if (matchesStore) {
-                        recordMap.set(r.id, r);
+                    if (matchesStore && !recordMap.has(String(r.id))) {
+                        let finalRecord = r;
+                        if (pendingUpdates.has(String(r.id))) {
+                            finalRecord = { ...r, ...pendingUpdates.get(String(r.id)) };
+                        }
+                        recordMap.set(String(r.id), finalRecord);
                     }
                 }
             });
