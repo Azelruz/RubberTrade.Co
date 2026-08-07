@@ -183,7 +183,7 @@ async function handlePost(context) {
 
                 let id = p.id;
                 if (!id || isUUID(id)) {
-                    const nonce = isUUID(id) ? id.substring(0, 4).toUpperCase() : '';
+                    const nonce = isUUID(id) ? id.substring(0, 6).toUpperCase() : '';
                     id = await generateNextId(context.env.DB, 'buys', format, stationCode, storeId, nonce, i);
                 }
                 const {
@@ -222,8 +222,7 @@ async function handlePost(context) {
                         bonusDrc = excluded.bonusDrc,
                         actualPrice = excluded.actualPrice,
                         bonusMemberType = excluded.bonusMemberType,
-                        rubberType = excluded.rubberType,
-                        createdBy = excluded.createdBy
+                        rubberType = excluded.rubberType
                 `).bind(
                     id, date || null, farmerId || null, farmerName || null, 
                     weight || 0, drc || 0, pricePerKg || 0, total || 0, 
@@ -243,9 +242,10 @@ async function handlePost(context) {
                 context.waitUntil?.(Promise.all(body.payloads.map((p, idx) => {
                     const id = stmts[idx].params[0]; // Extract ID from prepared statement
                     return recordAuditLog(context, {
-                        action: 'CREATE',
+                        action: 'CREATE_BUY',
                         entityType: 'buys',
                         entityId: id,
+                        oldData: null,
                         newData: { ...p, userId: storeId }
                     });
                 })));
@@ -258,7 +258,7 @@ async function handlePost(context) {
         const buyData = {
             ...payload,
             userId: storeId,
-            created_at: new Date().toISOString()
+            created_at: payload.created_at || new Date().toISOString()
         };
 
         const buySchema = {
@@ -283,9 +283,13 @@ async function handlePost(context) {
         if (!id || isUUID(id)) {
             const stationCode = await getSetting(context.env.DB, 'station_code', storeId, '0335');
             const format = await getSetting(context.env.DB, 'format_buy_bill', storeId, 'B-{STATION}{YYYY}-{SEQ4}');
-            const nonce = isUUID(id) ? id.substring(0, 4).toUpperCase() : '';
+            const nonce = isUUID(id) ? id.substring(0, 6).toUpperCase() : '';
             id = await generateNextId(context.env.DB, 'buys', format, stationCode, storeId, nonce, 0);
         }
+
+        // Check if existing record exists to record accurate audit log (CREATE vs UPDATE)
+        const existingRecord = await context.env.DB.prepare("SELECT * FROM buys WHERE id = ? AND userId = ?").bind(id, storeId).first();
+        const isUpdate = !!existingRecord;
 
         const { 
             date, farmerId, farmerName, weight, drc, pricePerKg, total, 
@@ -323,8 +327,7 @@ async function handlePost(context) {
                 bonusDrc = excluded.bonusDrc,
                 actualPrice = excluded.actualPrice,
                 bonusMemberType = excluded.bonusMemberType,
-                rubberType = excluded.rubberType,
-                createdBy = excluded.createdBy
+                rubberType = excluded.rubberType
         `).bind(
             id, date || null, farmerId || null, farmerName || null, 
             weight || 0, drc || 0, pricePerKg || 0, total || 0, 
@@ -333,7 +336,7 @@ async function handlePost(context) {
             farmerStatus || 'Pending', employeeStatus || 'Pending', 
             receiptUrl || null, bucketWeight || 0,
             basePrice || 0, bonusDrc || 0, actualPrice || 0, bonusMemberType || 0, 
-            rubberType || 'latex', createdBy || context.user.username || 'Owner', storeId, payload.created_at || payload.timestamp || new Date().toISOString()
+            rubberType || 'latex', createdBy || (existingRecord ? existingRecord.createdBy : (context.user.username || 'Owner')), storeId, payload.created_at || payload.timestamp || (existingRecord ? existingRecord.created_at : new Date().toISOString())
         ).run();
 
         // --- Process Loan Deductions ---
@@ -391,10 +394,11 @@ async function handlePost(context) {
         
         // --- Audit Logging ---
         context.waitUntil?.(recordAuditLog(context, {
-            action: 'CREATE_BUY',
+            action: isUpdate ? 'UPDATE_BUY' : 'CREATE_BUY',
             entityType: 'buys',
             entityId: id,
-            newData: buyData
+            oldData: isUpdate ? existingRecord : null,
+            newData: { ...buyData, id }
         }));
 
         return jsonResponse({ status: 'success', id });

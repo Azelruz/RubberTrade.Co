@@ -39,8 +39,61 @@ async function handlePost(context) {
             return jsonResponse({ status: 'success' });
         }
         
+        // Handle checkStationCode
+        if (body.action === 'checkStationCode') {
+            const code = (payload?.code || '').trim().toUpperCase();
+            if (!code) return jsonResponse({ status: 'success', isAvailable: true });
+            const existing = await context.env.DB.prepare(
+                "SELECT userId FROM settings WHERE key = 'station_code' AND UPPER(value) = ? AND userId != ?"
+            ).bind(code, context.user.storeId).first();
+
+            if (existing) {
+                return jsonResponse({ status: 'duplicate', isAvailable: false, message: `รหัสสถานี '${code}' ถูกใช้งานแล้วโดยร้านค้าอื่น` });
+            }
+            return jsonResponse({ status: 'success', isAvailable: true });
+        }
+
+        // Handle generateStationCode
+        if (body.action === 'generateStationCode') {
+            let prefix = (payload?.prefix || context.user.username || 'RTB').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (prefix.length < 2) prefix = 'RTB';
+            if (prefix.length > 4) prefix = prefix.substring(0, 4);
+
+            let candidate = prefix;
+            let counter = 1;
+            let isUnique = false;
+
+            while (!isUnique && counter <= 99) {
+                const checkCode = counter === 1 ? candidate : `${prefix}${String(counter).padStart(2, '0')}`;
+                const existing = await context.env.DB.prepare(
+                    "SELECT userId FROM settings WHERE key = 'station_code' AND UPPER(value) = ? AND userId != ?"
+                ).bind(checkCode, context.user.storeId).first();
+
+                if (!existing) {
+                    candidate = checkCode;
+                    isUnique = true;
+                } else {
+                    counter++;
+                }
+            }
+
+            return jsonResponse({ status: 'success', code: candidate });
+        }
+
         // Handle generic updateSettings
         if (body.action === 'updateSettings' && payload) {
+            // Check station_code uniqueness before updating
+            if (payload.station_code) {
+                const code = String(payload.station_code).trim().toUpperCase();
+                const existing = await context.env.DB.prepare(
+                    "SELECT userId FROM settings WHERE key = 'station_code' AND UPPER(value) = ? AND userId != ?"
+                ).bind(code, context.user.storeId).first();
+
+                if (existing) {
+                    return errorResponse(`รหัสสถานี '${code}' ถูกใช้งานแล้วโดยร้านค้าอื่น กรุณาเลือกใช้รหัสอื่น`, 400);
+                }
+            }
+
             const stmts = Object.keys(payload).map(key => {
                 const rawValue = payload[key];
                 const value = rawValue === undefined ? null : (typeof rawValue === 'object' ? JSON.stringify(rawValue) : String(rawValue));

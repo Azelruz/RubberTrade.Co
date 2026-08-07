@@ -277,10 +277,14 @@ const offlineWrite = async (table, endpoint, payload, action = 'POST') => {
             await db[table].put(finalPayload);
         }
         
+        const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+        const currentUserId = session?.user?.id || null;
+
         await db.sync_queue.put({
             type: table,
             action,
             payload: { payload: finalPayload },
+            userId: currentUserId,
             status: 'pending',
             retryCount: 0,
             createdAt: Date.now(),
@@ -453,7 +457,8 @@ export const deleteMemberType = async (id) => {
         return res;
     }
     // Offline delete
-    await db.sync_queue.put({ type: 'farmer_types', action: 'DELETE', payload: { id }, status: 'pending', retryCount: 0, createdAt: Date.now(), uuid: crypto.randomUUID() });
+    const { data: { session: sess1 } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+    await db.sync_queue.put({ type: 'farmer_types', action: 'DELETE', payload: { id }, userId: sess1?.user?.id || null, status: 'pending', retryCount: 0, createdAt: Date.now(), uuid: crypto.randomUUID() });
     try { await db.farmer_types.delete(id); } catch {}
     triggerDataRefresh();
     return { status: 'success' };
@@ -521,10 +526,12 @@ export const deleteRecord = async (sheetName, id) => {
         throw new Error('ไม่สามารถลบข้อมูลแบบออฟไลน์ขณะแก้ไขข้อมูลแทนร้านค้าอื่นได้ กรุณาเชื่อมต่ออินเทอร์เน็ต');
     }
 
+    const { data: { session: sess2 } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
     await db.sync_queue.put({
         type: 'deleteRecord',
         action: 'POST',
         payload: { sheetName, id },
+        userId: sess2?.user?.id || null,
         status: 'pending',
         retryCount: 0,
         createdAt: Date.now(),
@@ -562,10 +569,12 @@ export const updateRecord = async (sheetName, id, updates) => {
         throw new Error('ไม่สามารถแก้ไขข้อมูลแบบออฟไลน์ขณะแก้ไขข้อมูลแทนร้านค้าอื่นได้ กรุณาเชื่อมต่ออินเทอร์เน็ต');
     }
 
+    const { data: { session: sess3 } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
     await db.sync_queue.put({
         type: 'updateRecord',
         action: 'POST',
         payload: { sheetName, id, updates },
+        userId: sess3?.user?.id || null,
         status: 'pending',
         retryCount: 0,
         createdAt: Date.now(),
@@ -783,6 +792,16 @@ export const updateServiceQueue = async (id, payload) => {
 
 export const deleteServiceQueue = async (id) => {
     return await deleteRecord('service_queues', id);
+};
+
+export const checkStationCodeAPI = async (code) => {
+    if (!navigator.onLine) return { status: 'success', isAvailable: true };
+    return await fetchAPI('/settings', { method: 'POST', body: { action: 'checkStationCode', payload: { code } } });
+};
+
+export const generateUniqueStationCodeAPI = async (prefix = 'RTB') => {
+    if (!navigator.onLine) return { status: 'success', code: prefix };
+    return await fetchAPI('/settings', { method: 'POST', body: { action: 'generateStationCode', payload: { prefix } } });
 };
 
 

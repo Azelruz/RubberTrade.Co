@@ -170,7 +170,7 @@ async function handlePost(context) {
 
                 let id = p.id;
                 if (!id || isUUID(id)) {
-                    const nonce = isUUID(id) ? id.substring(0, 4).toUpperCase() : '';
+                    const nonce = isUUID(id) ? id.substring(0, 6).toUpperCase() : '';
                     id = await generateNextId(context.env.DB, 'sells', format, stationCode, storeId, nonce, i);
                 }
                 const { 
@@ -249,7 +249,7 @@ async function handlePost(context) {
         if (!id || isUUID(id)) {
             const stationCode = await getSetting(context.env.DB, 'station_code', storeId, '0335');
             const format = await getSetting(context.env.DB, 'format_sell_bill', storeId, 'S-{STATION}{YYYY}-{SEQ4}');
-            const nonce = isUUID(id) ? id.substring(0, 4).toUpperCase() : '';
+            const nonce = isUUID(id) ? id.substring(0, 6).toUpperCase() : '';
             id = await generateNextId(context.env.DB, 'sells', format, stationCode, storeId, nonce, 0);
         }
 

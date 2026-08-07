@@ -163,12 +163,17 @@ export const syncQueueToServer = async () => {
             return;
         }
 
-        console.log(`[SyncService] Starting sync of ${queue.length} items`);
-        let syncedCount = 0;
-        let failedCount = 0;
+        const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+        const currentUserId = session?.user?.id;
 
         for (const item of queue) {
             try {
+                // USER ISOLATION CHECK: Skip items created by another user without deleting them
+                if (currentUserId && item.userId && item.userId !== currentUserId) {
+                    console.warn(`[SyncService] Skipping item ${item.uuid} belonging to user ${item.userId} (current: ${currentUserId})`);
+                    continue;
+                }
+
                 // DATA INTEGRITY CHECK: Validate data before syncing
                 const recordData = item.payload?.payload || item.payload;
                 const validation = validateRecordData(item.type, recordData);

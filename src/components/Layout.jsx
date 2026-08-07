@@ -535,13 +535,13 @@ export const Layout = () => {
                     <div className="flex items-center space-x-2">
                         <span className="text-lg font-bold text-rubber-600 lg:hidden">RubberTrade</span>
                         <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-rubber-50 text-rubber-700 rounded-full border border-rubber-200 lg:hidden">
-                            v1.4.2
+                            v1.4.3
                         </span>
                     </div>
 
                     <div className="flex items-center ml-auto space-x-3">
                         <span className="px-2.5 py-1 text-xs font-mono font-bold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200 shadow-xs hidden md:inline-flex items-center">
-                            v1.4.2
+                            v1.4.3
                         </span>
                         <StoreSwitcher />
                         <GlobalSearch />

@@ -67,9 +67,9 @@ export async function generateNextId(db, table, format, stationCode, userId, non
     const nextSeqStr = nextSeq.toString().padStart(seqLen, '0');
     let finalId = prefix + nextSeqStr + suffix;
     
-    // 5. Append short nonce if provided
+    // 5. Append short nonce if provided (6-character hex for 1 in 16.7M uniqueness)
     if (nonce) {
-        const shortNonce = nonce.length > 2 ? nonce.substring(0, 2) : nonce;
+        const shortNonce = nonce.length > 6 ? nonce.substring(0, 6) : nonce;
         finalId += '-' + shortNonce;
     }
     

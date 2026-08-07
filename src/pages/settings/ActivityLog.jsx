@@ -109,12 +109,11 @@ const ActivityLog = () => {
     };
 
     const getActionIcon = (action) => {
-        switch (action) {
-            case 'CREATE': return <Plus className="text-green-500" size={16} />;
-            case 'UPDATE': return <Pencil className="text-blue-500" size={16} />;
-            case 'DELETE': return <Trash2 className="text-red-500" size={16} />;
-            default: return <Info className="text-gray-400" size={16} />;
-        }
+        const act = (action || '').toUpperCase();
+        if (act.includes('CREATE')) return <Plus className="text-green-500" size={16} />;
+        if (act.includes('UPDATE')) return <Pencil className="text-blue-500" size={16} />;
+        if (act.includes('DELETE')) return <Trash2 className="text-red-500" size={16} />;
+        return <Info className="text-gray-400" size={16} />;
     };
 
     const getEntityLabel = (type) => {
@@ -143,25 +142,27 @@ const ActivityLog = () => {
         });
     };
 
-    const renderDiff = (oldData, newData) => {
-        if (!oldData && !newData) return <p className="text-gray-400 italic">ไม่มีข้อมูลแสดงผล</p>;
+    const renderDiff = (oldData, newData, action) => {
+        const isCreate = action && action.toUpperCase().includes('CREATE');
+        const effectiveOldData = isCreate ? null : oldData;
+
+        if (!effectiveOldData && !newData) return <p className="text-gray-400 italic text-xs">ไม่มีข้อมูลแสดงผล</p>;
         
-        // If it's an update, we might want to highlight changes
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {oldData && (
-                    <div className="space-y-2">
+                {effectiveOldData && (
+                    <div className="space-y-2 min-w-0">
                         <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">ข้อมูลเดิม (Before)</div>
                         <div className="bg-gray-900 text-green-400 p-4 rounded-xl text-[11px] font-mono overflow-auto max-h-60 custom-scrollbar">
-                            <pre>{JSON.stringify(oldData, null, 2)}</pre>
+                            <pre className="whitespace-pre-wrap break-all">{JSON.stringify(effectiveOldData, null, 2)}</pre>
                         </div>
                     </div>
                 )}
                 {newData && (
-                    <div className="space-y-2">
-                        <div className="text-[10px] font-black text-rubber-600 uppercase tracking-widest">ข้อมูลใหม่ (After) {oldData ? '/ ปัจจุบัน' : ''}</div>
+                    <div className="space-y-2 min-w-0">
+                        <div className="text-[10px] font-black text-rubber-600 uppercase tracking-widest">ข้อมูลใหม่ (After) {effectiveOldData ? '/ ปัจจุบัน' : ''}</div>
                         <div className="bg-gray-900 text-blue-300 p-4 rounded-xl text-[11px] font-mono overflow-auto max-h-60 custom-scrollbar">
-                            <pre>{JSON.stringify(newData, null, 2)}</pre>
+                            <pre className="whitespace-pre-wrap break-all">{JSON.stringify(newData, null, 2)}</pre>
                         </div>
                     </div>
                 )}
@@ -361,18 +362,18 @@ const ActivityLog = () => {
                                         {expandedRow === log.id && (
                                             <tr className="bg-gray-50/50">
                                                 <td colSpan="5" className="px-8 py-8 border-t border-gray-100">
-                                                    <div className="animate-in fade-in slide-in-from-top-2">
-                                                        <div className="flex items-center justify-between mb-6">
-                                                            <div className="flex items-center space-x-3">
-                                                                <FileJson className="text-rubber-600" size={20} />
-                                                                <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">รายละเอียดการเปลี่ยนแปลงข้อมูล (Data Snapshot)</h4>
-                                                            </div>
-                                                            <div className="text-[10px] text-gray-400 font-mono bg-white px-3 py-1 rounded-full border border-gray-200">
-                                                                IP: {log.ip_address}
-                                                            </div>
-                                                        </div>
-                                                        {renderDiff(log.oldData, log.newData)}
-                                                    </div>
+                                                     <div className="animate-in fade-in slide-in-from-top-2">
+                                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+                                                             <div className="flex items-center space-x-3 min-w-0">
+                                                                 <FileJson className="text-rubber-600 shrink-0" size={20} />
+                                                                 <h4 className="text-xs sm:text-sm font-black text-gray-900 uppercase tracking-wider truncate">รายละเอียดการเปลี่ยนแปลงข้อมูล (Data Snapshot)</h4>
+                                                             </div>
+                                                             <div className="text-[10px] text-gray-400 font-mono bg-white px-3 py-1 rounded-full border border-gray-200 self-start sm:self-auto shrink-0">
+                                                                 IP: {log.ip_address}
+                                                             </div>
+                                                         </div>
+                                                         {renderDiff(log.oldData, log.newData, log.action)}
+                                                     </div>
                                                 </td>
                                             </tr>
                                         )}

@@ -12,7 +12,7 @@ const TABLE_WHITELISTS = {
         'date', 'farmerId', 'farmerName', 'weight', 'drc', 'pricePerKg', 'total', 
         'dryRubber', 'empPct', 'employeeTotal', 'farmerTotal', 'note', 'status', 
         'farmerStatus', 'employeeStatus', 'receiptUrl', 'bucketWeight',
-        'basePrice', 'bonusDrc', 'actualPrice', 'bonusMemberType', 'rubberType', 'createdBy'
+        'basePrice', 'bonusDrc', 'actualPrice', 'bonusMemberType', 'rubberType'
     ],
     'sells': [
         'date', 'buyerName', 'factoryId', 'employeeId', 'truckId', 'truckInfo',

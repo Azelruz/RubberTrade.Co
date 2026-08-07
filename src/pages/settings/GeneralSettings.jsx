@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { Building2, Save, Trash2, Database, AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
+import { Building2, Save, Trash2, Database, AlertTriangle, RefreshCw, MapPin, Sparkles, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { 
     getSettings, 
     updateSettingsAPI, 
     saveReceiptImageToDrive, 
-    clearAllCache 
+    clearAllCache,
+    checkStationCodeAPI,
+    generateUniqueStationCodeAPI
 } from '../../services/apiService';
 import { useAuth } from '../../context/AuthContext';
 import db from '../../services/db';
@@ -15,8 +17,11 @@ export const GeneralSettings = () => {
     const { user } = useAuth();
     const [saving, setSaving] = useState(false);
     const [logoUrl, setLogoUrl] = useState('');
+    const [stationStatus, setStationStatus] = useState('idle'); // 'idle' | 'checking' | 'available' | 'duplicate'
+    const [stationMessage, setStationMessage] = useState('');
+    const [generatingStation, setGeneratingStation] = useState(false);
     
-    const { register, handleSubmit, reset, setValue } = useForm({
+    const { register, handleSubmit, reset, setValue, watch } = useForm({
         defaultValues: {
             factoryName: '',
             address: '',
@@ -34,6 +39,51 @@ export const GeneralSettings = () => {
             showPrizeDraw: true
         }
     });
+
+    const handleCheckStationCode = async (codeVal) => {
+        const code = (codeVal || '').trim().toUpperCase();
+        if (!code) {
+            setStationStatus('idle');
+            setStationMessage('');
+            return;
+        }
+        setStationStatus('checking');
+        try {
+            const res = await checkStationCodeAPI(code);
+            if (res.status === 'duplicate' || res.isAvailable === false) {
+                setStationStatus('duplicate');
+                setStationMessage(res.message || `รหัส '${code}' ถูกใช้งานแล้วโดยร้านค้าอื่น`);
+            } else {
+                setStationStatus('available');
+                setStationMessage(`รหัส '${code}' พร้อมใช้งาน (ไม่ซ้ำกับใคร)`);
+            }
+        } catch {
+            setStationStatus('idle');
+            setStationMessage('');
+        }
+    };
+
+    const handleGenerateStationCode = async () => {
+        setGeneratingStation(true);
+        const toastId = toast.loading('กำลังสุ่มรหัสสถานีที่ไม่ซ้ำ...');
+        try {
+            const storeName = watch('factoryName') || user?.username || 'RTB';
+            const prefix = storeName.substring(0, 3).toUpperCase();
+            const res = await generateUniqueStationCodeAPI(prefix);
+            if (res.status === 'success' && res.code) {
+                setValue('station_code', res.code);
+                setStationStatus('available');
+                setStationMessage(`สุ่มรหัส '${res.code}' สำเร็จ (ไม่ซ้ำกับใคร)`);
+                toast.success(`สุ่มได้รหัสสถานี: ${res.code}`, { id: toastId });
+            } else {
+                toast.error('ไม่สามารถสุ่มรหัสได้', { id: toastId });
+            }
+        } catch (err) {
+            toast.error('สุ่มรหัสล้มเหลว: ' + err.message, { id: toastId });
+        } finally {
+            setGeneratingStation(false);
+        }
+    };
 
     const handleGetCurrentLocation = () => {
         if (!navigator.geolocation) {

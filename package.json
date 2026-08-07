@@ -1,12 +1,13 @@
 {
   "name": "rubertrade-co-ltd",
   "private": true,
-  "version": "1.4.2",
+  "version": "1.4.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "deploy": "npm run build && npx wrangler pages deploy dist --branch main",
+    "deploy:prod": "npm run build && npx wrangler pages deploy dist --branch main",
     "deploy:test": "npm run build && npx wrangler pages deploy dist --branch test",
     "lint": "eslint .",
     "preview": "vite preview"
