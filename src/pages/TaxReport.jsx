@@ -3,13 +3,14 @@ import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval } from 'da
 import { th } from 'date-fns/locale';
 import { 
     Download, FileText, Calendar, ArrowUpRight, ArrowDownLeft, 
-    TrendingUp, TrendingDown, DollarSign, Briefcase, Award, Layers 
+    TrendingUp, TrendingDown, DollarSign, Briefcase, Award, Layers, Printer
 } from 'lucide-react';
 import { 
     fetchBuyRecords, fetchSellRecords, fetchFactories, 
-    fetchFarmers, fetchExpenses, fetchWages, isCached 
+    fetchFarmers, fetchExpenses, fetchWages, getSettings, isCached 
 } from '../services/apiService';
 import toast from 'react-hot-toast';
+import ReportPrintHeader from '../components/ReportPrintHeader';
 
 export const TaxReport = () => {
     const [loading, setLoading] = useState(true);
@@ -19,6 +20,7 @@ export const TaxReport = () => {
     const [wages, setWages] = useState([]);
     const [factories, setFactories] = useState([]);
     const [farmers, setFarmers] = useState([]);
+    const [settings, setSettings] = useState({});
     
     // UI states
     const [dateRange, setDateRange] = useState(format(new Date(), 'yyyy-MM'));
@@ -34,13 +36,14 @@ export const TaxReport = () => {
             setLoading(true);
         }
         try {
-            const [b, s, e, w, f, fm] = await Promise.all([
+            const [b, s, e, w, f, fm, setRes] = await Promise.all([
                 fetchBuyRecords(),
                 fetchSellRecords(),
                 fetchExpenses(),
                 fetchWages(),
                 fetchFactories(),
-                fetchFarmers()
+                fetchFarmers(),
+                getSettings()
             ]);
             setBuys(Array.isArray(b) ? b : []);
             setSells(Array.isArray(s) ? s : []);
@@ -48,6 +51,9 @@ export const TaxReport = () => {
             setWages(Array.isArray(w) ? w : []);
             setFactories(Array.isArray(f) ? f : []);
             setFarmers(Array.isArray(fm) ? fm : []);
+            if (setRes && setRes.status === 'success') {
+                setSettings(setRes.data || {});
+            }
         } catch (error) {
             toast.error('โหลดข้อมูลล้มเหลว');
         } finally {
@@ -241,7 +247,18 @@ export const TaxReport = () => {
     }, [dateRange]);
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-7xl mx-auto pb-10">
+            <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                    @page { size: A4 portrait; margin: 10mm; }
+                    html, body, #root, main, div { overflow: visible !important; height: auto !important; max-height: none !important; }
+                    .no-print { display: none !important; }
+                    tr { page-break-inside: avoid; }
+                    thead { display: table-header-group; }
+                    tfoot { display: table-footer-group; }
+                }
+            ` }} />
+            <div className="no-print space-y-6">
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
@@ -252,14 +269,24 @@ export const TaxReport = () => {
                     <p className="text-gray-500">รายงานวิเคราะห์กำไรขาดทุน สรุปภาษีซื้อ-ขาย และรายงานหัก ณ ที่จ่ายสรรพากร</p>
                 </div>
 
-                <div className="flex items-center space-x-3 bg-white p-2 rounded-xl shadow-sm border border-gray-100">
-                    <Calendar size={20} className="text-gray-400 ml-2" />
-                    <input 
-                        type="month" 
-                        value={dateRange}
-                        onChange={(e) => setDateRange(e.target.value)}
-                        className="border-none focus:ring-0 text-gray-900 font-bold"
-                    />
+                <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-3 bg-white p-2 rounded-xl shadow-sm border border-gray-100">
+                        <Calendar size={20} className="text-gray-400 ml-2" />
+                        <input 
+                            type="month" 
+                            value={dateRange}
+                            onChange={(e) => setDateRange(e.target.value)}
+                            className="border-none focus:ring-0 text-gray-900 font-bold"
+                        />
+                    </div>
+                    <button 
+                        onClick={() => window.print()}
+                        className="flex items-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-md shadow-emerald-100 text-sm border border-emerald-700"
+                        title="พิมพ์รายงานสรุป"
+                    >
+                        <Printer size={18} className="mr-2" />
+                        พิมพ์รายงาน
+                    </button>
                 </div>
             </div>
 
@@ -602,18 +629,70 @@ export const TaxReport = () => {
                 </div>
             )}
 
-            {/* Bottom Recommendation */}
-            <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 flex items-start space-x-4">
-                <div className="bg-blue-600 p-2 rounded-lg text-white shadow-md flex-shrink-0">
-                    <FileText size={20} />
+            </div>
+            {/* Close no-print wrapper */}
+
+            {/* A4 Printable View */}
+            <div className="hidden print:block text-black p-4 font-sans bg-white">
+                <ReportPrintHeader 
+                    settings={settings}
+                    title="รายงานระบบบัญชี & ภาษีลานยางพารา"
+                    subtitle={`ประจำเดือน ${dateRange}`}
+                />
+
+                {/* Summary Table */}
+                <div className="grid grid-cols-3 gap-2 mb-4 p-3 border border-black rounded bg-gray-50 text-center text-xs">
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">รายได้ขายยางส่งโรงงาน (Revenue)</span>
+                        <span className="text-sm font-bold">฿{plCalculations.revenue.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ต้นทุนขายและรายจ่าย (COGS & Expenses)</span>
+                        <span className="text-sm font-bold">฿{(plCalculations.cogs + plCalculations.totalOperatingExpenses).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">กำไรสุทธิจริง (Net Profit)</span>
+                        <span className="text-sm font-bold">฿{plCalculations.netProfit.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                    </div>
                 </div>
+
+                {/* Withholding Tax Table */}
                 <div>
-                    <h3 className="font-bold text-blue-900 mb-1 italic">ข้อแนะนำสำหรับงานบัญชีและสรรพากร</h3>
-                    <ul className="text-sm text-blue-800 space-y-1 list-disc pl-4 opacity-80">
-                        <li><strong>งบกำไรขาดทุน (P&L):</strong> ใช้เพื่อประเมินผลกำไรสุทธิเบื้องต้นก่อนหักภาษีเงินได้นิติบุคคล/บุคคลธรรมดา</li>
-                        <li><strong>ภาษีหัก ณ ที่จ่าย:</strong> สามารถส่งออกเป็นไฟล์ CSV ไปใช้คำนวณกรอกแบบนำส่ง ภ.ง.ด.1 (ค่าจ้าง), ภ.ง.ด.3 (บุคคลธรรมดา/ค่าขนส่ง/บริการ), ภ.ง.ด.53 (นิติบุคคล) ได้ทันที</li>
-                        <li><strong>ข้อมูลภาษีมูลค่าเพิ่ม (VAT):</strong> ได้รับการปรับแต่งการออกบิลและเก็บประวัติคู่ค้าให้ตรงกับที่ระบุในหัวข้อตั้งค่าทั่วไป</li>
-                    </ul>
+                    <h3 className="text-sm font-bold border-b border-black pb-1 mb-2">ตารางสรุปรายการหักภาษี ณ ที่จ่าย</h3>
+                    <table className="w-full border-collapse border border-black text-xs">
+                        <thead>
+                            <tr className="bg-gray-100 border-b border-black">
+                                <th className="border border-black p-1 text-center">ลำดับ</th>
+                                <th className="border border-black p-1 text-left">วันที่</th>
+                                <th className="border border-black p-1 text-left">หมวดหมู่/คำอธิบาย</th>
+                                <th className="border border-black p-1 text-center">อัตราภาษี</th>
+                                <th className="border border-black p-1 text-right">จำนวนเงิน (฿)</th>
+                                <th className="border border-black p-1 text-right">ภาษีหัก ณ ที่จ่าย (฿)</th>
+                                <th className="border border-black p-1 text-right">สุทธิต้องจ่าย (฿)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {withholdingTaxRecords.map((item, idx) => (
+                                <tr key={item.id || idx} className="border-b border-gray-300">
+                                    <td className="border border-black p-1 text-center">{idx + 1}</td>
+                                    <td className="border border-black p-1">{item.date}</td>
+                                    <td className="border border-black p-1">{item.description || item.category || 'ค่าใช้จ่าย'}</td>
+                                    <td className="border border-black p-1 text-center">{item.tax_type === 'wh_3' ? '3%' : item.tax_type === 'wh_0.75' ? '0.75%' : '-'}</td>
+                                    <td className="border border-black p-1 text-right">{Number(item.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                                    <td className="border border-black p-1 text-right font-bold text-red-600">{Number(item.tax_amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                                    <td className="border border-black p-1 text-right font-bold">{(Number(item.amount || 0) - Number(item.tax_amount || 0)).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                        <tfoot>
+                            <tr className="bg-gray-100 font-bold">
+                                <td colSpan="4" className="border border-black p-1 text-right">รวมหัก ณ ที่จ่ายทั้งสิ้น</td>
+                                <td className="border border-black p-1 text-right">฿{withholdingTaxRecords.reduce((sum, i) => sum + Number(i.amount || 0), 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                                <td className="border border-black p-1 text-right text-red-600">฿{withholdingTaxRecords.reduce((sum, i) => sum + Number(i.tax_amount || 0), 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                                <td className="border border-black p-1 text-right">฿{withholdingTaxRecords.reduce((sum, i) => sum + (Number(i.amount || 0) - Number(i.tax_amount || 0)), 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
             </div>
         </div>

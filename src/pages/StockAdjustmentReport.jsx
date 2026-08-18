@@ -3,10 +3,11 @@ import { format } from 'date-fns';
 import { 
     Calendar, Download, ChevronRight, PieChart, 
     RefreshCw, Factory, TrendingUp, TrendingDown,
-    Search, Filter, ChevronLeft, PackageCheck, AlertCircle
+    Search, Filter, ChevronLeft, PackageCheck, AlertCircle, Printer
 } from 'lucide-react';
-import { fetchSellRecords } from '../services/apiService';
+import { fetchSellRecords, getSettings } from '../services/apiService';
 import { truncateOneDecimal } from '../utils/calculations';
+import ReportPrintHeader from '../components/ReportPrintHeader';
 
 const StockAdjustmentReport = () => {
     const [loading, setLoading] = useState(true);
@@ -19,6 +20,7 @@ const StockAdjustmentReport = () => {
     const ITEMS_PER_PAGE = 10;
 
     const [sells, setSells] = useState([]);
+    const [settings, setSettings] = useState({});
 
     useEffect(() => {
         loadData();
@@ -27,8 +29,14 @@ const StockAdjustmentReport = () => {
     const loadData = async () => {
         setLoading(true);
         try {
-            const data = await fetchSellRecords();
+            const [data, setRes] = await Promise.all([
+                fetchSellRecords(),
+                getSettings()
+            ]);
             setSells(Array.isArray(data) ? data : []);
+            if (setRes && setRes.status === 'success') {
+                setSettings(setRes.data || {});
+            }
         } catch (error) {
             console.error('Error loading adjustments:', error);
         } finally {
@@ -123,6 +131,17 @@ const StockAdjustmentReport = () => {
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto p-4 md:p-6 bg-gray-50/30 min-h-screen pb-20">
+            <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                    @page { size: A4 portrait; margin: 10mm; }
+                    html, body, #root, main, div { overflow: visible !important; height: auto !important; max-height: none !important; }
+                    .no-print { display: none !important; }
+                    tr { page-break-inside: avoid; }
+                    thead { display: table-header-group; }
+                    tfoot { display: table-footer-group; }
+                }
+            ` }} />
+            <div className="no-print space-y-6">
             {/* Header Section */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div className="flex items-center space-x-4">
@@ -160,6 +179,14 @@ const StockAdjustmentReport = () => {
                     >
                         <Download size={18} />
                         <span>CSV</span>
+                    </button>
+                    <button 
+                        onClick={() => window.print()}
+                        className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl font-bold text-sm transition-all shadow-lg shadow-emerald-100 active:scale-95 w-full sm:w-auto justify-center border border-emerald-700"
+                        title="พิมพ์รายงานสรุป"
+                    >
+                        <Printer size={18} />
+                        <span>พิมพ์รายงาน</span>
                     </button>
                 </div>
             </div>
@@ -350,8 +377,61 @@ const StockAdjustmentReport = () => {
                     ตัวเลขในรายงานนี้สรุปจากการบันทึกส่วนต่างในขั้นตอนการ "ขายน้ำยาง" หากน้ำหนักโรงงานน้อยกว่าสต็อกในระบบจะถูกนับเป็น "สูญหาย" และหากมากกว่าจะถูกนับเป็น "สต็อกเพิ่ม" เพื่อใช้ในการกระทบยอดสต็อกปลายงวด
                 </p>
             </div>
+            {/* Close no-print wrapper */}
+
+            {/* A4 Printable View */}
+            <div className="hidden print:block text-black p-4 font-sans bg-white">
+                <ReportPrintHeader 
+                    settings={settings}
+                    title="รายงานการปรับปรุงสต็อกและส่วนต่างน้ำหนัก"
+                    subtitle={`ประจำวันที่: ${startDate} ถึง ${endDate}`}
+                />
+
+                {/* Summary Stats Box */}
+                <div className="grid grid-cols-2 gap-2 mb-4 p-3 border border-black rounded bg-gray-50 text-center text-xs">
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">สต็อกขาด (สูญหายรวม)</span>
+                        <span className="text-sm font-bold text-red-600">-{stats.totalLoss.toLocaleString()} กก. ({stats.lossCount} รายการ)</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">สต็อกเกิน (เพิ่มขึ้นรวม)</span>
+                        <span className="text-sm font-bold text-emerald-600">+{stats.totalGain.toLocaleString()} กก. ({stats.gainCount} รายการ)</span>
+                    </div>
+                </div>
+
+                {/* Table Details */}
+                <table className="w-full border-collapse border border-black text-xs">
+                    <thead>
+                        <tr className="bg-gray-100 border-b border-black">
+                            <th className="border border-black p-1 text-center">ลำดับ</th>
+                            <th className="border border-black p-1 text-left">วันที่</th>
+                            <th className="border border-black p-1 text-left">โรงงาน/ผู้ซื้อ</th>
+                            <th className="border border-black p-1 text-right">น้ำหนักสุทธิ (กก.)</th>
+                            <th className="border border-black p-1 text-right">ส่วนต่างสต็อก (กก.)</th>
+                            <th className="border border-black p-1 text-center">สถานะ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {adjustmentData.map((item, idx) => {
+                            const loss = Number(item.lossWeight || 0);
+                            const isLoss = loss > 0;
+                            return (
+                                <tr key={item.id || idx} className="border-b border-gray-300">
+                                    <td className="border border-black p-1 text-center">{idx + 1}</td>
+                                    <td className="border border-black p-1">{item.date}</td>
+                                    <td className="border border-black p-1 font-bold">{item.buyerName || item.factoryId}</td>
+                                    <td className="border border-black p-1 text-right">{Number(item.weight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                    <td className="border border-black p-1 text-right font-bold">{isLoss ? `-${loss}` : `+${Math.abs(loss)}`}</td>
+                                    <td className="border border-black p-1 text-center font-bold">{isLoss ? 'สต็อกขาด' : 'สต็อกเกิน'}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
         </div>
-    );
+    </div>
+);
 };
 
 export default StockAdjustmentReport;

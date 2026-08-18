@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
-import { Gift, Award, Clock, Users, Search, Trash2, PlusCircle } from 'lucide-react';
+import { Gift, Award, Clock, Users, Search, Trash2, PlusCircle, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { fetchBuyRecords, fetchFarmers, fetchPromotions, addPromotion, getSettings, deleteRecord, isCached } from '../services/apiService';
+import ReportPrintHeader from '../components/ReportPrintHeader';
 
 export const Promotions = () => {
     const [activeTab, setActiveTab] = useState('points'); // points, history
@@ -11,6 +12,7 @@ export const Promotions = () => {
     const [buyRecords, setBuyRecords] = useState([]);
     const [promotions, setPromotions] = useState([]);
     const [pointsPerKg, setPointsPerKg] = useState(10); // default 10kg = 1 point
+    const [settings, setSettings] = useState({});
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -38,8 +40,9 @@ export const Promotions = () => {
             setFarmers(fData || []);
             setPromotions(Array.isArray(pRaw) ? [...pRaw].reverse() : []);
 
-            if (sRes && sRes.status === 'success' && sRes.data && sRes.data.pointsPerKg) {
-                setPointsPerKg(Number(sRes.data.pointsPerKg));
+            if (sRes && sRes.status === 'success' && sRes.data) {
+                if (sRes.data.pointsPerKg) setPointsPerKg(Number(sRes.data.pointsPerKg));
+                setSettings(sRes.data);
             }
         } catch (e) {
             toast.error('โหลดข้อมูลล้มเหลว: ' + e.message);
@@ -176,6 +179,17 @@ export const Promotions = () => {
 
     return (
         <div className="space-y-6">
+            <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                    @page { size: A4 portrait; margin: 10mm; }
+                    html, body, #root, main, div { overflow: visible !important; height: auto !important; max-height: none !important; }
+                    .no-print { display: none !important; }
+                    tr { page-break-inside: avoid; }
+                    thead { display: table-header-group; }
+                    tfoot { display: table-footer-group; }
+                }
+            ` }} />
+            <div className="no-print space-y-6">
             {/* Confirm Delete Modal */}
             {confirmDeleteId && (
                 <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center">
@@ -203,12 +217,22 @@ export const Promotions = () => {
                     <h1 className="text-2xl font-bold text-gray-900">โปรโมชั่นและของรางวัล</h1>
                     <p className="text-gray-500">ระบบคะแนนสะสมและแลกของรางวัลสำหรับสมาชิก</p>
                 </div>
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-2 flex items-center shadow-sm">
-                    <Award className="text-yellow-600 mr-2" size={20} />
-                    <div>
-                        <p className="text-xs text-yellow-700 font-bold uppercase tracking-wider">อัตราแลกคะแนน</p>
-                        <p className="text-sm font-black text-yellow-800">{pointsPerKg} กก. (ยางแห้ง) = 1 คะแนน</p>
+                <div className="flex items-center space-x-3">
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-2 flex items-center shadow-sm">
+                        <Award className="text-yellow-600 mr-2" size={20} />
+                        <div>
+                            <p className="text-xs text-yellow-700 font-bold uppercase tracking-wider">อัตราแลกคะแนน</p>
+                            <p className="text-sm font-black text-yellow-800">{pointsPerKg} กก. (ยางแห้ง) = 1 คะแนน</p>
+                        </div>
                     </div>
+                    <button 
+                        onClick={() => window.print()}
+                        className="flex items-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-md shadow-emerald-100 text-sm border border-emerald-700 whitespace-nowrap"
+                        title="พิมพ์รายงานสรุป"
+                    >
+                        <Printer size={18} className="mr-2" />
+                        พิมพ์รายงาน
+                    </button>
                 </div>
             </div>
 
@@ -390,6 +414,83 @@ export const Promotions = () => {
                         </div>
                     )}
                 </div>
+            </div>
+            </div>
+            {/* Close no-print wrapper */}
+
+            {/* A4 Printable View */}
+            <div className="hidden print:block text-black p-4 font-sans bg-white">
+                <ReportPrintHeader 
+                    settings={settings}
+                    title="รายงานโปรโมชั่นและคะแนนสะสมเกษตรกร"
+                    subtitle={`อัตราแลกคะแนน: ${pointsPerKg} กก. ยางแห้ง = 1 คะแนน`}
+                />
+
+                {/* Summary Table */}
+                <div className="grid grid-cols-2 gap-2 mb-4 p-3 border border-black rounded bg-gray-50 text-center text-xs">
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">จำนวนสมาชิกทั้งหมด</span>
+                        <span className="text-sm font-bold">{farmers.length} ราย</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ประวัติการแลก/แจกรางวัลรวม</span>
+                        <span className="text-sm font-bold">{promotions.length} รายการ</span>
+                    </div>
+                </div>
+
+                {/* Details Table */}
+                {activeTab === 'points' ? (
+                    <table className="w-full border-collapse border border-black text-xs">
+                        <thead>
+                            <tr className="bg-gray-100 border-b border-black">
+                                <th className="border border-black p-1 text-center">ลำดับ</th>
+                                <th className="border border-black p-1 text-left">ชื่อเกษตรกร</th>
+                                <th className="border border-black p-1 text-right">น้ำหนักยางแห้งสะสม (กก.)</th>
+                                <th className="border border-black p-1 text-right">คะแนนสะสมทั้งหมด</th>
+                                <th className="border border-black p-1 text-right">คะแนนใช้ไป</th>
+                                <th className="border border-black p-1 text-right">คะแนนคงเหลือ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredFarmers.map((f, idx) => {
+                                const pts = getFarmerPoints(f.id);
+                                return (
+                                    <tr key={f.id || idx} className="border-b border-gray-300">
+                                        <td className="border border-black p-1 text-center">{idx + 1}</td>
+                                        <td className="border border-black p-1 font-bold">{f.name}</td>
+                                        <td className="border border-black p-1 text-right">{pts.totalWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                        <td className="border border-black p-1 text-right">{pts.earnedPoints.toLocaleString()}</td>
+                                        <td className="border border-black p-1 text-right text-red-600">-{pts.usedPoints.toLocaleString()}</td>
+                                        <td className="border border-black p-1 text-right font-bold text-emerald-600">{pts.currentPoints.toLocaleString()}</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                ) : (
+                    <table className="w-full border-collapse border border-black text-xs">
+                        <thead>
+                            <tr className="bg-gray-100 border-b border-black">
+                                <th className="border border-black p-1 text-center">ลำดับ</th>
+                                <th className="border border-black p-1 text-left">วันที่</th>
+                                <th className="border border-black p-1 text-left">เกษตรกร</th>
+                                <th className="border border-black p-1 text-left">ของรางวัล/โปรโมชั่น</th>
+                                <th className="border border-black p-1 text-right">คะแนนที่ใช้</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredPromotions.map((p, idx) => (
+                                <tr key={p.id || idx} className="border-b border-gray-300">
+                                    <td className="border border-black p-1 text-center">{idx + 1}</td>
+                                    <td className="border border-black p-1">{p.date}</td>
+                                    <td className="border border-black p-1 font-bold">{p.farmerName}</td>
+                                    <td className="border border-black p-1">{p.rewardName}</td>
+                                    <td className="border border-black p-1 text-right font-bold">{Number(p.pointsUsed) === 0 ? 'รางวัลจับฉลาก' : `-${Number(p.pointsUsed).toLocaleString()}`}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
             </div>
         </div>
     );

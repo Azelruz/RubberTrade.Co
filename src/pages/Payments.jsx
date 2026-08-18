@@ -15,16 +15,19 @@ import {
     FileText,
     Calendar,
     X,
-    ExternalLink
+    ExternalLink,
+    Printer
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { fetchBuyRecords, fetchFarmers, fetchEmployees, updateRecord, isCached } from '../services/apiService';
+import { fetchBuyRecords, fetchFarmers, fetchEmployees, updateRecord, getSettings, isCached } from '../services/apiService';
+import ReportPrintHeader from '../components/ReportPrintHeader';
 
 export const Payments = () => {
     const [records, setRecords] = useState([]);
     const { user } = useAuth();
     const [farmers, setFarmers] = useState([]);
     const [employees, setEmployees] = useState([]);
+    const [settings, setSettings] = useState({});
     const [loading, setLoading] = useState(true);
     const [filterDate, setFilterDate] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
@@ -38,14 +41,18 @@ export const Payments = () => {
     const loadData = async () => {
         if (!isCached('buys', 'farmers', 'employees')) setLoading(true);
         try {
-            const [buysData, farmersData, empsData] = await Promise.all([
+            const [buysData, farmersData, empsData, setRes] = await Promise.all([
                 fetchBuyRecords(),
                 fetchFarmers(),
-                fetchEmployees()
+                fetchEmployees(),
+                getSettings()
             ]);
             setRecords(Array.isArray(buysData) ? buysData : []);
             setFarmers(Array.isArray(farmersData) ? farmersData : []);
             setEmployees(Array.isArray(empsData) ? empsData : []);
+            if (setRes && setRes.status === 'success') {
+                setSettings(setRes.data || {});
+            }
         } catch (error) {
             toast.error('โหลดข้อมูลล้มเหลว');
             console.error(error);
@@ -117,6 +124,17 @@ export const Payments = () => {
 
     return (
         <div className="space-y-6">
+            <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                    @page { size: A4 portrait; margin: 10mm; }
+                    html, body, #root, main, div { overflow: visible !important; height: auto !important; max-height: none !important; }
+                    .no-print { display: none !important; }
+                    tr { page-break-inside: avoid; }
+                    thead { display: table-header-group; }
+                    tfoot { display: table-footer-group; }
+                }
+            ` }} />
+            <div className="no-print space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 mb-1">การชำระเงิน</h1>
@@ -133,6 +151,14 @@ export const Payments = () => {
                             className="text-sm font-medium focus:outline-none border-none p-0"
                         />
                     </div>
+                    <button 
+                        onClick={() => window.print()}
+                        className="flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-sm transition-all shadow-sm border border-emerald-700 whitespace-nowrap"
+                        title="พิมพ์รายงานสรุป"
+                    >
+                        <Printer size={18} className="mr-2" />
+                        พิมพ์รายงาน
+                    </button>
                 </div>
             </div>
 
@@ -445,6 +471,57 @@ export const Payments = () => {
                     </div>
                 </div>
             )}
+            </div>
+            {/* Close no-print wrapper */}
+
+            {/* A4 Printable View */}
+            <div className="hidden print:block text-black p-4 font-sans bg-white">
+                <ReportPrintHeader 
+                    settings={settings}
+                    title="รายงานการชำระเงินค้างจ่ายเกษตรกรและลูกจ้าง"
+                    subtitle={filterDate ? `ข้อมูลประจำวันที่: ${filterDate}` : 'ข้อมูลทั้งหมด'}
+                />
+
+                {/* Summary Box */}
+                <div className="grid grid-cols-2 gap-2 mb-4 p-3 border border-black rounded bg-gray-50 text-center text-xs">
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">รายการที่รอจ่ายค้างอยู่</span>
+                        <span className="text-sm font-bold">{pendingCount} รายการ</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ยอดเงินคงค้างรวมสุทธิ</span>
+                        <span className="text-sm font-bold text-red-600">฿{totalToPay.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                </div>
+
+                {/* Details Table */}
+                <table className="w-full border-collapse border border-black text-xs">
+                    <thead>
+                        <tr className="bg-gray-100 border-b border-black">
+                            <th className="border border-black p-1 text-center">ลำดับ</th>
+                            <th className="border border-black p-1 text-left">เลขที่บิล</th>
+                            <th className="border border-black p-1 text-left">ชื่อเกษตรกร</th>
+                            <th className="border border-black p-1 text-right">ยอดค้างเกษตรกร (฿)</th>
+                            <th className="border border-black p-1 text-center">สถานะเกษตรกร</th>
+                            <th className="border border-black p-1 text-right">ยอดค้างลูกจ้าง (฿)</th>
+                            <th className="border border-black p-1 text-center">สถานะลูกจ้าง</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filteredRecords.map((r, idx) => (
+                            <tr key={r.id || idx} className="border-b border-gray-300">
+                                <td className="border border-black p-1 text-center">{idx + 1}</td>
+                                <td className="border border-black p-1">#{r.id?.substring(0, 8)}</td>
+                                <td className="border border-black p-1 font-bold">{r.farmerName}</td>
+                                <td className="border border-black p-1 text-right">฿{Number(r.farmerTotal || r.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td className="border border-black p-1 text-center font-bold">{r.farmerStatus === 'Paid' ? 'โอนแล้ว' : 'รอโอน'}</td>
+                                <td className="border border-black p-1 text-right">฿{Number(r.employeeTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td className="border border-black p-1 text-center font-bold">{r.employeeTotal > 0 ? (r.employeeStatus === 'Paid' ? 'โอนแล้ว' : 'รอโอน') : '-'}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 };

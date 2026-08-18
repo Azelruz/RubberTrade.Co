@@ -3,10 +3,11 @@ import { useAuth } from '../context/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { format, subMonths, isWithinInterval, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
-import { Calendar, Download, Filter, TrendingUp, Droplets, Target, Calculator, Wallet, Users, BarChart3, FlaskConical, Truck, Activity, Save } from 'lucide-react';
+import { Calendar, Download, Filter, TrendingUp, Droplets, Target, Calculator, Wallet, Users, BarChart3, FlaskConical, Truck, Activity, Save, Printer } from 'lucide-react';
 import { fetchBuyRecords, fetchSellRecords, getSettings, fetchExpenses, fetchWages, fetchChemicalUsage, isCached, addChemicalUsage } from '../services/apiService';
 import { truncateOneDecimal } from '../utils/calculations';
 import toast from 'react-hot-toast';
+import ReportPrintHeader from '../components/ReportPrintHeader';
 
 export const Report = () => {
     const { user } = useAuth();
@@ -201,6 +202,16 @@ export const Report = () => {
         const recWater = getRecommended('water', 30, 800);
         const recWhiteMed = getRecommended('whiteMedicine', 1, 1000);
 
+        const latexBuys = buys.filter(b => b.date >= fStart && b.date <= fEnd && (b.rubberType === 'latex' || !b.rubberType));
+        const cupLumpBuys = buys.filter(b => b.date >= fStart && b.date <= fEnd && b.rubberType === 'cuplump');
+
+        const latexWeight = truncateOneDecimal(latexBuys.reduce((sum, b) => sum + (Number(b.weight || 0) - Number(b.bucketWeight || 0)), 0));
+        const latexDryWeight = truncateOneDecimal(latexBuys.reduce((sum, b) => sum + Number(b.dryRubber || 0), 0));
+        const latexBuyTotal = truncateOneDecimal(latexBuys.reduce((sum, b) => sum + Number(b.total || 0), 0));
+
+        const cupLumpWeight = truncateOneDecimal(cupLumpBuys.reduce((sum, b) => sum + (Number(b.weight || 0) - Number(b.bucketWeight || 0)), 0));
+        const cupLumpBuyTotal = truncateOneDecimal(cupLumpBuys.reduce((sum, b) => sum + Number(b.total || 0), 0));
+
         return {
             buyTotal,
             buyWeight,
@@ -210,6 +221,12 @@ export const Report = () => {
             profit,
             currentStock,
             chartData,
+            summary: {
+                buy: buyTotal,
+                sell: sellTotal,
+                expenses: fExpenses,
+                profit: fNetOutcome
+            },
             periodChemicals: {
                 ammonia: ammoniaWeight,
                 water: waterWeight,
@@ -226,6 +243,11 @@ export const Report = () => {
                 wages: fWages,
                 netOutcome: fNetOutcome,
                 dailyPrice: dailyPrice,
+                latexWeight,
+                latexDryWeight,
+                latexBuyTotal,
+                cupLumpWeight,
+                cupLumpBuyTotal,
                 chemicals: {
                     ammonia: truncateOneDecimal(chemicalUsage.filter(c => c.chemicalId === 'ammonia' && c.date >= fStart && c.date <= fEnd).reduce((sum, c) => sum + Number(c.amount || 0), 0)),
                     water: truncateOneDecimal(chemicalUsage.filter(c => c.chemicalId === 'water' && c.date >= fStart && c.date <= fEnd).reduce((sum, c) => sum + Number(c.amount || 0), 0)),
@@ -240,9 +262,19 @@ export const Report = () => {
         };
     }, [buys, sells, expenses, wages, chemicalUsage, dateRange, settings, profitMargin, fStart, fEnd]);
 
-
     return (
-        <div className="space-y-6 max-w-7xl mx-auto">
+        <div className="space-y-6 max-w-7xl mx-auto pb-10">
+            <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                    @page { size: A4 portrait; margin: 10mm; }
+                    html, body, #root, main, div { overflow: visible !important; height: auto !important; max-height: none !important; }
+                    .no-print { display: none !important; }
+                    tr { page-break-inside: avoid; }
+                    thead { display: table-header-group; }
+                    tfoot { display: table-footer-group; }
+                }
+            ` }} />
+            <div className="no-print space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">รายงานคาดการณ์ ประจำวัน</h1>
@@ -269,6 +301,15 @@ export const Report = () => {
                         ทั้งหมด
                     </button>
                 </div>
+
+                <button 
+                    onClick={() => window.print()}
+                    className="flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-sm transition-all shadow-sm border border-emerald-700"
+                    title="พิมพ์รายงานสรุป"
+                >
+                    <Printer size={18} className="mr-2" />
+                    พิมพ์รายงาน
+                </button>
             </div>
 
             {loading ? (
@@ -588,6 +629,72 @@ export const Report = () => {
                     </div>
                 </>
             )}
+            </div>
+            {/* Close no-print wrapper */}
+
+            {/* A4 Printable View */}
+            <div className="hidden print:block text-black p-4 font-sans bg-white">
+                <ReportPrintHeader 
+                    settings={settings}
+                    title="รายงานสรุปผลประกอบการและภาพรวมระบบ"
+                    subtitle={`ช่วงเวลาวิเคราะห์: ${fStart} ถึง ${fEnd}`}
+                />
+
+                {/* Financial Summary Box */}
+                <div className="grid grid-cols-4 gap-2 mb-4 p-3 border border-black rounded bg-gray-50 text-center text-xs">
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ยอดรับซื้อรวม</span>
+                        <span className="text-sm font-bold">฿{Number(filteredData?.summary?.buy || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ยอดส่งขายโรงงาน</span>
+                        <span className="text-sm font-bold">฿{Number(filteredData?.summary?.sell || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ค่าใช้จ่ายรวม</span>
+                        <span className="text-sm font-bold">฿{Number(filteredData?.summary?.expenses || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">กำไรสุทธิจริง</span>
+                        <span className="text-sm font-bold">{isStaff ? '***' : `฿${Number(filteredData?.summary?.profit || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}`}</span>
+                    </div>
+                </div>
+
+                {/* Buy-Sell Summary Table */}
+                <div className="mb-4">
+                    <h3 className="text-sm font-bold border-b border-black pb-1 mb-2">สรุปปริมาณและมูลค่าการรับซื้อ-ขาย</h3>
+                    <table className="w-full border-collapse border border-black text-xs text-center">
+                        <thead>
+                            <tr className="bg-gray-100 border-b border-black">
+                                <th className="border border-black p-1 text-left">ประเภทรายการ</th>
+                                <th className="border border-black p-1">น้ำหนักสุทธิ (กก.)</th>
+                                <th className="border border-black p-1">น้ำหนักยางแห้ง (กก.)</th>
+                                <th className="border border-black p-1">มูลค่ารวม (฿)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td className="border border-black p-1 text-left font-bold">รับซื้อน้ำยางสด (Latex)</td>
+                                <td className="border border-black p-1">{Number(filteredData?.todaySummary?.latexWeight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                <td className="border border-black p-1">{Number(filteredData?.todaySummary?.latexDryWeight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                <td className="border border-black p-1 font-bold">฿{Number(filteredData?.todaySummary?.latexBuyTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                            </tr>
+                            <tr>
+                                <td className="border border-black p-1 text-left font-bold">รับซื้อขี้ยาง (Cup Lump)</td>
+                                <td className="border border-black p-1">{Number(filteredData?.todaySummary?.cupLumpWeight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                <td className="border border-black p-1">-</td>
+                                <td className="border border-black p-1 font-bold">฿{Number(filteredData?.todaySummary?.cupLumpBuyTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                            </tr>
+                            <tr className="bg-gray-100 font-bold">
+                                <td className="border border-black p-1 text-left">รวมรับซื้อทั้งหมด</td>
+                                <td className="border border-black p-1">{(Number(filteredData?.todaySummary?.latexWeight || 0) + Number(filteredData?.todaySummary?.cupLumpWeight || 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                <td className="border border-black p-1">{Number(filteredData?.todaySummary?.latexDryWeight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                <td className="border border-black p-1">฿{Number(filteredData?.summary?.buy || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     );
 };

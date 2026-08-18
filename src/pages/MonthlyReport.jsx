@@ -5,10 +5,11 @@ import { th } from 'date-fns/locale';
 import { 
     Calendar, Download, TrendingUp, TrendingDown, 
     Droplets, ShoppingCart, BarChart3, ChevronLeft, 
-    ChevronRight, Filter, FileSpreadsheet
+    ChevronRight, Filter, FileSpreadsheet, Printer
 } from 'lucide-react';
-import { fetchBuyRecords, fetchSellRecords, fetchExpenses, fetchWages, isCached } from '../services/apiService';
+import { fetchBuyRecords, fetchSellRecords, fetchExpenses, fetchWages, getSettings, isCached } from '../services/apiService';
 import { truncateOneDecimal } from '../utils/calculations';
+import ReportPrintHeader from '../components/ReportPrintHeader';
 
 export const MonthlyReport = () => {
     const { user } = useAuth();
@@ -19,6 +20,7 @@ export const MonthlyReport = () => {
     const [expenses, setExpenses] = useState([]);
     const [wages, setWages] = useState([]);
     const [selectedMonth, setSelectedMonth] = useState(new Date());
+    const [settings, setSettings] = useState({});
 
     useEffect(() => {
         loadData();
@@ -27,16 +29,20 @@ export const MonthlyReport = () => {
     const loadData = async () => {
         if (!isCached('buys', 'sells', 'expenses', 'wages')) setLoading(true);
         try {
-            const [b, s, exp, w] = await Promise.all([
+            const [b, s, exp, w, setRes] = await Promise.all([
                 fetchBuyRecords(),
                 fetchSellRecords(),
                 fetchExpenses(),
-                fetchWages()
+                fetchWages(),
+                getSettings()
             ]);
             setBuys(Array.isArray(b) ? b : []);
             setSells(Array.isArray(s) ? s : []);
             setExpenses(Array.isArray(exp) ? exp : []);
             setWages(Array.isArray(w) ? w : []);
+            if (setRes && setRes.status === 'success') {
+                setSettings(setRes.data || {});
+            }
         } catch (error) {
             console.error('Error loading data:', error);
         } finally {
@@ -125,6 +131,17 @@ export const MonthlyReport = () => {
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto pb-10">
+            <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                    @page { size: A4 portrait; margin: 10mm; }
+                    html, body, #root, main, div { overflow: visible !important; height: auto !important; max-height: none !important; }
+                    .no-print { display: none !important; }
+                    tr { page-break-inside: avoid; }
+                    thead { display: table-header-group; }
+                    tfoot { display: table-footer-group; }
+                }
+            ` }} />
+            <div className="no-print space-y-6">
             {/* Header section */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                 <div>
@@ -153,6 +170,14 @@ export const MonthlyReport = () => {
                     >
                         <FileSpreadsheet size={18} className="mr-2" />
                         Export CSV
+                    </button>
+                    <button 
+                        onClick={() => window.print()}
+                        className="flex items-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-md shadow-emerald-100 text-sm whitespace-nowrap border border-emerald-700"
+                        title="พิมพ์รายงานสรุป"
+                    >
+                        <Printer size={18} className="mr-2" />
+                        พิมพ์รายงาน
                     </button>
                 </div>
             </div>
@@ -291,6 +316,70 @@ export const MonthlyReport = () => {
                     </div>
                 </>
             )}
+            </div>
+            {/* Close no-print wrapper */}
+
+            {/* A4 Printable View */}
+            <div className="hidden print:block text-black p-4 font-sans bg-white">
+                <ReportPrintHeader 
+                    settings={settings}
+                    title="รายงานสรุปรายรับ-รายจ่ายประจำเดือน"
+                    subtitle={`ประจำเดือน ${format(selectedMonth, 'MMMM yyyy', { locale: th })}`}
+                />
+
+                {/* Summary Table */}
+                <div className="grid grid-cols-4 gap-2 mb-4 p-3 border border-black rounded bg-gray-50 text-center text-xs">
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ยอดรับซื้อรวม</span>
+                        <span className="text-sm font-bold">฿{reportData.totals.buy.toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ยอดขายรวม</span>
+                        <span className="text-sm font-bold">฿{reportData.totals.sell.toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ค่าใช้จ่ายรวม</span>
+                        <span className="text-sm font-bold">฿{reportData.totals.expenses.toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">กำไรสุทธิจริง</span>
+                        <span className="text-sm font-bold">{isStaff ? '***' : `฿${reportData.totals.profit.toLocaleString(undefined, { minimumFractionDigits: 1 })}`}</span>
+                    </div>
+                </div>
+
+                {/* Daily Details Table */}
+                <table className="w-full border-collapse border border-black text-xs">
+                    <thead>
+                        <tr className="bg-gray-100 border-b border-black">
+                            <th className="border border-black p-1 text-left">วันที่</th>
+                            <th className="border border-black p-1 text-right">ยอดรับซื้อ (฿)</th>
+                            <th className="border border-black p-1 text-right">ยอดขาย (฿)</th>
+                            <th className="border border-black p-1 text-right">ค่าใช้จ่าย (฿)</th>
+                            <th className="border border-black p-1 text-right">สุทธิ (฿)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {reportData.dailyData.filter(d => d.buyTotal > 0 || d.sellTotal > 0 || d.expTotal > 0).map((day) => (
+                            <tr key={day.dateStr} className="border-b border-gray-300">
+                                <td className="border border-black p-1">{format(day.date, 'dd MMMM yyyy (EEEE)', { locale: th })}</td>
+                                <td className="border border-black p-1 text-right">{day.buyTotal > 0 ? day.buyTotal.toLocaleString(undefined, { minimumFractionDigits: 1 }) : '-'}</td>
+                                <td className="border border-black p-1 text-right">{day.sellTotal > 0 ? day.sellTotal.toLocaleString(undefined, { minimumFractionDigits: 1 }) : '-'}</td>
+                                <td className="border border-black p-1 text-right">{day.expTotal > 0 ? day.expTotal.toLocaleString(undefined, { minimumFractionDigits: 1 }) : '-'}</td>
+                                <td className="border border-black p-1 text-right font-bold">{isStaff ? '***' : (day.profit !== 0 ? (day.profit > 0 ? '+' : '') + day.profit.toLocaleString(undefined, { minimumFractionDigits: 1 }) : '0.0')}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                    <tfoot>
+                        <tr className="bg-gray-200 font-bold">
+                            <td className="border border-black p-1 text-left">ยอดรวมทั้งเดือน</td>
+                            <td className="border border-black p-1 text-right">฿{reportData.totals.buy.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                            <td className="border border-black p-1 text-right">฿{reportData.totals.sell.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                            <td className="border border-black p-1 text-right">฿{reportData.totals.expenses.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                            <td className="border border-black p-1 text-right">{isStaff ? '***' : `฿${reportData.totals.profit.toLocaleString(undefined, { minimumFractionDigits: 1 })}`}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
         </div>
     );
 };

@@ -1,21 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Gift, Wallet, FlaskConical } from 'lucide-react';
+import { Gift, Wallet, Sliders } from 'lucide-react';
 import { 
     fetchDashboardData, fetchFarmers, fetchChemicalUsage, 
-    addBulkWages, addPromotion, addChemicalUsage 
+    addBulkWages, addPromotion, addChemicalUsage, fetchBuyRecords 
 } from '../services/apiService';
 import { format, subDays, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { calculateWage, truncateOneDecimal } from '../utils/calculations';
+import { 
+    loadDashboardConfig, 
+    saveDashboardConfig, 
+    resetDashboardConfig, 
+    getDefaultDashboardConfig 
+} from '../utils/dashboardConfig';
 
 // Sub-components
 import DashboardStats from './dashboard/DashboardStats';
 import { DashboardForecast } from './dashboard/DashboardForecast';
-import DashboardCharts from './dashboard/DashboardCharts';
+import DashboardCharts, { ActivityChart, PriceChart } from './dashboard/DashboardCharts';
 import DashboardChemicals from './dashboard/DashboardChemicals';
 import DashboardRecent from './dashboard/DashboardRecent';
 import { WageConfirmModal, LuckyDrawModal } from './dashboard/DashboardModals';
+import DashboardCustomizeModal from './dashboard/DashboardCustomizeModal';
 
 export const Dashboard = () => {
     const [loading, setLoading] = useState(true);
@@ -27,12 +34,14 @@ export const Dashboard = () => {
         todayBuyWeight: 0,
         todayLatexWeight: 0,
         todayCupLumpWeight: 0,
+        todayTotalDryWeight: 0,
         todayExpense: 0,
         monthIncome: 0,
         monthCost: 0,
         monthProfit: 0,
         unpaidBills: 0,
         totalMembers: 0,
+        inactiveFarmers15Days: 0,
         todayAvgDrc: 0,
         dailyPrice: 0,
         cupLumpPrice: 0
@@ -55,6 +64,11 @@ export const Dashboard = () => {
     const [rewardName, setRewardName] = useState('');
     const [savingReward, setSavingReward] = useState(false);
     const [showPrizeDrawBtn, setShowPrizeDrawBtn] = useState(true);
+    
+    // Dashboard Customization State
+    const [dashboardConfig, setDashboardConfig] = useState(getDefaultDashboardConfig());
+    const [showCustomizeModal, setShowCustomizeModal] = useState(false);
+
     const isDemo = false;
 
     useEffect(() => {
@@ -75,15 +89,12 @@ export const Dashboard = () => {
                 fetchChemicalUsage()
             ]);
 
-            // dashData now contains pre-calculated stats and aggregated charts
             const buys = Array.isArray(dashData?.buys) ? dashData.buys : [];
             const sells = Array.isArray(dashData?.sells) ? dashData.sells : [];
             const wages = Array.isArray(dashData?.wages) ? dashData.wages : [];
             const staff = Array.isArray(dashData?.staff) ? dashData.staff : [];
             const farmerArr = Array.isArray(farmers) ? farmers : [];
             
-            // For features like Lucky Draw that still need buy list,
-            // we'll rely on what the server sent (limited) or fetch more later.
             setAllBuys(buys);
             setAllWages(wages);
             setAllStaff(staff);
@@ -93,20 +104,40 @@ export const Dashboard = () => {
             const showPrize = settings.showPrizeDraw === undefined ? true : (settings.showPrizeDraw === 'true' || settings.showPrizeDraw === true);
             setShowPrizeDrawBtn(showPrize);
 
+            // Load user dashboard configuration from settings (cloud) or local storage
+            const loadedConfig = loadDashboardConfig(settings);
+            setDashboardConfig(loadedConfig);
+
+            // Calculate Inactive Farmers (15 days without purchases)
+            const fifteenDaysAgo = subDays(new Date(), 15);
+            const activeFarmerIdsIn15Days = new Set(
+                buys
+                    .filter(b => b.date && new Date(b.date) >= fifteenDaysAgo)
+                    .map(b => String(b.farmerId))
+            );
+            const inactiveFarmersCount = farmerArr.filter(f => f.id && !activeFarmerIdsIn15Days.has(String(f.id))).length;
+
+            // Calculate Today's Dry Rubber Weight
+            const todayRange = { start: startOfDay(new Date()), end: endOfDay(new Date()) };
+            const todayDryWeightTotal = buys
+                .filter(b => b.date && isWithinInterval(new Date(b.date), todayRange) && (b.rubberType === 'latex' || !b.rubberType))
+                .reduce((sum, item) => sum + Number(item.dryRubber || item.dryWeight || 0), 0);
+
             // Use server-side stats if available, otherwise fallback to local calc
             if (dashData?.stats) {
                 const s = dashData.stats;
                 setStats({
                     ...s,
                     todayAvgDrc: truncateOneDecimal(s.todayAvgDrc || 0),
+                    todayTotalDryWeight: truncateOneDecimal(todayDryWeightTotal),
+                    inactiveFarmers15Days: inactiveFarmersCount,
                     dailyPrice: Number(dashData?.dailyPrice?.price || 0),
                     cupLumpPrice: Number(dashData?.dailyPrice?.cupLumpPrice || dashData?.settings?.cupLumpPrice || 0),
-                    // Ensure monthProfit is calculated if missing or use server value
                     monthProfit: s.monthProfit !== undefined ? s.monthProfit : truncateOneDecimal((s.monthIncome || 0) - (s.monthCost || 0))
                 });
                 calculateChemicals(s.todayLatexWeight, settings.chemicalSettings);
             } else {
-                calculateStats(buys, sells, dashData?.expenses || [], wages, dashData, farmerArr);
+                calculateStats(buys, sells, dashData?.expenses || [], wages, dashData, farmerArr, todayDryWeightTotal, inactiveFarmersCount);
             }
 
             // Use server-side chart data if available
@@ -131,7 +162,7 @@ export const Dashboard = () => {
             }
         } catch (error) {
             console.error("Dashboard error:", error);
-        } finally {
+        } fontally: {
             setLoading(false);
         }
     };
@@ -173,7 +204,7 @@ export const Dashboard = () => {
         setPriceChartData(priceData);
     };
 
-    const calculateStats = (buys, sells, expenses, wages, dashData, farmers) => {
+    const calculateStats = (buys, sells, expenses, wages, dashData, farmers, todayDryWeightTotal, inactiveFarmersCount) => {
         const today = new Date();
         const todayRange = { start: startOfDay(today), end: endOfDay(today) };
         const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -242,9 +273,11 @@ export const Dashboard = () => {
             todayBuyWeight: truncateOneDecimal(todayLatexWeight + todayCupLumpWeight),
             todayLatexWeight: truncateOneDecimal(todayLatexWeight),
             todayCupLumpWeight: truncateOneDecimal(todayCupLumpWeight),
+            todayTotalDryWeight: truncateOneDecimal(todayDryWeightTotal || todayTotalDry),
             todayExpense: truncateOneDecimal(todayExpTotal + todayWageTotal),
             monthIncome, monthCost, monthProfit: profit, dailyPrice, cupLumpPrice,
             unpaidBills, totalMembers: Array.isArray(farmers) ? farmers.length : 0,
+            inactiveFarmers15Days: inactiveFarmersCount || 0,
             todayAvgDrc
         });
 
@@ -365,13 +398,11 @@ export const Dashboard = () => {
         setIsSpinning(true); setWinner(null); setRewardName('');
         
         try {
-            // Check if we already have the data in allBuys, otherwise fetch for this range
             let dateBuys = allBuys.filter(b => isWithinInterval(new Date(b.date), { start, end }));
             
-            // If allBuys is currently limited/empty from dashboard load, fetch full list for range
             if (dateBuys.length === 0 || allBuys.length < 50) {
                 const toastId = toast.loading('กำลังโหลดข้อมูลย้อนหลัง...');
-                const fullBuys = await fetchBuyRecords(); // Fetches from API or LocalDB
+                const fullBuys = await fetchBuyRecords();
                 setAllBuys(fullBuys);
                 dateBuys = fullBuys.filter(b => isWithinInterval(new Date(b.date), { start, end }));
                 toast.dismiss(toastId);
@@ -413,6 +444,23 @@ export const Dashboard = () => {
         finally { setSavingReward(false); }
     };
 
+    // Dashboard Customization Handlers
+    const handleSaveConfig = async (newConfig) => {
+        const res = await saveDashboardConfig(newConfig);
+        if (res.status === 'success') {
+            setDashboardConfig(newConfig);
+            toast.success('บันทึกการตั้งค่า Dashboard เรียบร้อยแล้ว (ซิงค์คลาวด์)');
+        } else {
+            toast.error('เกิดข้อผิดพลาดในการบันทึก: ' + (res.message || ''));
+        }
+    };
+
+    const handleResetConfig = async () => {
+        const defaultConfig = await resetDashboardConfig();
+        setDashboardConfig(defaultConfig);
+        toast.success('รีเซ็ตการตั้งค่าเป็นค่าเริ่มต้นเรียบร้อยแล้ว');
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-full">
@@ -421,14 +469,49 @@ export const Dashboard = () => {
         );
     }
 
+    // Helper to render individual widget sections according to user order and visibility
+    const renderWidgetSection = (widgetId) => {
+        if (!dashboardConfig.visibleWidgets.includes(widgetId)) return null;
+
+        switch (widgetId) {
+            case 'forecast_widget':
+                return <DashboardForecast key="forecast_widget" />;
+            case 'chemical_widget':
+                return (
+                    <DashboardChemicals 
+                        key="chemical_widget"
+                        chemicalCalcs={chemicalCalcs} 
+                        handleRecordChemical={handleRecordChemical} 
+                        chemicalUsage={chemicalUsage} 
+                        stats={stats} 
+                    />
+                );
+            case 'charts_activity':
+                return <ActivityChart key="charts_activity" chartData={chartData} />;
+            case 'charts_price':
+                return <PriceChart key="charts_price" priceChartData={priceChartData} />;
+            case 'recent_transactions':
+                return <DashboardRecent key="recent_transactions" recentTransactions={recentTransactions} />;
+            default:
+                return null;
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">ภาพรวมระบบ (Dashboard)</h1>
-                    <p className="text-gray-500">ข้อมูลสรุปการรับซื้อ-ขายน้ำยางการาประจำวัน</p>
+                    <p className="text-gray-500">ข้อมูลสรุปการรับซื้อ-ขายน้ำยางพาราประจำวัน</p>
                 </div>
                 <div className="flex items-center space-x-3 flex-wrap gap-2">
+                    <button
+                        onClick={() => setShowCustomizeModal(true)}
+                        className="bg-white border border-gray-200 hover:border-rubber-300 text-gray-700 hover:bg-gray-50 font-bold py-2 px-4 rounded-xl shadow-sm transition-all flex items-center space-x-2"
+                    >
+                        <Sliders size={18} className="text-rubber-600" />
+                        <span>ปรับแต่งหน้าจอ</span>
+                    </button>
                     {showPrizeDrawBtn && (
                         <button
                             onClick={() => { setShowLuckyDraw(true); setWinner(null); }}
@@ -462,22 +545,20 @@ export const Dashboard = () => {
                 savingReward={savingReward}
             />
 
-            <DashboardStats stats={stats} />
-
-            <DashboardForecast />
-
-            <DashboardChemicals 
-                chemicalCalcs={chemicalCalcs} handleRecordChemical={handleRecordChemical} 
-                chemicalUsage={chemicalUsage} stats={stats} 
+            <DashboardCustomizeModal
+                isOpen={showCustomizeModal}
+                onClose={() => setShowCustomizeModal(false)}
+                currentConfig={dashboardConfig}
+                onSave={handleSaveConfig}
+                onReset={handleResetConfig}
             />
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
-                    <DashboardCharts chartData={chartData} priceChartData={priceChartData} />
-                </div>
-                <div>
-                    <DashboardRecent recentTransactions={recentTransactions} />
-                </div>
+            {/* Stat Cards Block */}
+            <DashboardStats stats={stats} visibleStats={dashboardConfig.visibleStats} />
+
+            {/* Dynamic Widget Sections in user-defined order */}
+            <div className="space-y-6">
+                {dashboardConfig.widgetOrder.map(widgetId => renderWidgetSection(widgetId))}
             </div>
         </div>
     );

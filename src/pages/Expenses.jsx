@@ -3,10 +3,11 @@ import { useAuth } from '../context/AuthContext';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
-import { PlusCircle, Trash2, Edit2, Receipt, Users, Search, Wallet, Calendar, Tag, FileText } from 'lucide-react';
+import { PlusCircle, Trash2, Edit2, Receipt, Users, Search, Wallet, Calendar, Tag, FileText, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { calculateWage } from '../utils/calculations';
-import { fetchExpenses, addExpense, fetchWages, addWage, fetchStaff, fetchBuyRecords, deleteRecord, updateRecord, isCached } from '../services/apiService';
+import { fetchExpenses, addExpense, fetchWages, addWage, fetchStaff, fetchBuyRecords, deleteRecord, updateRecord, getSettings, isCached } from '../services/apiService';
+import ReportPrintHeader from '../components/ReportPrintHeader';
 
 const EXPENSE_CATEGORIES = [
     'ค่าน้ำมัน',
@@ -27,6 +28,7 @@ export const Expenses = () => {
     const { user } = useAuth();
     const [wages, setWages] = useState([]);
     const [staffList, setStaffList] = useState([]);
+    const [settings, setSettings] = useState({});
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -274,6 +276,17 @@ export const Expenses = () => {
 
     return (
         <div className="space-y-6">
+            <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                    @page { size: A4 portrait; margin: 10mm; }
+                    html, body, #root, main, div { overflow: visible !important; height: auto !important; max-height: none !important; }
+                    .no-print { display: none !important; }
+                    tr { page-break-inside: avoid; }
+                    thead { display: table-header-group; }
+                    tfoot { display: table-footer-group; }
+                }
+            ` }} />
+            <div className="no-print space-y-6">
 
             {/* Confirm Delete Modal */}
             {confirmDeleteId && (
@@ -297,9 +310,19 @@ export const Expenses = () => {
             )}
 
             {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-gray-900">บันทึกค่าใช้จ่าย</h1>
-                <p className="text-gray-500">จัดการค่าใช้จ่ายรายวันและค่าจ้างพนักงาน</p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">บันทึกค่าใช้จ่าย</h1>
+                    <p className="text-gray-500">จัดการค่าใช้จ่ายรายวันและค่าจ้างพนักงาน</p>
+                </div>
+                <button 
+                    onClick={() => window.print()}
+                    className="flex items-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-md shadow-emerald-100 text-sm border border-emerald-700"
+                    title="พิมพ์รายงานสรุป"
+                >
+                    <Printer size={18} className="mr-2" />
+                    พิมพ์รายงาน
+                </button>
             </div>
 
             {/* Tabs */}
@@ -693,6 +716,79 @@ export const Expenses = () => {
                         </div>
                     )}
                 </div>
+            </div>
+            </div>
+            {/* Close no-print wrapper */}
+
+            {/* A4 Printable View */}
+            <div className="hidden print:block text-black p-4 font-sans bg-white">
+                <ReportPrintHeader 
+                    settings={settings}
+                    title={activeTab === 'expenses' ? 'รายงานสรุปค่าใช้จ่ายรายวัน' : 'รายงานสรุปค่าจ้างพนักงาน'}
+                />
+
+                {/* Summary Box */}
+                <div className="grid grid-cols-2 gap-2 mb-4 p-3 border border-black rounded bg-gray-50 text-center text-xs">
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">จำนวนรายการรวม</span>
+                        <span className="text-sm font-bold">{activeTab === 'expenses' ? filteredExpenses.length : filteredWages.length} รายการ</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ยอดเงินสุทธิรวม</span>
+                        <span className="text-sm font-bold text-red-600">฿{(activeTab === 'expenses' ? totalExpenses : totalWages).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                </div>
+
+                {/* Table Details */}
+                {activeTab === 'expenses' ? (
+                    <table className="w-full border-collapse border border-black text-xs">
+                        <thead>
+                            <tr className="bg-gray-100 border-b border-black">
+                                <th className="border border-black p-1 text-center">ลำดับ</th>
+                                <th className="border border-black p-1 text-left">วันที่</th>
+                                <th className="border border-black p-1 text-left">หมวดหมู่</th>
+                                <th className="border border-black p-1 text-left">คำอธิบาย</th>
+                                <th className="border border-black p-1 text-right">จำนวนเงิน (฿)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredExpenses.map((item, idx) => (
+                                <tr key={item.id || idx} className="border-b border-gray-300">
+                                    <td className="border border-black p-1 text-center">{idx + 1}</td>
+                                    <td className="border border-black p-1">{item.date}</td>
+                                    <td className="border border-black p-1 font-bold">{item.category}</td>
+                                    <td className="border border-black p-1">{item.description}</td>
+                                    <td className="border border-black p-1 text-right font-bold">฿{Number(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                ) : (
+                    <table className="w-full border-collapse border border-black text-xs">
+                        <thead>
+                            <tr className="bg-gray-100 border-b border-black">
+                                <th className="border border-black p-1 text-center">ลำดับ</th>
+                                <th className="border border-black p-1 text-left">วันที่</th>
+                                <th className="border border-black p-1 text-left">พนักงาน</th>
+                                <th className="border border-black p-1 text-right">ค่าแรงวัน (฿)</th>
+                                <th className="border border-black p-1 text-right">โบนัส (฿)</th>
+                                <th className="border border-black p-1 text-right">รวมจ่าย (฿)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredWages.map((item, idx) => (
+                                <tr key={item.id || idx} className="border-b border-gray-300">
+                                    <td className="border border-black p-1 text-center">{idx + 1}</td>
+                                    <td className="border border-black p-1">{item.date}</td>
+                                    <td className="border border-black p-1 font-bold">{item.staffName}</td>
+                                    <td className="border border-black p-1 text-right">฿{Number(item.dailyWage || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    <td className="border border-black p-1 text-right">฿{Number(item.bonus || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    <td className="border border-black p-1 text-right font-bold">฿{Number(item.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
             </div>
         </div>
     );

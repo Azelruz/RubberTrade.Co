@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../services/db';
-import { fetchLoans, addLoan, fetchFarmers, fetchEmployees, fetchStaff, deleteRecord, fetchLoanDeductions, updateRecord, addLoanDeduction } from '../services/apiService';
-import { PlusCircle, Search, User, Calendar, DollarSign, FileText, ChevronRight, X, ArrowLeftRight, Percent, RefreshCw } from 'lucide-react';
+import { fetchLoans, addLoan, fetchFarmers, fetchEmployees, fetchStaff, deleteRecord, fetchLoanDeductions, updateRecord, addLoanDeduction, getSettings } from '../services/apiService';
+import { PlusCircle, Search, User, Calendar, DollarSign, FileText, ChevronRight, X, ArrowLeftRight, Percent, RefreshCw, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
+import ReportPrintHeader from '../components/ReportPrintHeader';
 
 export const Loans = () => {
     const { user } = useAuth();
@@ -13,6 +14,7 @@ export const Loans = () => {
     const [farmers, setFarmers] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [staff, setStaff] = useState([]);
+    const [settings, setSettings] = useState({});
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -66,12 +68,13 @@ export const Loans = () => {
         // Step 2: Fetch background revalidation from remote D1
         if (navigator.onLine) {
             try {
-                const [lList, dList, fList, eList, sList] = await Promise.all([
+                const [lList, dList, fList, eList, sList, setRes] = await Promise.all([
                     fetchLoans(),
                     fetchLoanDeductions(),
                     fetchFarmers(),
                     fetchEmployees(),
-                    fetchStaff()
+                    fetchStaff(),
+                    getSettings()
                 ]);
 
                 if (Array.isArray(lList)) {
@@ -332,6 +335,17 @@ export const Loans = () => {
 
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-6">
+            <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                    @page { size: A4 portrait; margin: 10mm; }
+                    html, body, #root, main, div { overflow: visible !important; height: auto !important; max-height: none !important; }
+                    .no-print { display: none !important; }
+                    tr { page-break-inside: avoid; }
+                    thead { display: table-header-group; }
+                    tfoot { display: table-footer-group; }
+                }
+            ` }} />
+            <div className="no-print space-y-6">
             {/* Header section */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
@@ -355,6 +369,14 @@ export const Loans = () => {
                     >
                         <PlusCircle size={18} />
                         <span>บันทึกเงินเบิกใหม่</span>
+                    </button>
+                    <button 
+                        onClick={() => window.print()}
+                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-sm flex items-center space-x-2 text-sm border border-emerald-700"
+                        title="พิมพ์รายงานสรุป"
+                    >
+                        <Printer size={18} />
+                        <span>พิมพ์รายงาน</span>
                     </button>
                 </div>
             </div>
@@ -936,6 +958,62 @@ export const Loans = () => {
                     </div>
                 </div>
             )}
+            </div>
+            {/* Close no-print wrapper */}
+
+            {/* A4 Printable View */}
+            <div className="hidden print:block text-black p-4 font-sans bg-white">
+                <ReportPrintHeader 
+                    settings={settings}
+                    title="รายงานระบบเงินกู้ & หนี้สินสะสม"
+                    subtitle={`ประเภทผู้กู้: ${activeTab === 'farmer' ? 'ชาวสวน/เกษตรกร' : activeTab === 'employee' ? 'คนกรีด/ลูกจ้าง' : 'พนักงานประจำ'}`}
+                />
+
+                {/* Summary Box */}
+                <div className="grid grid-cols-3 gap-2 mb-4 p-3 border border-black rounded bg-gray-50 text-center text-xs">
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">หนี้รวมเกษตรกร (ชาวสวน)</span>
+                        <span className="text-sm font-bold">฿{stats.farmerDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">หนี้รวมคนกรีด (ลูกจ้าง)</span>
+                        <span className="text-sm font-bold">฿{stats.employeeDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">หนี้รวมพนักงาน</span>
+                        <span className="text-sm font-bold">฿{stats.staffDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                </div>
+
+                {/* Table Details */}
+                <table className="w-full border-collapse border border-black text-xs">
+                    <thead>
+                        <tr className="bg-gray-100 border-b border-black">
+                            <th className="border border-black p-1 text-center">ลำดับ</th>
+                            <th className="border border-black p-1 text-left">ชื่อ-นามสกุล ผู้กู้</th>
+                            <th className="border border-black p-1 text-right">ยอดกู้สะสม (฿)</th>
+                            <th className="border border-black p-1 text-right">ชำระคืนแล้ว (฿)</th>
+                            <th className="border border-black p-1 text-right">คงเหลือสุทธิ (฿)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {activeSummary.map((item, idx) => {
+                            const paidAmount = Number(item.totalLoan || 0) - Number(item.remainingDebt || 0);
+                            return (
+                                <tr key={item.id || idx} className="border-b border-gray-300">
+                                    <td className="border border-black p-1 text-center">{idx + 1}</td>
+                                    <td className="border border-black p-1 font-bold">{item.name}</td>
+                                    <td className="border border-black p-1 text-right">฿{Number(item.totalLoan || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    <td className="border border-black p-1 text-right">฿{paidAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    <td className="border border-black p-1 text-right font-bold text-red-600">฿{Number(item.remainingDebt || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 };
+
+export default Loans;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchQueues, updateQueue } from '../services/apiService';
 import { db } from '../services/db';
-import { Beaker, Search, CheckCircle2, Volume2, Save, ArrowRight, RefreshCw } from 'lucide-react';
+import { Beaker, Search, CheckCircle2, Volume2, Save, ArrowRight, RefreshCw, Edit2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const QueueStation2 = () => {
@@ -10,6 +10,14 @@ export const QueueStation2 = () => {
     const [savingId, setSavingId] = useState(null);
     const [drcValues, setDrcValues] = useState({}); // { id: drc_value }
     const [autoAnnounce, setAutoAnnounce] = useState(true); // Toggle to speak calling out or not
+
+    // Edit Modal state
+    const [editingQueue, setEditingQueue] = useState(null);
+    const [editFarmerName, setEditFarmerName] = useState('');
+    const [editWeight, setEditWeight] = useState('');
+    const [editBucketWeight, setEditBucketWeight] = useState('');
+    const [editDrc, setEditDrc] = useState('');
+    const [editRubberType, setEditRubberType] = useState('fresh_latex');
 
     useEffect(() => {
         loadData();
@@ -167,6 +175,67 @@ export const QueueStation2 = () => {
         toast.success(`ประกาศคิว Q${String(q.queue_no).padStart(2, '0')} แล้ว`);
     };
 
+    const handleOpenEdit = (q) => {
+        setEditingQueue(q);
+        setEditFarmerName(q.farmer_name || '');
+        setEditWeight(q.weight || '');
+        setEditBucketWeight(q.bucket_weight || 0);
+        setEditDrc(q.drc || '');
+        setEditRubberType(q.rubber_type || 'fresh_latex');
+    };
+
+    const handleSaveEdit = async (e) => {
+        e.preventDefault();
+        if (!editingQueue) return;
+
+        const weightNum = parseFloat(editWeight);
+        if (isNaN(weightNum) || weightNum <= 0) {
+            toast.error("กรุณากรอกน้ำหนักที่ถูกต้อง");
+            return;
+        }
+
+        const drcNum = editDrc ? parseFloat(editDrc) : null;
+        if (drcNum !== null && (isNaN(drcNum) || drcNum < 1 || drcNum > 100)) {
+            toast.error("กรุณากรอกค่า %DRC ระหว่าง 1 - 100");
+            return;
+        }
+
+        const payload = {
+            id: editingQueue.id,
+            farmer_name: editFarmerName.trim(),
+            weight: weightNum,
+            bucket_weight: parseFloat(editBucketWeight) || 0,
+            drc: drcNum,
+            rubber_type: editRubberType,
+            status: drcNum !== null ? 'waiting_payment' : editingQueue.status
+        };
+
+        setSavingId(editingQueue.id);
+        const toastId = toast.loading("กำลังบันทึกการแก้ไขข้อมูลคิว...");
+
+        try {
+            // 1. Local Dexie Update
+            await db.queues.update(editingQueue.id, payload);
+
+            // Optimistic UI state update
+            setQueues(prev => prev.map(item => item.id === editingQueue.id ? { ...item, ...payload } : item));
+
+            // 2. Server Cloud Update
+            const res = await updateQueue(payload);
+            if (res && res.status === 'success') {
+                toast.success(`แก้ไขข้อมูลคิว Q${String(editingQueue.queue_no).padStart(2, '0')} สำเร็จ!`, { id: toastId });
+                setEditingQueue(null);
+                loadData();
+            } else {
+                throw new Error(res?.message || 'บันทึกล้มเหลว');
+            }
+        } catch (err) {
+            toast.error("บันทึกล้มเหลว: " + err.message, { id: toastId });
+        } finally {
+            setSavingId(null);
+        }
+    };
+
     const waitingQueues = queues.filter(q => q.status === 'waiting_drc');
     const waitingPaymentQueues = queues.filter(q => q.status === 'waiting_payment' || q.status === 'calling');
 
@@ -250,6 +319,13 @@ export const QueueStation2 = () => {
                                         </div>
                                         
                                         <button 
+                                            onClick={() => handleOpenEdit(q)}
+                                            className="p-2 text-gray-400 hover:text-rubber-600 hover:bg-gray-100 rounded-xl transition-all"
+                                            title="แก้ไขข้อมูลคิว"
+                                        >
+                                            <Edit2 size={16} />
+                                        </button>
+                                        <button 
                                             onClick={() => handleSaveDrc(q)}
                                             disabled={savingId === q.id}
                                             className="px-3.5 py-2.5 bg-rubber-600 hover:bg-rubber-700 text-white rounded-xl text-xs font-bold transition-all flex items-center space-x-1 shadow-sm disabled:opacity-50"
@@ -305,6 +381,13 @@ export const QueueStation2 = () => {
 
                                     <div className="flex items-center space-x-2">
                                         <button 
+                                            onClick={() => handleOpenEdit(q)}
+                                            className="p-2 text-gray-400 hover:text-rubber-600 hover:bg-gray-100 rounded-xl transition-all"
+                                            title="แก้ไขข้อมูลคิว"
+                                        >
+                                            <Edit2 size={16} />
+                                        </button>
+                                        <button 
                                             onClick={() => handleManualCall(q)}
                                             className="px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition-all flex items-center space-x-1"
                                             title="เรียกคิวซ้ำ"
@@ -322,6 +405,112 @@ export const QueueStation2 = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Edit Queue Modal */}
+            {editingQueue && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-200">
+                        <div className="bg-rubber-700 text-white px-6 py-4 flex items-center justify-between">
+                            <h3 className="font-bold flex items-center space-x-2">
+                                <Edit2 size={18} />
+                                <span>แก้ไขข้อมูลคิว Q{String(editingQueue.queue_no).padStart(2, '0')}</span>
+                            </h3>
+                            <button 
+                                onClick={() => setEditingQueue(null)}
+                                className="text-white/70 hover:text-white transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">ชื่อเกษตรกร / ลูกค้า *</label>
+                                <input 
+                                    type="text"
+                                    value={editFarmerName}
+                                    onChange={(e) => setEditFarmerName(e.target.value)}
+                                    required
+                                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-rubber-500 outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">ประเภทน้ำยาง *</label>
+                                <select 
+                                    value={editRubberType}
+                                    onChange={(e) => setEditRubberType(e.target.value)}
+                                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-rubber-500 outline-none"
+                                >
+                                    <option value="fresh_latex">น้ำยางสด</option>
+                                    <option value="cup_lump">ยางก้อนถ้วย</option>
+                                    <option value="sheet">ยางแผ่น</option>
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">น้ำหนักชั่งรวม (กก.) *</label>
+                                    <input 
+                                        type="number"
+                                        step="0.1"
+                                        min="0.1"
+                                        value={editWeight}
+                                        onChange={(e) => setEditWeight(e.target.value)}
+                                        required
+                                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold font-mono focus:ring-2 focus:ring-rubber-500 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">หักถัง/ภาชนะ (กก.)</label>
+                                    <input 
+                                        type="number"
+                                        step="0.1"
+                                        min="0"
+                                        value={editBucketWeight}
+                                        onChange={(e) => setEditBucketWeight(e.target.value)}
+                                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold font-mono focus:ring-2 focus:ring-rubber-500 outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-700 mb-1">เปอร์เซ็นต์ % DRC</label>
+                                <div className="relative">
+                                    <input 
+                                        type="number"
+                                        step="0.1"
+                                        min="1"
+                                        max="100"
+                                        value={editDrc}
+                                        onChange={(e) => setEditDrc(e.target.value)}
+                                        placeholder="ระบุค่า % DRC (เช่น 32.5)"
+                                        className="w-full pl-3 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold font-mono focus:ring-2 focus:ring-rubber-500 outline-none"
+                                    />
+                                    <span className="absolute right-3 top-3 text-xs text-gray-400 font-bold">%</span>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100">
+                                <button 
+                                    type="button"
+                                    onClick={() => setEditingQueue(null)}
+                                    className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button 
+                                    type="submit"
+                                    className="px-5 py-2.5 bg-rubber-600 hover:bg-rubber-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5"
+                                >
+                                    <Save size={16} />
+                                    <span>บันทึกการแก้ไข</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
