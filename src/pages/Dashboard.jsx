@@ -109,13 +109,37 @@ export const Dashboard = () => {
             setDashboardConfig(loadedConfig);
 
             // Calculate Inactive Farmers (15 days without purchases)
-            const fifteenDaysAgo = subDays(new Date(), 15);
-            const activeFarmerIdsIn15Days = new Set(
-                buys
-                    .filter(b => b.date && new Date(b.date) >= fifteenDaysAgo)
-                    .map(b => String(b.farmerId))
-            );
-            const inactiveFarmersCount = farmerArr.filter(f => f.id && !activeFarmerIdsIn15Days.has(String(f.id))).length;
+            const fifteenDaysAgo = startOfDay(subDays(new Date(), 15));
+            const activeFarmerIdentifiers = new Set();
+
+            buys.forEach(b => {
+                const rawDate = b.date || b.timestamp || b.created_at;
+                if (!rawDate) return;
+                const bDate = new Date(rawDate);
+                if (isNaN(bDate.getTime())) return;
+
+                if (bDate >= fifteenDaysAgo) {
+                    const fId = b.farmerId || b.farmer_id;
+                    const fName = b.farmerName || b.farmer_name;
+                    if (fId !== undefined && fId !== null && String(fId).trim() !== '') {
+                        activeFarmerIdentifiers.add(String(fId).trim());
+                    }
+                    if (fName !== undefined && fName !== null && String(fName).trim() !== '') {
+                        activeFarmerIdentifiers.add(String(fName).trim().toLowerCase());
+                    }
+                }
+            });
+
+            const inactiveFarmersCount = farmerArr.filter(f => {
+                if (!f) return false;
+                const fId = f.id !== undefined && f.id !== null ? String(f.id).trim() : '';
+                const fName = f.name !== undefined && f.name !== null ? String(f.name).trim().toLowerCase() : '';
+
+                const isActiveById = fId && activeFarmerIdentifiers.has(fId);
+                const isActiveByName = fName && activeFarmerIdentifiers.has(fName);
+
+                return !isActiveById && !isActiveByName;
+            }).length;
 
             // Calculate Today's Dry Rubber Weight
             const todayRange = { start: startOfDay(new Date()), end: endOfDay(new Date()) };
