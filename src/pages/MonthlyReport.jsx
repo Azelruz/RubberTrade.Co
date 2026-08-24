@@ -24,16 +24,20 @@ export const MonthlyReport = () => {
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [selectedMonth]);
 
     const loadData = async () => {
         if (!isCached('buys', 'sells', 'expenses', 'wages')) setLoading(true);
         try {
+            const startStr = format(startOfMonth(selectedMonth), 'yyyy-MM-dd');
+            const endStr = format(endOfMonth(selectedMonth), 'yyyy-MM-dd');
+            const dateParams = { startDate: startStr, endDate: endStr };
+
             const [b, s, exp, w, setRes] = await Promise.all([
-                fetchBuyRecords(),
-                fetchSellRecords(),
-                fetchExpenses(),
-                fetchWages(),
+                fetchBuyRecords(false, dateParams),
+                fetchSellRecords(false, dateParams),
+                fetchExpenses(dateParams),
+                fetchWages(dateParams),
                 getSettings()
             ]);
             setBuys(Array.isArray(b) ? b : []);
@@ -58,10 +62,10 @@ export const MonthlyReport = () => {
         const dailyData = days.map(day => {
             const dateStr = format(day, 'yyyy-MM-dd');
             
-            const dayBuys = buys.filter(b => b.date === dateStr);
-            const daySells = sells.filter(s => s.date === dateStr);
-            const dayExp = expenses.filter(e => e.date === dateStr);
-            const dayWage = wages.filter(w => w.date === dateStr);
+            const dayBuys = buys.filter(b => (b.date || '').substring(0, 10) === dateStr);
+            const daySells = sells.filter(s => (s.date || '').substring(0, 10) === dateStr);
+            const dayExp = expenses.filter(e => (e.date || '').substring(0, 10) === dateStr);
+            const dayWage = wages.filter(w => (w.date || '').substring(0, 10) === dateStr);
 
             const buyTotal = dayBuys.reduce((sum, b) => sum + Number(b.total || 0), 0);
             const sellTotal = daySells.reduce((sum, s) => sum + Number(s.total || 0), 0);

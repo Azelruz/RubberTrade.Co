@@ -4,7 +4,35 @@ import { generateNextId, getSetting } from './_id_utils.js';
 async function handleGet(context) {
     try {
         const storeId = context.user.storeId || context.user.id;
-        const { results } = await context.env.DB.prepare("SELECT * FROM farmers WHERE userId = ? ORDER BY name ASC").bind(storeId).all();
+        const url = new URL(context.request.url);
+        const includeStats = url.searchParams.get('includeStats') === 'true';
+
+        if (includeStats) {
+            const query = `
+                SELECT 
+                    f.*,
+                    b.lastBuyDate,
+                    COALESCE(b.buyCount, 0) as buyCount
+                FROM farmers f
+                LEFT JOIN (
+                    SELECT farmerId, MAX(date) as lastBuyDate, COUNT(id) as buyCount
+                    FROM buys
+                    WHERE userId = ? AND date >= date('now', '-60 days')
+                    GROUP BY farmerId
+                ) b ON f.id = b.farmerId
+                WHERE f.userId = ?
+                ORDER BY f.name ASC
+            `;
+            const { results } = await context.env.DB.prepare(query).bind(storeId, storeId).all();
+            return jsonResponse(results);
+        }
+
+        const query = `
+            SELECT * FROM farmers 
+            WHERE userId = ? 
+            ORDER BY name ASC
+        `;
+        const { results } = await context.env.DB.prepare(query).bind(storeId).all();
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);

@@ -337,3 +337,15 @@ CREATE TABLE IF NOT EXISTS loan_deductions (
 CREATE INDEX IF NOT EXISTS idx_loan_deductions_buy ON loan_deductions(userId, buyId);
 CREATE INDEX IF NOT EXISTS idx_loan_deductions_borrower ON loan_deductions(userId, borrowerId);
 
+-- Performance Indexes
+CREATE INDEX IF NOT EXISTS idx_buys_user_date ON buys(userId, date DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_buys_user_updated ON buys(userId, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_buys_farmer ON buys(userId, farmerId);
+CREATE INDEX IF NOT EXISTS idx_sells_user_date ON sells(userId, date DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sells_user_updated ON sells(userId, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_farmers_user ON farmers(userId);
+CREATE INDEX IF NOT EXISTS idx_employees_user ON employees(userId);
+CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(userId, date DESC);
+CREATE INDEX IF NOT EXISTS idx_wages_user_date ON wages(userId, date DESC);
+
+

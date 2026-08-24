@@ -64,7 +64,7 @@ const HistoryTable = ({
                                         <tr key={r.id} className="group hover:bg-gray-50/60 transition-colors">
                                             <td className="px-6 py-5">
                                                 <div className="font-bold text-gray-600 whitespace-nowrap">
-                                                    {format(parseISO(r.date), 'dd ม.ค. yyyy', { locale: th })}
+                                                    {format(parseISO(r.date), 'dd MMM yyyy', { locale: th })}
                                                 </div>
                                                 <div className="text-[10px] font-black text-gray-300 uppercase tracking-tighter mt-1 italic">
                                                     {r.id}

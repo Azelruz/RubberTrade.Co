@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
     Settings as SettingsIcon, Building2, UserCircle, Leaf, 
     Users, DollarSign, Truck, Shield, MessageSquare, ClipboardList, Beaker,
@@ -19,7 +20,14 @@ import { PaperSlipSettings } from './settings/PaperSlipSettings';
 import { ServiceManagement } from './settings/ServiceManagement';
 
 const Settings = () => {
-    const [activeTab, setActiveTab] = useState('price'); // Default to price as it's most common
+    const location = useLocation();
+    const [activeTab, setActiveTab] = useState(location.state?.activeTab || 'price');
+
+    useEffect(() => {
+        if (location.state?.activeTab) {
+            setActiveTab(location.state.activeTab);
+        }
+    }, [location.state]);
 
     const groups = useMemo(() => [
         {
@@ -57,7 +65,7 @@ const Settings = () => {
     return (
         <div className="min-h-[85vh] animate-in fade-in duration-500">
             {/* Header Section */}
-            <div className="mb-8 ml-2">
+            <div className="mb-8 ml-2 no-print">
                 <div className="flex items-center space-x-3 mb-2">
                     <div className="p-2.5 bg-rubber-600 rounded-xl shadow-lg shadow-rubber-200 text-white">
                         <SettingsIcon size={24} />
@@ -70,7 +78,7 @@ const Settings = () => {
             </div>
 
             {/* Navigation Tabs Bar (Top) */}
-            <div className="bg-white rounded-2xl lg:rounded-[2rem] shadow-xl shadow-gray-200/30 border border-gray-100 mb-6 p-2 md:p-3 overflow-x-auto">
+            <div className="bg-white rounded-2xl lg:rounded-[2rem] shadow-xl shadow-gray-200/30 border border-gray-100 mb-6 p-2 md:p-3 overflow-x-auto no-print">
                 <div className="flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-gray-100 min-w-max lg:min-w-0">
                     {groups.map((group, gIdx) => (
                         <div key={gIdx} className="p-2 flex-1 min-w-[280px] lg:min-w-0">
@@ -108,10 +116,10 @@ const Settings = () => {
 
             <div className="grid grid-cols-1 gap-6 items-start">
                 {/* Content Area */}
-                <div className="bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/30 border border-gray-50 overflow-hidden min-h-[700px] flex flex-col">
+                <div className="bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/30 border border-gray-50 overflow-hidden min-h-[700px] flex flex-col print:p-0 print:border-none print:shadow-none print:rounded-none">
                     
                     {/* Sticky Content Header */}
-                    <div className="bg-white/80 backdrop-blur-md border-b border-gray-50 px-8 py-5 flex justify-between items-center sticky top-0 z-10">
+                    <div className="bg-white/80 backdrop-blur-md border-b border-gray-50 px-8 py-5 flex justify-between items-center sticky top-0 z-10 no-print">
                         <div className="flex items-center space-x-3">
                             <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 border border-gray-100 shadow-sm">
                                 {currentTab?.icon}
@@ -129,8 +137,8 @@ const Settings = () => {
                     </div>
 
                     {/* Content Section */}
-                    <div className="flex-1 p-6 md:p-10">
-                        <div className="max-w-4xl mx-auto">
+                    <div className="flex-1 p-6 md:p-10 print:p-0">
+                        <div className="max-w-4xl mx-auto print:max-w-none print:w-full">
                             {/* Content Area */}
                             {activeTab === 'general' && <GeneralSettings />}
                             {activeTab === 'paper_slip' && <PaperSlipSettings />}
@@ -147,7 +155,7 @@ const Settings = () => {
                     </div>
 
                     {/* Content Footer (Subtle) */}
-                    <div className="px-10 py-4 bg-gray-50/50 border-t border-gray-50 text-[10px] font-medium text-gray-400 flex justify-between items-center">
+                    <div className="px-10 py-4 bg-gray-50/50 border-t border-gray-50 text-[10px] font-medium text-gray-400 flex justify-between items-center no-print">
                         <span>RubberTrade.Co Cloud Settings Engine v2.1</span>
                         <div className="flex items-center space-x-4">
                             <span>Privacy Policy</span>

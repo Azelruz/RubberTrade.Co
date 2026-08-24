@@ -10,14 +10,15 @@ export const printRecord = (htmlContent) => {
         iframe.id = 'global-print-frame';
         iframe.name = 'print-frame';
         // Make it invisible but still part of the layout tree to ensure browser renders it for printing
-        iframe.style.position = 'absolute';
-        // Force a narrow width to match thermal paper (approx 380px)
-        // This prevents Tailwind breakpoints (sm:, md:) from shifting the layout
-        iframe.style.width = '380px';
-        iframe.style.height = 'auto'; 
+        iframe.style.position = 'fixed';
+        iframe.style.left = '0';
+        iframe.style.top = '0';
+        iframe.style.width = '100%';
+        iframe.style.height = '100%'; 
         iframe.style.opacity = '0';
         iframe.style.pointerEvents = 'none';
         iframe.style.border = '0';
+        iframe.style.zIndex = '-9999';
         
         document.body.appendChild(iframe);
     }
@@ -59,7 +60,7 @@ export const printRecord = (htmlContent) => {
                     <title>Print Receipt</title>
                     <style>
                         ${inlineStyles}
-                        @page { margin: 0; }
+                        @page { size: auto !important; margin: 0 !important; }
                         body { 
                             margin: 0; 
                             padding: 0; 
@@ -70,9 +71,9 @@ export const printRecord = (htmlContent) => {
                         }
                         .no-print { display: none !important; }
                         /* Force standard thermal paper width */
-                        .print-receipt-container { 
-                            width: 100%; 
-                            max-width: 76mm;
+                        .print-receipt-container, .receipt-content, .receipt-content-inner { 
+                            width: 100% !important; 
+                            max-width: 100% !important;
                             padding: 1mm; 
                             box-sizing: border-box; 
                             margin: 0;
@@ -111,7 +112,7 @@ export const printRecord = (htmlContent) => {
             <title>Print Receipt</title>
             <style>
                 ${inlineStyles}
-                @page { margin: 0; }
+                @page { size: auto !important; margin: 0 !important; }
                 body { 
                     margin: 0; 
                     padding: 0; 
@@ -122,9 +123,9 @@ export const printRecord = (htmlContent) => {
                 }
                 .no-print { display: none !important; }
                 /* Force standard thermal paper width (57mm for 58mm printer, or 72mm for 80mm) */
-                .print-receipt-container { 
-                    width: 100%; 
-                    max-width: 76mm;
+                .print-receipt-container, .receipt-content, .receipt-content-inner { 
+                    width: 100% !important; 
+                    max-width: 100% !important;
                     padding: 1mm; 
                     box-sizing: border-box; 
                     margin: 0;

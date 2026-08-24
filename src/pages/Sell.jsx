@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { 
     addSellRecord, fetchSellRecords, deleteRecord, updateRecord, fetchFarmers, fetchStaff, 
     fetchFactories, fetchTrucks, isCached, getSettings, saveReceiptImageToDrive, 
-    deleteReceiptFileToDrive, fetchBuyRecords, fetchChemicalUsage 
+    deleteReceiptFileToDrive, fetchBuyRecords, fetchChemicalUsage, fetchStockSummary
 } from '../services/apiService';
 import { truncateOneDecimal, truncateTwoDecimals } from '../utils/calculations';
 import { useAuth } from '../context/AuthContext';
@@ -30,7 +30,8 @@ export const Sell = () => {
     const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [allBuys, setAllBuys] = useState([]);
     const [chemicalUsage, setChemicalUsage] = useState([]);
-    
+    const [serverStockMetrics, setServerStockMetrics] = useState(null);
+
     // Selection state
     const [showFactoryResults, setShowFactoryResults] = useState(false);
     const [factorySearch, setFactorySearch] = useState('');
@@ -107,13 +108,14 @@ export const Sell = () => {
      const loadData = async () => {
          setIsLoading(true);
          try {
-             const [recs, facs, trks, stf, buys, chems] = await Promise.all([
+             const [recs, facs, trks, stf, buys, chems, stockRes] = await Promise.all([
                  fetchSellRecords(),
                  fetchFactories(),
                  fetchTrucks(),
                  fetchStaff(),
                  fetchBuyRecords(),
-                 fetchChemicalUsage()
+                 fetchChemicalUsage(),
+                 fetchStockSummary()
              ]);
              setRecords(recs || []);
              setFactories(facs || []);
@@ -121,6 +123,9 @@ export const Sell = () => {
              setStaff(stf || []);
              setAllBuys(buys || []);
              setChemicalUsage(chems || []);
+             if (stockRes) {
+                 setServerStockMetrics(stockRes);
+             }
          } catch (error) {
              toast.error('โหลดข้อมูลล้มเหลว');
          } finally {
@@ -343,6 +348,10 @@ export const Sell = () => {
     });
 
     const stockMetrics = React.useMemo(() => {
+        if (serverStockMetrics) {
+            return serverStockMetrics;
+        }
+
         const latexBuys = allBuys.filter(b => b.rubberType === 'latex' || !b.rubberType);
         const cupLumpBuys = allBuys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง');
 
@@ -379,7 +388,7 @@ export const Sell = () => {
         const avgDrc = buyWeightLatex > 0 ? truncateOneDecimal(totalWeightedDrc / buyWeightLatex) : 0;
 
         return { currentStock: currentStockLatex, cupLumpStock: currentStockCupLump, avgDrc };
-    }, [allBuys, records, chemicalUsage]);
+    }, [serverStockMetrics, allBuys, records, chemicalUsage]);
 
     // Auto Adjust Logic
     useEffect(() => {

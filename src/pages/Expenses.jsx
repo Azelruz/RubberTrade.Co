@@ -30,7 +30,9 @@ export const Expenses = () => {
     const [staffList, setStaffList] = useState([]);
     const [settings, setSettings] = useState({});
     const [loading, setLoading] = useState(true);
-    const [submitting, setSubmitting] = useState(false);
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const [startDate, setStartDate] = useState(todayStr);
+    const [endDate, setEndDate] = useState(todayStr);
     const [showExpenseForm, setShowExpenseForm] = useState(false);
     const [showWageForm, setShowWageForm] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -98,17 +100,22 @@ export const Expenses = () => {
 
     useEffect(() => {
         loadData();
-    }, [activeTab]);
+    }, [activeTab, startDate, endDate]);
 
     const loadData = async () => {
         if (!isCached('expenses', 'wages')) setLoading(true);
         try {
+            const dateParams = (startDate || endDate) ? { startDate, endDate } : null;
             if (activeTab === 'expenses') {
-                const data = await fetchExpenses();
-                setExpenses([...data].reverse());
+                const data = await fetchExpenses(dateParams);
+                setExpenses(Array.isArray(data) ? data : []);
             } else {
-                const [wData, sData, bRaw] = await Promise.all([fetchWages(), fetchStaff(), fetchBuyRecords()]);
-                setWages([...wData].reverse());
+                const [wData, sData, bRaw] = await Promise.all([
+                    fetchWages(dateParams), 
+                    fetchStaff(), 
+                    fetchBuyRecords()
+                ]);
+                setWages(Array.isArray(wData) ? wData : []);
                 setStaffList(sData || []);
                 // Pre-fill the ref cache so calcBonus can use it immediately
                 buyRecordsRef.current = Array.isArray(bRaw) ? bRaw : [];
@@ -315,14 +322,41 @@ export const Expenses = () => {
                     <h1 className="text-2xl font-bold text-gray-900">บันทึกค่าใช้จ่าย</h1>
                     <p className="text-gray-500">จัดการค่าใช้จ่ายรายวันและค่าจ้างพนักงาน</p>
                 </div>
-                <button 
-                    onClick={() => window.print()}
-                    className="flex items-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-md shadow-emerald-100 text-sm border border-emerald-700"
-                    title="พิมพ์รายงานสรุป"
-                >
-                    <Printer size={18} className="mr-2" />
-                    พิมพ์รายงาน
-                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-xs text-sm">
+                        <Calendar size={16} className="text-gray-400 mr-2 flex-shrink-0" />
+                        <input 
+                            type="date" 
+                            value={startDate} 
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="border-none focus:ring-0 text-xs font-bold text-gray-700 bg-transparent p-0 cursor-pointer"
+                        />
+                        <span className="mx-2 text-gray-400 font-bold text-xs">-</span>
+                        <input 
+                            type="date" 
+                            value={endDate} 
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="border-none focus:ring-0 text-xs font-bold text-gray-700 bg-transparent p-0 cursor-pointer"
+                        />
+                    </div>
+                    {(startDate || endDate) && (
+                        <button
+                            onClick={() => { setStartDate(''); setEndDate(''); }}
+                            className="px-2.5 py-1.5 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-bold transition-all"
+                            title="แสดงข้อมูลย้อนหลังทั้งหมด"
+                        >
+                            แสดงทั้งหมด
+                        </button>
+                    )}
+                    <button 
+                        onClick={() => window.print()}
+                        className="flex items-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-md shadow-emerald-100 text-sm border border-emerald-700"
+                        title="พิมพ์รายงานสรุป"
+                    >
+                        <Printer size={18} className="mr-2" />
+                        พิมพ์รายงาน
+                    </button>
+                </div>
             </div>
 
             {/* Tabs */}

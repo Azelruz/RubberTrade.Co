@@ -4,7 +4,7 @@ import {
     fetchDashboardData, fetchFarmers, fetchChemicalUsage, 
     addBulkWages, addPromotion, addChemicalUsage, fetchBuyRecords 
 } from '../services/apiService';
-import { format, subDays, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import { format, subDays, startOfDay, endOfDay, isWithinInterval, differenceInDays } from 'date-fns';
 import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { calculateWage, truncateOneDecimal } from '../utils/calculations';
@@ -83,10 +83,11 @@ export const Dashboard = () => {
         try { hasCache = !!sessionStorage.getItem('gc_dashboard'); } catch {}
         if (!silent && !hasCache) setLoading(true);
         try {
-            const [dashData, farmers, chemUsage] = await Promise.all([
+            const [dashData, farmers, chemUsage, fullBuys] = await Promise.all([
                 fetchDashboardData(silent),
-                fetchFarmers(),
-                fetchChemicalUsage()
+                fetchFarmers(true),
+                fetchChemicalUsage(),
+                fetchBuyRecords()
             ]);
 
             const buys = Array.isArray(dashData?.buys) ? dashData.buys : [];
@@ -108,44 +109,73 @@ export const Dashboard = () => {
             const loadedConfig = loadDashboardConfig(settings);
             setDashboardConfig(loadedConfig);
 
-            // Calculate Inactive Farmers (15 days without purchases)
-            const fifteenDaysAgo = startOfDay(subDays(new Date(), 15));
-            const activeFarmerIdentifiers = new Set();
+            // Calculate Inactive Farmers using exact same logic & data scope as UserManagement (15 days without purchases)
+            const buysToUse = Array.isArray(fullBuys) && fullBuys.length > 0 ? fullBuys : buys;
+            const farmerActivityMap = {};
+            const today = new Date();
 
-            buys.forEach(b => {
-                const rawDate = b.date || b.timestamp || b.created_at;
-                if (!rawDate) return;
-                const bDate = new Date(rawDate);
-                if (isNaN(bDate.getTime())) return;
+            buysToUse.forEach(b => {
+                if (!b.farmerId && !b.farmerName) return;
+                const key = b.farmerId || b.farmerName;
+                const bDate = b.date ? new Date(b.date) : (b.timestamp ? new Date(b.timestamp) : null);
+                if (!bDate || isNaN(bDate.getTime())) return;
 
-                if (bDate >= fifteenDaysAgo) {
-                    const fId = b.farmerId || b.farmer_id;
-                    const fName = b.farmerName || b.farmer_name;
-                    if (fId !== undefined && fId !== null && String(fId).trim() !== '') {
-                        activeFarmerIdentifiers.add(String(fId).trim());
-                    }
-                    if (fName !== undefined && fName !== null && String(fName).trim() !== '') {
-                        activeFarmerIdentifiers.add(String(fName).trim().toLowerCase());
-                    }
+                if (!farmerActivityMap[key] || bDate > farmerActivityMap[key].lastDate) {
+                    farmerActivityMap[key] = { lastDate: bDate };
                 }
             });
 
             const inactiveFarmersCount = farmerArr.filter(f => {
                 if (!f) return false;
-                const fId = f.id !== undefined && f.id !== null ? String(f.id).trim() : '';
-                const fName = f.name !== undefined && f.name !== null ? String(f.name).trim().toLowerCase() : '';
+                const entry = farmerActivityMap[f.id] || farmerActivityMap[f.name];
+                const localDate = entry?.lastDate || null;
+                const apiDate = f.lastBuyDate ? new Date(f.lastBuyDate) : null;
+                
+                let finalLastDate = null;
+                if (localDate && apiDate) {
+                    finalLastDate = localDate > apiDate ? localDate : apiDate;
+                } else {
+                    finalLastDate = localDate || apiDate;
+                }
 
-                const isActiveById = fId && activeFarmerIdentifiers.has(fId);
-                const isActiveByName = fName && activeFarmerIdentifiers.has(fName);
-
-                return !isActiveById && !isActiveByName;
+                if (finalLastDate && !isNaN(finalLastDate.getTime())) {
+                    const daysAgo = differenceInDays(today, finalLastDate);
+                    return daysAgo >= 15;
+                }
+                return true;
             }).length;
 
-            // Calculate Today's Dry Rubber Weight
+            // Calculate Today's Dry Rubber Weight (matching Daily Summary Report logic)
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
             const todayRange = { start: startOfDay(new Date()), end: endOfDay(new Date()) };
-            const todayDryWeightTotal = buys
-                .filter(b => b.date && isWithinInterval(new Date(b.date), todayRange) && (b.rubberType === 'latex' || !b.rubberType))
-                .reduce((sum, item) => sum + Number(item.dryRubber || item.dryWeight || 0), 0);
+            const buysToCalc = Array.isArray(fullBuys) && fullBuys.length > 0 ? fullBuys : buys;
+            
+            const isTodayRecord = (b) => {
+                if (!b) return false;
+                if (b.date === todayStr || (typeof b.date === 'string' && b.date.startsWith(todayStr))) return true;
+                if (b.date && !isNaN(new Date(b.date).getTime())) {
+                    return isWithinInterval(new Date(b.date), todayRange);
+                }
+                return false;
+            };
+
+            const isLatexType = (b) => {
+                if (!b) return false;
+                const type = b.rubberType || 'latex';
+                return type === 'latex' || type === 'น้ำยางสด' || type === '';
+            };
+
+            const getRecordDryWeight = (item) => {
+                if (item.dryRubber !== undefined && item.dryRubber !== null && item.dryRubber !== '' && item.dryRubber !== 0) return Number(item.dryRubber);
+                if (item.dryWeight !== undefined && item.dryWeight !== null && item.dryWeight !== '' && item.dryWeight !== 0) return Number(item.dryWeight);
+                const net = Number(item.netWeight || (Number(item.weight || 0) - Number(item.bucketWeight || 0)));
+                const drc = Number(item.drc || 0);
+                return (net * drc) / 100;
+            };
+
+            const todayDryWeightTotal = buysToCalc
+                .filter(b => isTodayRecord(b) && isLatexType(b))
+                .reduce((sum, item) => sum + getRecordDryWeight(item), 0);
 
             // Use server-side stats if available, otherwise fallback to local calc
             if (dashData?.stats) {
@@ -264,7 +294,13 @@ export const Dashboard = () => {
         const todayExpTotal = todayExps.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
         const todayWageTotal = todayWages.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
 
-        const todayTotalDry = latexBuys.reduce((sum, item) => sum + (Number(item.dryRubber || item.dryWeight || 0)), 0);
+        const todayTotalDry = latexBuys.reduce((sum, item) => {
+            const dr = item.dryRubber || item.dryWeight;
+            if (dr !== undefined && dr !== null && dr !== '' && Number(dr) !== 0) return sum + Number(dr);
+            const net = Number(item.netWeight || (Number(item.weight || 0) - Number(item.bucketWeight || 0)));
+            const drc = Number(item.drc || 0);
+            return sum + ((net * drc) / 100);
+        }, 0);
         const todayAvgDrc = todayLatexWeight > 0 ? truncateOneDecimal((todayTotalDry / todayLatexWeight) * 100) : 0;
 
         const unpaidBills = buys.reduce((count, r) => {

@@ -1,4 +1,4 @@
-import { jsonResponse, errorResponse, withAuth, isUUID, trackUsage, recordAuditLog } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth, isUUID, trackUsage, recordAuditLog, getTodayDateStr } from './_utils.js';
 import { generateNextId, getSetting } from './_id_utils.js';
 import { validatePayload } from './_validation.js';
 
@@ -7,13 +7,69 @@ async function handleGet(context) {
         const userId = context.user.id;
         const url = new URL(context.request.url);
         
+        const stockSummaryParam = url.searchParams.get('stockSummary') === 'true';
+        if (stockSummaryParam) {
+            const storeId = context.user.storeId;
+            const [buysRes, chemsRes, sellsRes] = await context.env.DB.batch([
+                context.env.DB.prepare(`
+                    SELECT 
+                        SUM(CASE WHEN (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN (weight - bucketWeight) ELSE 0 END) as latexBuyWeight,
+                        SUM(CASE WHEN (rubberType = 'cup_lump' OR rubberType = 'ขี้ยาง') THEN (weight - bucketWeight) ELSE 0 END) as cupLumpBuyWeight,
+                        SUM(CASE WHEN (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN ((weight - bucketWeight) * drc) ELSE 0 END) as totalDrcWeight
+                    FROM buys WHERE userId = ?
+                `).bind(storeId),
+                context.env.DB.prepare(`
+                    SELECT 
+                        SUM(CASE WHEN chemicalId = 'ammonia' THEN amount ELSE 0 END) as ammonia,
+                        SUM(CASE WHEN chemicalId = 'water' THEN amount ELSE 0 END) as water,
+                        SUM(CASE WHEN chemicalId = 'whiteMedicine' THEN amount ELSE 0 END) as whiteMedicine
+                    FROM chemical_usage WHERE userId = ?
+                `).bind(storeId),
+                context.env.DB.prepare(`
+                    SELECT 
+                        SUM(CASE WHEN (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN weight ELSE 0 END) as latexSellWeight,
+                        SUM(CASE WHEN (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN lossWeight ELSE 0 END) as latexSellLoss,
+                        SUM(CASE WHEN (rubberType = 'cup_lump' OR rubberType = 'ขี้ยาง') THEN weight ELSE 0 END) as cupLumpSellWeight
+                    FROM sells WHERE userId = ?
+                `).bind(storeId)
+            ]);
+
+            const buyStats = buysRes.results?.[0] || {};
+            const chemStats = chemsRes.results?.[0] || {};
+            const sellStats = sellsRes.results?.[0] || {};
+
+            const buyLatex = Number(buyStats.latexBuyWeight || 0);
+            const buyCupLump = Number(buyStats.cupLumpBuyWeight || 0);
+            const totalDrc = Number(buyStats.totalDrcWeight || 0);
+
+            const chemW = Number(chemStats.ammonia || 0) + Number(chemStats.water || 0) + Number(chemStats.whiteMedicine || 0);
+
+            const sellLatex = Number(sellStats.latexSellWeight || 0);
+            const sellLossLatex = Number(sellStats.latexSellLoss || 0);
+            const sellCupLump = Number(sellStats.cupLumpSellWeight || 0);
+
+            const currentStockLatex = Math.round((buyLatex + chemW - sellLatex - sellLossLatex) * 10) / 10;
+            const currentStockCupLump = Math.round((buyCupLump - sellCupLump) * 10) / 10;
+            const avgDrc = buyLatex > 0 ? Math.round((totalDrc / buyLatex) * 10) / 10 : 0;
+
+            return jsonResponse({
+                status: 'success',
+                stockMetrics: {
+                    currentStock: currentStockLatex,
+                    cupLumpStock: currentStockCupLump,
+                    avgDrc
+                }
+            });
+        }
+
         // --- Input Parameters ---
         const since = url.searchParams.get('since');
-        const startDate = url.searchParams.get('startDate');
-        const endDate = url.searchParams.get('endDate');
+        let startDate = url.searchParams.get('startDate');
+        let endDate = url.searchParams.get('endDate');
         const search = url.searchParams.get('search');
         const pageParam = url.searchParams.get('page');
         const pageSizeParam = url.searchParams.get('pageSize');
+        const allParam = url.searchParams.get('all') === 'true';
         const isPaginated = !!pageParam;
         
         const page = parseInt(pageParam) || 1;
@@ -34,8 +90,9 @@ async function handleGet(context) {
             params.push(startDate);
         }
         if (endDate) {
+            const endDateBound = endDate.length === 10 ? `${endDate}T23:59:59.999Z` : endDate;
             whereClauses.push("date <= ?");
-            params.push(endDate);
+            params.push(endDateBound);
         }
         if (search) {
             whereClauses.push("(buyerName LIKE ? OR id LIKE ?)");

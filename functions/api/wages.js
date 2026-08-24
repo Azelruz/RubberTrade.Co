@@ -3,13 +3,37 @@ import { validatePayload } from './_validation.js';
 
 async function handleGet(context) {
     try {
-        const { results } = await context.env.DB.prepare(
-            `SELECT w.*, s.name as staffName 
-             FROM wages w 
-             LEFT JOIN staff s ON w.staffId = s.id 
-             WHERE w.userId = ?
-             ORDER BY w.created_at DESC`
-        ).bind(context.user.storeId).all();
+        const url = new URL(context.request.url);
+        const startDate = url.searchParams.get('startDate');
+        const endDate = url.searchParams.get('endDate');
+        const search = url.searchParams.get('search');
+        const since = url.searchParams.get('since');
+
+        let whereClauses = ["w.userId = ?"];
+        const params = [context.user.storeId];
+
+        if (since) {
+            whereClauses.push("w.updated_at > ?");
+            params.push(since);
+        }
+        if (startDate) {
+            whereClauses.push("w.date >= ?");
+            params.push(startDate);
+        }
+        if (endDate) {
+            const endDateBound = endDate.length === 10 ? `${endDate}T23:59:59.999Z` : endDate;
+            whereClauses.push("w.date <= ?");
+            params.push(endDateBound);
+        }
+        if (search) {
+            whereClauses.push("(w.staffName LIKE ? OR s.name LIKE ? OR w.note LIKE ?)");
+            const pattern = `%${search}%`;
+            params.push(pattern, pattern, pattern);
+        }
+
+        const fromClause = search ? 'FROM wages w LEFT JOIN staff s ON w.staffId = s.id' : 'FROM wages w';
+        const query = `SELECT w.* ${fromClause} WHERE ${whereClauses.join(' AND ')} ORDER BY w.date DESC, w.created_at DESC`;
+        const { results } = await context.env.DB.prepare(query).bind(...params).all();
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);

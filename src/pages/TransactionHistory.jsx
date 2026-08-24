@@ -26,6 +26,7 @@ export const TransactionHistory = () => {
     const [records, setRecords] = useState([]);
     const [pagination, setPagination] = useState({
         page: 1,
+        currentPage: 1,
         pageSize: 50,
         totalCount: 0,
         totalPages: 0
@@ -77,12 +78,13 @@ export const TransactionHistory = () => {
 
     // Debounce search term
     useEffect(() => {
+        if (filters.searchTerm === debouncedSearch) return;
         const timer = setTimeout(() => {
             setDebouncedSearch(filters.searchTerm);
-            setPagination(prev => ({ ...prev, page: 1 })); // Reset to page 1 on search
-        }, 500);
+            setPagination(prev => ({ ...prev, page: 1, currentPage: 1 }));
+        }, 400);
         return () => clearTimeout(timer);
-    }, [filters.searchTerm]);
+    }, [filters.searchTerm, debouncedSearch]);
 
     // Load records when dependencies change
     useEffect(() => {
@@ -120,14 +122,16 @@ export const TransactionHistory = () => {
     };
 
     const loadRecords = async () => {
-        setLoading(true);
+        if (records.length === 0) {
+            setLoading(true);
+        }
         try {
             const params = {
                 startDate: filters.startDate,
                 endDate: filters.endDate,
                 search: debouncedSearch,
-                page: pagination.page,
-                pageSize: pagination.pageSize,
+                page: pagination.page || pagination.currentPage || 1,
+                pageSize: pagination.pageSize || 50,
                 rubberType: filters.rubberType,
                 minWeight: filters.minWeight,
                 maxWeight: filters.maxWeight,
@@ -143,9 +147,27 @@ export const TransactionHistory = () => {
                 ? await fetchBuyHistory(params)
                 : await fetchSellHistory(params);
             
-            if (res.results) {
+            if (res && res.results) {
                 setRecords(res.results);
-                if (res.pagination) setPagination(res.pagination);
+                if (res.pagination) {
+                    const pageNum = res.pagination.currentPage || res.pagination.page || 1;
+                    const newPagination = {
+                        page: pageNum,
+                        currentPage: pageNum,
+                        pageSize: res.pagination.pageSize || 50,
+                        totalCount: res.pagination.totalCount || 0,
+                        totalPages: res.pagination.totalPages || 0
+                    };
+                    setPagination(prev => {
+                        if (prev.page === newPagination.page &&
+                            prev.pageSize === newPagination.pageSize &&
+                            prev.totalCount === newPagination.totalCount &&
+                            prev.totalPages === newPagination.totalPages) {
+                            return prev;
+                        }
+                        return newPagination;
+                    });
+                }
                 if (res.summary) setSummary(res.summary);
             } else {
                 setRecords([]);
@@ -162,13 +184,13 @@ export const TransactionHistory = () => {
         const { name, value } = e.target;
         setFilters(prev => ({ ...prev, [name]: value }));
         if (name === 'startDate' || name === 'endDate') {
-            setPagination(prev => ({ ...prev, page: 1 }));
+            setPagination(prev => ({ ...prev, page: 1, currentPage: 1 }));
         }
     };
 
     const handlePageChange = (newPage) => {
-        if (newPage >= 1 && newPage <= pagination.totalPages) {
-            setPagination(prev => ({ ...prev, page: newPage }));
+        if (newPage >= 1 && newPage <= pagination.totalPages && newPage !== pagination.page) {
+            setPagination(prev => ({ ...prev, page: newPage, currentPage: newPage }));
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
@@ -316,8 +338,8 @@ export const TransactionHistory = () => {
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
                     @page {
-                        size: A4 portrait;
-                        margin: 10mm;
+                        size: auto;
+                        margin: 0;
                     }
                     html, body, #root, main, div {
                         overflow: visible !important;
@@ -326,7 +348,7 @@ export const TransactionHistory = () => {
                     }
                     .receipt-content {
                         width: 100%;
-                        max-width: 76mm;
+                        max-width: 100%;
                         padding: 2mm;
                         margin: 0;
                         font-family: 'Noto Sans Thai', sans-serif;

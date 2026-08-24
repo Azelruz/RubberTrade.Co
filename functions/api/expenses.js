@@ -3,7 +3,41 @@ import { validatePayload } from './_validation.js';
 
 async function handleGet(context) {
     try {
-        const { results } = await context.env.DB.prepare("SELECT * FROM expenses WHERE userId = ? ORDER BY date DESC, created_at DESC").bind(context.user.storeId).all();
+        const url = new URL(context.request.url);
+        const startDate = url.searchParams.get('startDate');
+        const endDate = url.searchParams.get('endDate');
+        const category = url.searchParams.get('category');
+        const search = url.searchParams.get('search');
+        const since = url.searchParams.get('since');
+
+        let whereClauses = ["userId = ?"];
+        const params = [context.user.storeId];
+
+        if (since) {
+            whereClauses.push("updated_at > ?");
+            params.push(since);
+        }
+        if (startDate) {
+            whereClauses.push("date >= ?");
+            params.push(startDate);
+        }
+        if (endDate) {
+            const endDateBound = endDate.length === 10 ? `${endDate}T23:59:59.999Z` : endDate;
+            whereClauses.push("date <= ?");
+            params.push(endDateBound);
+        }
+        if (category) {
+            whereClauses.push("category = ?");
+            params.push(category);
+        }
+        if (search) {
+            whereClauses.push("(description LIKE ? OR category LIKE ? OR note LIKE ?)");
+            const pattern = `%${search}%`;
+            params.push(pattern, pattern, pattern);
+        }
+
+        const query = `SELECT * FROM expenses WHERE ${whereClauses.join(' AND ')} ORDER BY date DESC, created_at DESC`;
+        const { results } = await context.env.DB.prepare(query).bind(...params).all();
         return jsonResponse(results);
     } catch (e) {
         return errorResponse(e.message);

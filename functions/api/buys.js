@@ -1,4 +1,4 @@
-import { jsonResponse, errorResponse, withAuth, isUUID, trackUsage, recordAuditLog } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth, isUUID, trackUsage, recordAuditLog, getTodayDateStr } from './_utils.js';
 import { generateNextId, getSetting } from './_id_utils.js';
 import { validatePayload } from './_validation.js';
 import { refundLoanDeductions } from './_loan_helpers.js';
@@ -10,16 +10,24 @@ async function handleGet(context) {
         
         // --- Input Parameters ---
         const since = url.searchParams.get('since');
-        const startDate = url.searchParams.get('startDate');
-        const endDate = url.searchParams.get('endDate');
+        let startDate = url.searchParams.get('startDate');
+        let endDate = url.searchParams.get('endDate');
         const search = url.searchParams.get('search');
         const pageParam = url.searchParams.get('page');
         const pageSizeParam = url.searchParams.get('pageSize');
+        const allParam = url.searchParams.get('all') === 'true';
         const isPaginated = !!pageParam;
         
         const page = parseInt(pageParam) || 1;
         const pageSize = parseInt(pageSizeParam) || 50;
         const offset = (page - 1) * pageSize;
+
+        // Default to TODAY's date if no date range, search, since, or all parameter is specified
+        if (!startDate && !endDate && !search && !since && !allParam) {
+            const todayStr = getTodayDateStr(context.user.timezone);
+            startDate = todayStr;
+            endDate = todayStr;
+        }
 
         // --- Build Where Clauses ---
         let whereClauses = ["b.userId = ?"];
@@ -34,8 +42,9 @@ async function handleGet(context) {
             params.push(startDate);
         }
         if (endDate) {
+            const endDateBound = endDate.length === 10 ? `${endDate}T23:59:59.999Z` : endDate;
             whereClauses.push("b.date <= ?");
-            params.push(endDate);
+            params.push(endDateBound);
         }
         if (search) {
             whereClauses.push("(b.farmerName LIKE ? OR b.id LIKE ? OR f.name LIKE ?)");
@@ -89,56 +98,73 @@ async function handleGet(context) {
         const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
         // --- Execute Queries in Batch ---
-        // 1. Paginated Records
+        // 1. Paginated or Safety-limited Records (Default limit 100 if unpaginated to prevent massive D1 rows read)
+        const defaultLimit = (!isPaginated && !startDate && !endDate && !search && !since) ? 100 : null;
+        
+        // Only JOIN farmers if searching across f.name, otherwise b.farmerName is already present in buys table
+        const fromClause = search ? 'FROM buys b LEFT JOIN farmers f ON b.farmerId = f.id' : 'FROM buys b';
+        const selectNameColumn = search ? 'COALESCE(f.name, b.farmerName) as farmerName' : 'b.farmerName';
+
         const recordsQuery = `
-            SELECT b.*, COALESCE(f.name, b.farmerName) as farmerName 
-            FROM buys b 
-            LEFT JOIN farmers f ON b.farmerId = f.id 
+            SELECT b.*, ${selectNameColumn} 
+            ${fromClause} 
             ${whereSql} 
             ORDER BY b.date DESC, b.created_at DESC 
-            ${isPaginated ? 'LIMIT ? OFFSET ?' : ''}
+            ${isPaginated ? 'LIMIT ? OFFSET ?' : (defaultLimit ? 'LIMIT ?' : '')}
         `;
-        const recordsParams = isPaginated ? [...params, pageSize, offset] : params;
+        const recordsParams = isPaginated ? [...params, pageSize, offset] : (defaultLimit ? [...params, defaultLimit] : params);
 
-        // 2. Summary & Total Count for the FILTERED set
-        const summaryQuery = `
-            SELECT 
-                COUNT(*) as totalCount,
-                SUM(total) as totalAmount,
-                SUM(weight - bucketWeight) as totalWeight
-            FROM buys b
-            LEFT JOIN farmers f ON b.farmerId = f.id
-            ${whereSql}
-        `;
+        let results = [];
+        let totalCount = 0;
+        let totalPages = 1;
+        let summary = { totalCount: 0, totalAmount: 0, totalWeight: 0 };
 
-        const [recordsRes, summaryRes] = await context.env.DB.batch([
-            context.env.DB.prepare(recordsQuery).bind(...recordsParams),
-            context.env.DB.prepare(summaryQuery).bind(...params)
-        ]);
+        if (isPaginated) {
+            const summaryQuery = `
+                SELECT 
+                    COUNT(*) as totalCount,
+                    SUM(b.total) as totalAmount,
+                    SUM(b.weight - b.bucketWeight) as totalWeight
+                ${fromClause}
+                ${whereSql}
+            `;
 
-        const results = recordsRes.results || [];
-        const summary = summaryRes.results[0] || { totalCount: 0, totalAmount: 0, totalWeight: 0 };
-        
-        const totalCount = summary.totalCount || 0;
-        const totalPages = Math.ceil(totalCount / pageSize);
+            const [recordsRes, summaryRes] = await context.env.DB.batch([
+                context.env.DB.prepare(recordsQuery).bind(...recordsParams),
+                context.env.DB.prepare(summaryQuery).bind(...params)
+            ]);
 
-        // Track usage
-        context.waitUntil?.(trackUsage(context, { rowsRead: results.length }));
+            results = recordsRes.results || [];
+            summary = summaryRes.results[0] || { totalCount: 0, totalAmount: 0, totalWeight: 0 };
+            totalCount = summary.totalCount || 0;
+            totalPages = Math.ceil(totalCount / pageSize);
 
-        return jsonResponse({
-            results,
-            pagination: {
-                totalCount,
-                totalPages,
-                currentPage: page,
-                pageSize
-            },
-            summary: {
-                totalBills: totalCount,
-                totalAmount: summary.totalAmount || 0,
-                totalWeight: summary.totalWeight || 0
-            }
-        });
+            // Track usage
+            context.waitUntil?.(trackUsage(context, { rowsRead: results.length }));
+
+            return jsonResponse({
+                results,
+                pagination: {
+                    totalCount,
+                    totalPages,
+                    currentPage: page,
+                    pageSize
+                },
+                summary: {
+                    totalBills: totalCount,
+                    totalAmount: summary.totalAmount || 0,
+                    totalWeight: summary.totalWeight || 0
+                }
+            });
+        } else {
+            const recordsRes = await context.env.DB.prepare(recordsQuery).bind(...recordsParams).all();
+            results = recordsRes.results || [];
+
+            // Track usage
+            context.waitUntil?.(trackUsage(context, { rowsRead: results.length }));
+
+            return jsonResponse(results);
+        }
     } catch (e) {
         console.error("[GET /buys Error]", e);
         return errorResponse(e.message);

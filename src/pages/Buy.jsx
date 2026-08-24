@@ -183,20 +183,43 @@ export const Buy = () => {
         document.addEventListener('mousedown', handleClickOutside);
         
         const handleRefresh = () => {
-            loadData();
+            loadData(true);
         };
         window.addEventListener('dashboard-refresh', handleRefresh);
 
+        const handleVisibilityChange = () => {
+            if (!document.hidden && navigator.onLine) {
+                loadData(true);
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Real-time background sync interval (polls Cloudflare D1 every 5 seconds ONLY when tab is active)
+        const pollInterval = setInterval(() => {
+            if (navigator.onLine && !document.hidden) {
+                loadData(true);
+            }
+        }, 5000);
+
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
             window.removeEventListener('dashboard-refresh', handleRefresh);
+            clearInterval(pollInterval);
         };
     }, []);
 
-    // Reset pagination on filter change
+    // Reset pagination and reload data when date filter changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, selectedDate]);
+        if (selectedDate) {
+            loadData(true);
+        }
+    }, [selectedDate]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
 
     const getActiveStoreId = () => {
         return localStorage.getItem('rt_active_store_id') || user?.storeId || user?.id || null;
@@ -293,7 +316,7 @@ export const Buy = () => {
         }
     };
 
-    const loadData = async () => {
+    const loadData = async (force = false) => {
         // Step 1: Read locally from Dexie (Instant - <10ms)
         try {
             const [localBuys, localFarmers, localEmployees, localLoans, localDeds, localMts] = await Promise.all([
@@ -345,7 +368,7 @@ export const Buy = () => {
             }
 
             const [buyData, farmersData, priceData, settingsRes, employeesData, mtData, loansData, dedsData] = await Promise.all([
-                fetchBuyRecords(),
+                fetchBuyRecords(force, selectedDate ? { startDate: selectedDate, endDate: selectedDate } : null),
                 fetchFarmers(),
                 fetchDailyPrice(),
                 getSettings(),
@@ -877,7 +900,7 @@ export const Buy = () => {
                 @media print {
                     @page { size: auto; margin: 0; }
                     body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; }
-                    .receipt-content { width: 100%; max-width: 76mm; padding: 2mm; margin: 0; font-family: 'Noto Sans Thai', sans-serif; }
+                    .receipt-content { width: 100%; max-width: 100%; padding: 2mm; margin: 0; font-family: 'Noto Sans Thai', sans-serif; }
                     .no-print { display: none !important; }
                 }
             ` }} />
@@ -980,6 +1003,8 @@ export const Buy = () => {
                         }}
                         onPageChange={setCurrentPage}
                         loanDeductions={loanDeductions}
+                        farmers={farmers}
+                        employees={employees}
                     />
                 </div>
 

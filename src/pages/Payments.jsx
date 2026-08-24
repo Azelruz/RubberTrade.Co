@@ -36,13 +36,14 @@ export const Payments = () => {
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [filterDate]);
 
     const loadData = async () => {
         if (!isCached('buys', 'farmers', 'employees')) setLoading(true);
         try {
+            const dateParams = filterDate ? { startDate: filterDate, endDate: filterDate } : { all: 'true' };
             const [buysData, farmersData, empsData, setRes] = await Promise.all([
-                fetchBuyRecords(),
+                fetchBuyRecords(false, dateParams),
                 fetchFarmers(),
                 fetchEmployees(),
                 getSettings()
@@ -206,7 +207,7 @@ export const Payments = () => {
                     />
                 </div>
                 <button 
-                    onClick={loadData}
+                    onClick={() => { setSearchTerm(''); setFilterDate(''); }}
                     className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2"
                 >
                     <Filter size={16} /> ล้างการค้นหา

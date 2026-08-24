@@ -1,10 +1,14 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
     Droplets, TrendingUp, Activity, Truck, DollarSign, Wallet, FileText, Users, TrendingDown, FlaskConical, UserX
 } from 'lucide-react';
 
-const StatCard = ({ title, value, icon, bgColor, valueColor, details }) => (
-    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex items-center space-x-4">
+const StatCard = ({ title, value, icon, bgColor, valueColor, details, onClick }) => (
+    <div 
+        onClick={onClick}
+        className={`bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex items-center space-x-4 ${onClick ? 'cursor-pointer hover:border-rose-300 hover:shadow-md transition-all' : ''}`}
+    >
         <div className={`p-4 rounded-full ${bgColor}`}>
             {icon}
         </div>
@@ -33,6 +37,7 @@ const formatVal = (val, prefix = '', suffix = '') => {
 };
 
 const DashboardStats = ({ stats, visibleStats }) => {
+    const navigate = useNavigate();
     const isVisible = (id) => !visibleStats || visibleStats.includes(id);
 
     const allStatCards = [
@@ -175,8 +180,9 @@ const DashboardStats = ({ stats, visibleStats }) => {
                     icon={<UserX className="text-rose-500" size={24} />}
                     bgColor="bg-rose-50"
                     valueColor="text-rose-700"
+                    onClick={() => navigate('/settings', { state: { activeTab: 'farmers_employees', activityFilter: 'custom_days', customDaysThreshold: 15 } })}
                     details={[
-                        { label: 'ไม่มีซื้อขาย 15 วันล่าสุด', value: '' }
+                        { label: 'ไม่มีซื้อขาย 15 วันล่าสุด', value: 'ดูรายชื่อ ➔' }
                     ]}
                 />
             )

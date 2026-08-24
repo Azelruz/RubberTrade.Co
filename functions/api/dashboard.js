@@ -36,7 +36,7 @@ async function handleGet(context) {
             db.prepare("SELECT * FROM settings WHERE userId = ?").bind(storeId).all(),
             db.prepare("SELECT value, updated_at FROM settings WHERE userId = ? AND key = 'daily_price'").bind(storeId).first(),
             
-            // Buy stats: Today and Month
+            // Buy stats: Today and Month (Bound to monthStart to prevent full historical table scans)
             db.prepare(`
                 SELECT 
                     SUM(CASE WHEN date = ? THEN total ELSE 0 END) as todayTotal,
@@ -47,32 +47,32 @@ async function handleGet(context) {
                     SUM(CASE WHEN date = ? AND (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN CASE WHEN dryRubber > 0 THEN dryRubber ELSE (weight - bucketWeight) * (drc/100) END ELSE 0 END) as todayLatexDry,
                     SUM(CASE WHEN date >= ? THEN total ELSE 0 END) as monthTotal,
                     COUNT(CASE WHEN (farmerStatus != 'Paid' AND farmerStatus != 'จ่ายแล้ว') OR (employeeStatus != 'Paid' AND employeeStatus != 'จ่ายแล้ว') THEN 1 END) as unpaidBills
-                FROM buys WHERE userId = ?
-            `).bind(today, today, today, today, today, today, monthStart, storeId).first(),
+                FROM buys WHERE userId = ? AND date >= ?
+            `).bind(today, today, today, today, today, today, monthStart, storeId, monthStart).first(),
 
             // Sell stats: Today and Month
             db.prepare(`
                 SELECT 
                     SUM(CASE WHEN date = ? THEN total ELSE 0 END) as todayTotal,
                     SUM(CASE WHEN date >= ? THEN total ELSE 0 END) as monthTotal
-                FROM sells WHERE userId = ?
-            `).bind(today, monthStart, storeId).first(),
+                FROM sells WHERE userId = ? AND date >= ?
+            `).bind(today, monthStart, storeId, monthStart).first(),
 
             // Expense stats
             db.prepare(`
                 SELECT 
                     SUM(CASE WHEN date = ? THEN amount ELSE 0 END) as todayTotal,
                     SUM(CASE WHEN date >= ? THEN amount ELSE 0 END) as monthTotal
-                FROM expenses WHERE userId = ?
-            `).bind(today, monthStart, storeId).first(),
+                FROM expenses WHERE userId = ? AND date >= ?
+            `).bind(today, monthStart, storeId, monthStart).first(),
 
             // Wage stats
             db.prepare(`
                 SELECT 
                     SUM(CASE WHEN date = ? THEN total ELSE 0 END) as todayTotal,
                     SUM(CASE WHEN date >= ? THEN total ELSE 0 END) as monthTotal
-                FROM wages WHERE userId = ?
-            `).bind(today, monthStart, storeId).first(),
+                FROM wages WHERE userId = ? AND date >= ?
+            `).bind(today, monthStart, storeId, monthStart).first(),
 
             // Chart data buys (Last 30 days aggregated by date)
             db.prepare(`
@@ -98,8 +98,8 @@ async function handleGet(context) {
                 GROUP BY date, rubberType
             `).bind(storeId, thirtyDaysAgo).all(),
 
-            // Recent Transactions
-            db.prepare("SELECT b.*, f.name as farmerName FROM buys b LEFT JOIN farmers f ON b.farmerId = f.id WHERE b.userId = ? ORDER BY b.date DESC, b.created_at DESC LIMIT 10").bind(storeId).all(),
+            // Recent Transactions (No JOIN needed since farmerName is stored directly in buys)
+            db.prepare("SELECT * FROM buys WHERE userId = ? ORDER BY date DESC, created_at DESC LIMIT 10").bind(storeId).all(),
             db.prepare("SELECT * FROM sells WHERE userId = ? ORDER BY date DESC, created_at DESC LIMIT 10").bind(storeId).all()
         ]);
 

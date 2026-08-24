@@ -50,7 +50,7 @@ const SellPaperReceipt = ({ printingRecord, printRef, settings, paperSlipConfig,
     return (
         <div style={{ display: 'none' }}>
             <div ref={printRef}>
-                <div className="receipt-content text-black text-[16px] leading-snug p-1 pr-[5px] font-sans" style={{ width: '100%', maxWidth: '76mm', margin: '0', paddingRight: '5px', background: 'white', boxSizing: 'border-box' }}>
+                <div className="receipt-content text-black text-[16px] leading-snug p-1 pr-[5px] font-sans" style={{ width: '100%', maxWidth: '100%', margin: '0', paddingRight: '5px', background: 'white', boxSizing: 'border-box' }}>
                     <div className="receipt-content-inner">
                         {/* Top Note */}
                         {config.topNote && (

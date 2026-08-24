@@ -1,9 +1,34 @@
-import React from 'react';
-import { FileText, Search, Printer, Trash2, Eye, User, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { FileText, Search, Printer, Trash2, Eye, User, Users, Image as ImageIcon, ChevronLeft, ChevronRight, QrCode, X } from 'lucide-react';
 import { format, addYears } from 'date-fns';
 import { th } from 'date-fns/locale';
+import toast from 'react-hot-toast';
 
-const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearchTerm, selectedDate, setSelectedDate, handlePrintReceipt, handleDelete, setViewingEslip, user, pagination, onPageChange, loanDeductions = [] }) => {
+const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearchTerm, selectedDate, setSelectedDate, handlePrintReceipt, handleDelete, setViewingEslip, user, pagination, onPageChange, loanDeductions = [], farmers = [], employees = [] }) => {
+    const [qrModalData, setQrModalData] = useState(null);
+
+    const handleShowQR = (record) => {
+        const farmer = (farmers || []).find(f => f.id === record.farmerId || f.name === record.farmerName);
+        const farmerPromptpay = farmer?.phone || farmer?.bankAccount || record.phone || '';
+        
+        const emp = (employees || []).find(e => e.farmerId === record.farmerId || e.farmerId === farmer?.id);
+        const empPromptpay = emp?.phone || emp?.bankAccount || '';
+        
+        const hasEmp = Number(record.employeeTotal) > 0;
+        const farmerAmt = Number(record.farmerTotal || (record.total - (record.employeeTotal || 0))) || 0;
+        const empAmt = Number(record.employeeTotal) || 0;
+
+        setQrModalData({
+            farmerName: record.farmerName || farmer?.name || 'เกษตรกร',
+            farmerPromptpay,
+            farmerAmt,
+            hasEmp,
+            empName: emp?.name || 'ลูกจ้าง (คนกรีด)',
+            empPromptpay,
+            empAmt,
+            activeTab: 'farmer'
+        });
+    };
     return (
         <div className="lg:col-span-2">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -12,6 +37,10 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
                         <h2 className="text-lg font-bold text-gray-900 flex items-center">
                             <FileText className="mr-2 text-gray-500" size={20} />
                             ประวัติการรับซื้อ
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 ml-2.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-xs">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                Real-time
+                            </span>
                         </h2>
                         <div className="flex items-center bg-white border border-gray-300 rounded-lg px-2 py-1 shadow-sm">
                             <span className="text-xs font-bold text-gray-400 mr-2 uppercase tracking-tighter">วันที่:</span>
@@ -94,13 +123,21 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
                                                             <span className="flex items-center gap-2">
                                                                 {record.farmerName}{hasAnyDed ? '*' : ''}
                                                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${
-                                                                (record.rubberType === 'cup_lump' || record.rubber_type === 'cup_lump') 
-                                                                    ? 'bg-amber-100 text-amber-700 border border-amber-200' 
-                                                                    : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                                                            }`}>
-                                                                {(record.rubberType === 'cup_lump' || record.rubber_type === 'cup_lump') ? 'ขี้ยาง' : 'น้ำยาง'}
+                                                                    (record.rubberType === 'cup_lump' || record.rubber_type === 'cup_lump') 
+                                                                        ? 'bg-amber-100 text-amber-700 border border-amber-200' 
+                                                                        : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                                                }`}>
+                                                                    {(record.rubberType === 'cup_lump' || record.rubber_type === 'cup_lump') ? 'ขี้ยาง' : 'น้ำยาง'}
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleShowQR(record)}
+                                                                    className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                                                                    title="สร้าง PromptPay QR Code ชำระเงิน"
+                                                                >
+                                                                    <QrCode size={15} />
+                                                                </button>
                                                             </span>
-                                                        </span>
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
@@ -196,6 +233,116 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
                     )}
                 </div>
             </div>
+
+            {/* PromptPay QR Code Modal */}
+            {qrModalData && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden animate-in fade-in zoom-in duration-300">
+                        {/* Header */}
+                        <div className="bg-blue-600 p-5 text-white relative">
+                            <button 
+                                onClick={() => setQrModalData(null)}
+                                className="absolute right-4 top-4 p-1 hover:bg-white/20 rounded-full transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2.5 bg-white/20 rounded-xl">
+                                    <QrCode size={22} />
+                                </div>
+                                <h3 className="text-xl font-bold">PromptPay QR Code</h3>
+                            </div>
+
+                            {/* Tab Switcher if has employee */}
+                            {qrModalData.hasEmp ? (
+                                <div className="flex bg-blue-700/60 p-1 rounded-xl mt-3 border border-white/10">
+                                    <button
+                                        type="button"
+                                        onClick={() => setQrModalData(prev => ({ ...prev, activeTab: 'farmer' }))}
+                                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                            qrModalData.activeTab === 'farmer' ? 'bg-white text-blue-700 shadow-sm' : 'text-blue-100 hover:bg-white/10'
+                                        }`}
+                                    >
+                                        <User size={14} /> เกษตรกร
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setQrModalData(prev => ({ ...prev, activeTab: 'employee' }))}
+                                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                            qrModalData.activeTab === 'employee' ? 'bg-white text-blue-700 shadow-sm' : 'text-blue-100 hover:bg-white/10'
+                                        }`}
+                                    >
+                                        <Users size={14} /> ลูกจ้าง (คนกรีด)
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="mt-2">
+                                    <p className="text-xs opacity-80 uppercase tracking-wider font-medium">เกษตรกรผู้รับเงิน</p>
+                                    <p className="text-lg font-bold truncate">{qrModalData.farmerName}</p>
+                                </div>
+                            )}
+                        </div>
+                        
+                        {/* Body */}
+                        <div className="p-6 flex flex-col items-center">
+                            {(() => {
+                                const isFarmer = qrModalData.activeTab === 'farmer';
+                                const targetName = isFarmer ? qrModalData.farmerName : qrModalData.empName;
+                                const targetPromptpay = isFarmer ? qrModalData.farmerPromptpay : qrModalData.empPromptpay;
+                                const targetAmt = isFarmer ? qrModalData.farmerAmt : qrModalData.empAmt;
+
+                                if (!targetPromptpay) {
+                                    return (
+                                        <div className="w-full text-center py-8 px-4">
+                                            <div className="p-3 bg-amber-50 text-amber-600 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
+                                                <QrCode size={24} />
+                                            </div>
+                                            <p className="font-bold text-gray-800 text-sm mb-1">{targetName}</p>
+                                            <p className="text-xs text-amber-600 font-medium">
+                                                ยังไม่ได้ระบุเบอร์โทรศัพท์หรือเลขบัญชี PromptPay ของ{isFarmer ? 'เกษตรกร' : 'ลูกจ้าง'}รายนี้
+                                            </p>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <>
+                                        <div className="bg-white p-3 border-2 border-dashed border-gray-100 rounded-2xl shadow-inner mb-4">
+                                            <img 
+                                                src={`https://promptpay.io/${targetPromptpay}/${targetAmt}.png`} 
+                                                alt="PromptPay QR Code"
+                                                className="w-44 h-44"
+                                            />
+                                        </div>
+
+                                        <div className="w-full bg-gray-50 rounded-xl p-3.5 mb-5 border border-gray-100 space-y-1.5">
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="text-gray-500">ชื่อผู้รับโอน ({isFarmer ? 'เกษตรกร' : 'ลูกจ้าง'})</span>
+                                                <span className="font-bold text-gray-900 truncate max-w-[160px]">{targetName}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="text-gray-500">PromptPay / เบอร์โทร</span>
+                                                <span className="font-bold text-gray-700">{targetPromptpay}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center pt-1 border-t border-gray-200">
+                                                <span className="text-xs text-gray-500 font-medium">ยอดโอนสุทธิ</span>
+                                                <span className="text-base font-black text-blue-600">฿ {targetAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+
+                            <button 
+                                onClick={() => setQrModalData(null)}
+                                className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-sm rounded-xl transition-colors"
+                            >
+                                ปิดหน้าต่าง
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

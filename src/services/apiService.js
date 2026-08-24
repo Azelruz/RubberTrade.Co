@@ -172,13 +172,13 @@ const fetchAPI = async (endpoint, options = {}) => {
 }
 
 // --- HYBRID READ: Online = API, Offline = IndexedDB ---
-const offlineRead = async (table, fallbackEndpoint) => {
+const offlineRead = async (table, fallbackEndpoint, force = false) => {
     const switchedStoreId = localStorage.getItem('rt_active_store_id');
 
     // ONLINE: Always fetch from API directly
     if (navigator.onLine) {
-        // Bypass cache if switched store
-        if (!switchedStoreId) {
+        // Bypass cache if switched store or force parameter is true
+        if (!switchedStoreId && !force) {
             const cached = getCache(table);
             if (cached) return cached;
         }
@@ -337,11 +337,42 @@ export const fetchDashboardData = async (force = false) => {
     }
 };
 
-// Replace Read Operations with offlineRead
-export const fetchFarmers = async () => await offlineRead('farmers', '/farmers');
-export const fetchBuys = async () => await offlineRead('buys', '/buys'); // legacy or internal usage
-export const fetchBuyRecords = async () => await offlineRead('buys', '/buys');
-export const fetchSellRecords = async () => await offlineRead('sells', '/sells');
+export const fetchFarmers = async (includeStats = false) => {
+    const endpoint = includeStats ? '/farmers?includeStats=true' : '/farmers';
+    return await offlineRead('farmers', endpoint);
+};
+export const fetchBuyRecords = async (force = false, dateParams = null) => {
+    let endpoint = '/buys';
+    if (dateParams) {
+        if (typeof dateParams === 'string') {
+            endpoint = `/buys?startDate=${dateParams}&endDate=${dateParams}`;
+        } else if (typeof dateParams === 'object') {
+            const query = new URLSearchParams(dateParams).toString();
+            if (query) endpoint = `/buys?${query}`;
+        }
+    }
+    return await offlineRead('buys', endpoint, force);
+};
+export const fetchSellRecords = async (force = false, dateParams = null) => {
+    let endpoint = '/sells';
+    if (dateParams) {
+        if (typeof dateParams === 'string') {
+            endpoint = `/sells?startDate=${dateParams}&endDate=${dateParams}`;
+        } else if (typeof dateParams === 'object') {
+            const query = new URLSearchParams(dateParams).toString();
+            if (query) endpoint = `/sells?${query}`;
+        }
+    }
+    return await offlineRead('sells', endpoint, force);
+};
+
+export const fetchStockSummary = async () => {
+    const res = await fetchAPI('/sells?stockSummary=true');
+    if (res && res.status === 'success') {
+        return res.stockMetrics;
+    }
+    return { currentStock: 0, cupLumpStock: 0, avgDrc: 0 };
+};
 
 // --- New Paginated History fetchers ---
 export const fetchBuyHistory = async (params = {}) => {
@@ -365,8 +396,30 @@ export const fetchEmployees = async () => await offlineRead('employees', '/emplo
 export const fetchStaff = async () => await offlineRead('staff', '/staff');
 export const fetchFactories = async () => await offlineRead('factories', '/factories');
 export const fetchTrucks = async () => await offlineRead('trucks', '/trucks');
-export const fetchExpenses = async () => await offlineRead('expenses', '/expenses');
-export const fetchWages = async () => await offlineRead('wages', '/wages');
+export const fetchExpenses = async (dateParams = null) => {
+    let endpoint = '/expenses';
+    if (dateParams) {
+        if (typeof dateParams === 'string') {
+            endpoint = `/expenses?startDate=${dateParams}&endDate=${dateParams}`;
+        } else if (typeof dateParams === 'object') {
+            const query = new URLSearchParams(dateParams).toString();
+            if (query) endpoint = `/expenses?${query}`;
+        }
+    }
+    return await offlineRead('expenses', endpoint);
+};
+export const fetchWages = async (dateParams = null) => {
+    let endpoint = '/wages';
+    if (dateParams) {
+        if (typeof dateParams === 'string') {
+            endpoint = `/wages?startDate=${dateParams}&endDate=${dateParams}`;
+        } else if (typeof dateParams === 'object') {
+            const query = new URLSearchParams(dateParams).toString();
+            if (query) endpoint = `/wages?${query}`;
+        }
+    }
+    return await offlineRead('wages', endpoint);
+};
 export const fetchPromotions = async () => await offlineRead('promotions', '/promotions');
 export const fetchChemicalUsage = async () => await offlineRead('chemicals', '/chemicals');
 export const fetchMemberTypes = async () => await offlineRead('farmer_types', '/member-types');

@@ -29,7 +29,7 @@ async function handleGet(context) {
             SELECT AVG(daily_weight) as avg_weight, AVG(avg_daily_drc) as avg_drc FROM (
                 SELECT SUM(weight) as daily_weight, AVG(drc) as avg_daily_drc
                 FROM buys 
-                WHERE userId = ? AND rubberType = 'latex' AND weight > 0
+                WHERE userId = ? AND rubberType = 'latex' AND weight > 0 AND date >= date('now', '-60 days')
                 GROUP BY date 
                 ORDER BY date DESC 
                 LIMIT 14

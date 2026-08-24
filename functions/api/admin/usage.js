@@ -58,18 +58,17 @@ async function handleGet(context) {
             let totalStorageKb = 0;
             const tableStats = [];
 
-            for (const table of tables) {
-                try {
-                    const countRes = await db.prepare(`SELECT COUNT(*) as count FROM ${table.name} WHERE userId = ?`).bind(targetUserId).first();
-                    const count = countRes?.count || 0;
-                    const estSize = count * table.size;
-                    totalRows += count;
-                    totalStorageKb += estSize;
-                    tableStats.push({ name: table.name, count, estSizeKb: estSize });
-                } catch (e) {
-                    // Table might not have userId yet or not exist
-                }
-            }
+            const batchStmts = tables.map(table => db.prepare(`SELECT COUNT(*) as count FROM ${table.name} WHERE userId = ?`).bind(targetUserId));
+            const batchResults = await db.batch(batchStmts);
+
+            batchResults.forEach((res, idx) => {
+                const table = tables[idx];
+                const count = res?.results?.[0]?.count || 0;
+                const estSize = count * table.size;
+                totalRows += count;
+                totalStorageKb += estSize;
+                tableStats.push({ name: table.name, count, estSizeKb: estSize });
+            });
 
             return jsonResponse({
                 daily: daily?.results || [],

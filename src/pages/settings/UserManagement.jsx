@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { 
     Leaf, RefreshCw, Plus, Phone, MapPin, Database, Edit2, Trash2, 
@@ -8,11 +9,13 @@ import { differenceInDays, format, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { db } from '../../services/db';
+import ReportPrintHeader from '../../components/ReportPrintHeader';
 import { 
     fetchFarmers, 
     fetchEmployees, 
     fetchMemberTypes, 
     fetchBuyRecords,
+    getSettings,
     addFarmer, 
     addEmployee, 
     deleteRecord,
@@ -22,6 +25,7 @@ import {
 } from '../../services/apiService';
 
 export const UserManagement = () => {
+    const location = useLocation();
     const [activeSubTab, setActiveSubTab] = useState('farmers');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -31,10 +35,20 @@ export const UserManagement = () => {
     const [employees, setEmployees] = useState([]);
     const [memberTypes, setMemberTypes] = useState([]);
     const [buys, setBuys] = useState([]);
+    const [settings, setSettings] = useState({});
 
     // Activity Filter State
-    const [activityFilter, setActivityFilter] = useState('all'); // 'all', 'active', 'inactive_30', 'inactive_60', 'never', 'custom_days'
-    const [customDaysThreshold, setCustomDaysThreshold] = useState(30);
+    const [activityFilter, setActivityFilter] = useState(location.state?.activityFilter || 'all'); // 'all', 'active', 'inactive_30', 'inactive_60', 'never', 'custom_days'
+    const [customDaysThreshold, setCustomDaysThreshold] = useState(location.state?.customDaysThreshold || 60);
+
+    useEffect(() => {
+        if (location.state?.activityFilter) {
+            setActivityFilter(location.state.activityFilter);
+        }
+        if (location.state?.customDaysThreshold) {
+            setCustomDaysThreshold(location.state.customDaysThreshold);
+        }
+    }, [location.state]);
 
     // UI States
     const [showFarmerForm, setShowFarmerForm] = useState(false);
@@ -74,16 +88,18 @@ export const UserManagement = () => {
                 if (localBuys && localBuys.length > 0) setBuys(localBuys);
             } catch (e) { console.error(e); }
 
-            const [fRes, eRes, mtRes, bRes] = await Promise.all([
-                fetchFarmers(),
+            const [fRes, eRes, mtRes, bRes, sRes] = await Promise.all([
+                fetchFarmers(true),
                 fetchEmployees(),
                 fetchMemberTypes(),
-                fetchBuyRecords()
+                fetchBuyRecords(),
+                getSettings()
             ]);
             setFarmers(Array.isArray(fRes) ? fRes : []);
             setEmployees(Array.isArray(eRes) ? eRes : []);
             setMemberTypes(Array.isArray(mtRes) ? mtRes : []);
             if (Array.isArray(bRes)) setBuys(bRes);
+            if (sRes && sRes.status === 'success' && sRes.data) setSettings(sRes.data);
         } catch (error) {
             toast.error('โหลดข้อมูลล้มเหลว');
         } finally {
@@ -229,16 +245,27 @@ export const UserManagement = () => {
             }
         });
 
-        // Resolve map entries for all farmers by id or name
+        // Resolve map entries for all farmers by id or name, combining local buys with server-computed lastBuyDate
         const result = {};
         farmers.forEach(f => {
             const entry = map[f.id] || map[f.name];
-            if (entry && entry.lastDate) {
-                const daysAgo = differenceInDays(today, entry.lastDate);
+            const localDate = entry?.lastDate || null;
+            const apiDate = f.lastBuyDate ? new Date(f.lastBuyDate) : null;
+
+            // Pick the latest known purchase date between local buys and server API
+            let finalLastDate = null;
+            if (localDate && apiDate) {
+                finalLastDate = localDate > apiDate ? localDate : apiDate;
+            } else {
+                finalLastDate = localDate || apiDate;
+            }
+
+            if (finalLastDate && !isNaN(finalLastDate.getTime())) {
+                const daysAgo = differenceInDays(today, finalLastDate);
                 result[f.id] = {
-                    lastDate: entry.lastDate,
+                    lastDate: finalLastDate,
                     daysAgo: Math.max(0, daysAgo),
-                    count: entry.count
+                    count: Math.max(entry?.count || 0, f.buyCount || 0)
                 };
             } else {
                 result[f.id] = { lastDate: null, daysAgo: null, count: 0 };
@@ -285,13 +312,25 @@ export const UserManagement = () => {
             if (activityFilter === 'inactive_30') return act && act.daysAgo !== null && act.daysAgo > 30 && act.daysAgo <= 60;
             if (activityFilter === 'inactive_60') return act && act.daysAgo !== null && act.daysAgo > 60;
             if (activityFilter === 'never') return !act || act.daysAgo === null;
-            if (activityFilter === 'custom_days') return act && act.daysAgo !== null && act.daysAgo >= Number(customDaysThreshold);
+            if (activityFilter === 'custom_days') return !act || act.daysAgo === null || act.daysAgo >= Number(customDaysThreshold);
             return true;
         });
     }, [farmers, farmerSearch, activityFilter, farmerActivityMap, customDaysThreshold]);
 
     return (
         <div className="space-y-6">
+            <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                    @page { size: A4 portrait; margin: 10mm; }
+                    html, body, #root, main, div { overflow: visible !important; height: auto !important; max-height: none !important; }
+                    .no-print { display: none !important; }
+                    tr { page-break-inside: avoid; }
+                    thead { display: table-header-group; }
+                    tfoot { display: table-footer-group; }
+                }
+            ` }} />
+            
+            <div className="no-print space-y-6">
             {/* Sub-Tabs */}
             <div className="flex space-x-1 bg-gray-100 rounded-xl p-1">
                 <button
@@ -1003,6 +1042,111 @@ export const UserManagement = () => {
                     </div>
                 </section>
             )}
+            </div>
+            {/* End no-print wrapper */}
+
+            {/* A4 Printable View (Visible only during window.print()) */}
+            <div className="hidden print:block text-black p-4 font-sans bg-white">
+                <ReportPrintHeader 
+                    settings={settings}
+                    title={
+                        activityFilter === 'custom_days' 
+                            ? `รายงานสรุปเกษตรกรที่ไม่ได้มาขายน้ำยางเกิน ${customDaysThreshold} วัน`
+                            : activityFilter === 'inactive_30'
+                            ? 'รายงานสรุปเกษตรกรที่ขาดการติดต่อ 31 - 60 วัน'
+                            : activityFilter === 'inactive_60'
+                            ? 'รายงานสรุปเกษตรกรที่ขาดการติดต่อนานเกิน 60 วัน'
+                            : activityFilter === 'never'
+                            ? 'รายงานสรุปเกษตรกรที่ยังไม่เคยมีประวัติขาย'
+                            : activityFilter === 'active'
+                            ? 'รายงานสรุปเกษตรกรที่มาขายปกติ (≤30 วัน)'
+                            : 'รายงานสรุปรายชื่อเกษตรกรทั้งหมด'
+                    }
+                    subtitle={`ข้อมูล ณ วันที่ ${format(new Date(), 'd MMMM yyyy', { locale: th })} | พบทั้งหมด ${filteredFarmers.length} คน จากเกษตรกรในระบบ ${farmers.length} คน`}
+                />
+
+                {/* Summary Info Cards */}
+                <div className="grid grid-cols-4 gap-2 mb-4 p-3 border border-black rounded bg-gray-50 text-center text-xs">
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">มาขายปกติ (≤30 วัน)</span>
+                        <span className="text-sm font-bold">{activityStats.active} คน</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ขาดติดต่อ (31-60 วัน)</span>
+                        <span className="text-sm font-bold">{activityStats.inactive30} คน</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ขาดติดต่อนาน (&gt;60 วัน)</span>
+                        <span className="text-sm font-bold">{activityStats.inactive60} คน</span>
+                    </div>
+                    <div>
+                        <span className="block text-[10px] font-bold text-gray-600">ยังไม่เคยขาย</span>
+                        <span className="text-sm font-bold">{activityStats.never} คน</span>
+                    </div>
+                </div>
+
+                {/* Details Table */}
+                <table className="w-full border-collapse border border-black text-xs">
+                    <thead>
+                        <tr className="bg-gray-100 border-b border-black">
+                            <th className="border border-black p-1.5 text-center w-10">ลำดับ</th>
+                            <th className="border border-black p-1.5 text-left">ชื่อ-นามสกุล (รหัส)</th>
+                            <th className="border border-black p-1.5 text-left">เบอร์โทรศัพท์</th>
+                            <th className="border border-black p-1.5 text-left">ประวัติการขายล่าสุด</th>
+                            <th className="border border-black p-1.5 text-center">สถานะกิจกรรม</th>
+                            <th className="border border-black p-1.5 text-left">ที่อยู่</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filteredFarmers.map((f, idx) => {
+                            const act = farmerActivityMap[f.id];
+                            return (
+                                <tr key={f.id} className="border-b border-gray-300">
+                                    <td className="border border-black p-1.5 text-center">{idx + 1}</td>
+                                    <td className="border border-black p-1.5 font-bold">
+                                        {f.name} <span className="font-normal text-[10px] text-gray-500">({f.id})</span>
+                                    </td>
+                                    <td className="border border-black p-1.5 font-mono">{f.phone || '-'}</td>
+                                    <td className="border border-black p-1.5">
+                                        {act && act.lastDate ? (
+                                            `${format(act.lastDate, 'd MMM yyyy', { locale: th })} (${act.count} รายการ)`
+                                        ) : (
+                                            'ยังไม่มีประวัติ'
+                                        )}
+                                    </td>
+                                    <td className="border border-black p-1.5 text-center font-bold">
+                                        {act && act.daysAgo !== null ? (
+                                            act.daysAgo === 0 ? 'วันนี้' : `${act.daysAgo} วันที่แล้ว`
+                                        ) : (
+                                            'ยังไม่เคยขาย'
+                                        )}
+                                    </td>
+                                    <td className="border border-black p-1.5">{f.address || '-'}</td>
+                                </tr>
+                            );
+                        })}
+                        {filteredFarmers.length === 0 && (
+                            <tr>
+                                <td colSpan="6" className="border border-black p-4 text-center text-gray-500">
+                                    ไม่พบข้อมูลเกษตรกรในเงื่อนไขที่เลือก
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+
+                {/* Print Footer / Signatures */}
+                <div className="mt-8 flex justify-between items-end text-xs pt-4 border-t border-gray-300">
+                    <div>
+                        <p>ผู้ออกรายงาน: ....................................................</p>
+                        <p className="mt-1">วันที่พิมพ์: {format(new Date(), 'dd/MM/yyyy HH:mm')} น.</p>
+                    </div>
+                    <div className="text-center">
+                        <p>ลงชื่อ ....................................................</p>
+                        <p className="mt-1">( ผู้รับผิดชอบ/เจ้าหน้าที่ )</p>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };

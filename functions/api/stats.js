@@ -23,7 +23,7 @@ async function handleGet(context) {
             todayExp, todayWage, 
             monthBuysLatex, monthBuysCupLump, monthSellsLatex, monthSellsCupLump, 
             monthExp, monthWage, 
-            unpaid, settings, marketPrices, buyHistory, sellHistory, recentRecords
+            unpaid, settings, marketPrices, buyHistory, sellHistory, recentBuys, recentSells
         ] = await Promise.all([
             // --- TODAY'S DATA ---
             db.prepare(`
@@ -59,16 +59,17 @@ async function handleGet(context) {
             db.prepare("SELECT id, date, price, source FROM market_prices WHERE userId IS NULL OR userId = ? ORDER BY date DESC LIMIT 30").bind(storeId).all(),
             db.prepare(`SELECT date, AVG(pricePerKg) as avgPrice FROM buys WHERE userId = ? AND date >= date('now', ?, '-30 days') GROUP BY date ORDER BY date DESC`).bind(storeId, tzOffset).all(),
             db.prepare(`SELECT date, AVG(pricePerKg) as avgPrice FROM sells WHERE userId = ? AND date >= date('now', ?, '-30 days') GROUP BY date ORDER BY date DESC`).bind(storeId, tzOffset).all(),
-            db.prepare(`
-                SELECT * FROM (
-                    SELECT 'buy' as type, id, date, total, farmerName as name, farmerId as partyId, created_at
-                    FROM buys WHERE userId = ?
-                    UNION ALL
-                    SELECT 'sell' as type, id, date, total, buyerName as name, factoryId as partyId, created_at
-                    FROM sells WHERE userId = ?
-                ) ORDER BY date DESC, created_at DESC LIMIT 10
-            `).bind(storeId, storeId).all()
+            db.prepare("SELECT 'buy' as type, id, date, total, farmerName as name, farmerId as partyId, created_at FROM buys WHERE userId = ? ORDER BY date DESC, created_at DESC LIMIT 10").bind(storeId).all(),
+            db.prepare("SELECT 'sell' as type, id, date, total, buyerName as name, factoryId as partyId, created_at FROM sells WHERE userId = ? ORDER BY date DESC, created_at DESC LIMIT 10").bind(storeId).all()
         ]);
+
+        const combinedRecent = [
+            ...(recentBuys?.results || []),
+            ...(recentSells?.results || [])
+        ].sort((a, b) => {
+            if (a.date !== b.date) return b.date.localeCompare(a.date);
+            return (b.created_at || '').localeCompare(a.created_at || '');
+        }).slice(0, 10);
 
         const settingsMap = {};
         if (settings?.results) {
@@ -105,7 +106,7 @@ async function handleGet(context) {
                     buys: buyHistory?.results || [],
                     sells: sellHistory?.results || []
                 },
-                recentRecords: recentRecords?.results || []
+                recentRecords: combinedRecent
             },
             marketPrices: marketPrices?.results || [],
             filter: { today: dateParam, month: dateParam.substring(0, 7) }
