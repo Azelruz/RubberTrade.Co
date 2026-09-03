@@ -3,13 +3,13 @@ import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import { Gift, Award, Clock, Users, Search, Trash2, PlusCircle, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { fetchBuyRecords, fetchFarmers, fetchPromotions, addPromotion, getSettings, deleteRecord, isCached } from '../services/apiService';
+import { fetchFarmerBuyStats, fetchFarmers, fetchPromotions, addPromotion, getSettings, deleteRecord, isCached } from '../services/apiService';
 import ReportPrintHeader from '../components/ReportPrintHeader';
 
 export const Promotions = () => {
     const [activeTab, setActiveTab] = useState('points'); // points, history
     const [farmers, setFarmers] = useState([]);
-    const [buyRecords, setBuyRecords] = useState([]);
+    const [farmerBuyStats, setFarmerBuyStats] = useState([]);
     const [promotions, setPromotions] = useState([]);
     const [pointsPerKg, setPointsPerKg] = useState(10); // default 10kg = 1 point
     const [settings, setSettings] = useState({});
@@ -30,13 +30,13 @@ export const Promotions = () => {
     const loadData = async () => {
         if (!isCached('buys', 'farmers')) setLoading(true);
         try {
-            const [bRaw, fData, pRaw, sRes] = await Promise.all([
-                fetchBuyRecords(),
+            const [bStats, fData, pRaw, sRes] = await Promise.all([
+                fetchFarmerBuyStats(),
                 fetchFarmers(),
                 fetchPromotions(),
                 getSettings()
             ]);
-            setBuyRecords(Array.isArray(bRaw) ? bRaw : []);
+            setFarmerBuyStats(Array.isArray(bStats) ? bStats : []);
             setFarmers(fData || []);
             setPromotions(Array.isArray(pRaw) ? [...pRaw].reverse() : []);
 
@@ -58,12 +58,12 @@ export const Promotions = () => {
             return { totalWeight: 0, earnedPoints: 0, usedPoints: 0, currentPoints: 0 };
         }
 
-        // 1. Total Weight (fallback to name if farmerId missing from sheet)
-        const farmerBuys = buyRecords.filter(r => 
-            (r.farmerId && String(r.farmerId) === String(farmerId)) ||
-            (r.farmerName && String(r.farmerName).trim() === String(farmer.name).trim())
+        // 1. Total Weight from SQL aggregated stats (fallback to name if farmerId missing)
+        const stats = farmerBuyStats.filter(s => 
+            (s.farmerId && String(s.farmerId) === String(farmerId)) ||
+            (s.farmerName && String(s.farmerName).trim() === String(farmer.name).trim())
         );
-        const totalWeight = farmerBuys.reduce((sum, r) => sum + Number(r.dryRubber || r.dryWeight || 0), 0);
+        const totalWeight = stats.reduce((sum, s) => sum + Number(s.totalDryRubber || 0), 0);
         
         // 2. Total Earned Points
         const earnedPoints = Math.floor(totalWeight / pointsPerKg);

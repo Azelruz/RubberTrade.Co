@@ -62,6 +62,14 @@ export const verifyJWT = async (request, env) => {
     }
 };
 
+// In-Memory Auth Cache for Worker Isolates (TTL 60s)
+const userAuthMap = new Map();
+
+export const invalidateUserAuthCache = (userId) => {
+    if (userId) userAuthMap.delete(userId);
+    else userAuthMap.clear();
+};
+
 export const withAuth = (handler) => {
     return async (context) => {
         const payload = await verifyJWT(context.request, context.env);
@@ -73,8 +81,18 @@ export const withAuth = (handler) => {
         context.db = db;
         const userId = payload.sub;
         
-        // Fetch user subscription info from DB
-        let userRecord = await db.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first();
+        // Fetch user subscription info from In-Memory Cache or DB (TTL 60s)
+        const cachedUser = userAuthMap.get(userId);
+        let userRecord = null;
+
+        if (cachedUser && (Date.now() - cachedUser._timestamp < 60000)) {
+            userRecord = cachedUser.data;
+        } else {
+            userRecord = await db.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first();
+            if (userRecord) {
+                userAuthMap.set(userId, { data: userRecord, _timestamp: Date.now() });
+            }
+        }
         
         // --- NEW: Invited Email Linkage ---
         if (!userRecord && payload.email) {
@@ -84,6 +102,7 @@ export const withAuth = (handler) => {
                 // "Claim" the placeholder record
                 await db.prepare("UPDATE users SET id = ? WHERE id = ?").bind(userId, invitedRecord.id).run();
                 userRecord = { ...invitedRecord, id: userId };
+                userAuthMap.set(userId, { data: userRecord, _timestamp: Date.now() });
                 console.log(`[Auth] User ${payload.email} claimed invitation ${invitedRecord.id}`);
             }
         }
@@ -104,6 +123,7 @@ export const withAuth = (handler) => {
                 subscription_status: 'trial',
                 subscription_expiry: expiryStr
             };
+            userAuthMap.set(userId, { data: userRecord, _timestamp: Date.now() });
         }
 
         // Add user info to context
@@ -195,6 +215,130 @@ export const withSuperAdmin = (handler) => {
         }
         return handler(context);
     });
+};
+
+export const updateFarmerStats = async (db, farmerId, storeId) => {
+    if (!farmerId || !db) return;
+    try {
+        await db.prepare(`
+            UPDATE farmers 
+            SET 
+                lastBuyDate = s.maxDate,
+                buyCount = s.recentCount
+            FROM (
+                SELECT 
+                    MAX(date) as maxDate,
+                    COUNT(CASE WHEN date >= date('now', '-60 days') THEN 1 END) as recentCount
+                FROM buys 
+                WHERE farmerId = ? AND userId = ?
+            ) s
+            WHERE farmers.id = ? AND farmers.userId = ?
+        `).bind(farmerId, storeId, farmerId, storeId).run();
+    } catch (e) {
+        console.error('[updateFarmerStats Error]', e);
+    }
+};
+
+export const syncStoreStockSummary = async (db, storeId, delta = null) => {
+    if (!storeId || !db) return;
+    try {
+        if (delta && typeof delta === 'object' && Object.keys(delta).length > 0) {
+            // Incremental Delta Update for 99.9% D1 Rows Read reduction
+            await db.prepare(`
+                INSERT INTO store_stock_summary (
+                    userId, latexBuyWeight, cupLumpBuyWeight, totalDrcWeight, 
+                    ammonia, water, whiteMedicine, 
+                    latexSellWeight, latexSellLoss, cupLumpSellWeight, updated_at
+                )
+                VALUES (
+                    ?,
+                    MAX(0, COALESCE(?, 0)), MAX(0, COALESCE(?, 0)), MAX(0, COALESCE(?, 0)),
+                    MAX(0, COALESCE(?, 0)), MAX(0, COALESCE(?, 0)), MAX(0, COALESCE(?, 0)),
+                    MAX(0, COALESCE(?, 0)), MAX(0, COALESCE(?, 0)), MAX(0, COALESCE(?, 0)),
+                    datetime('now')
+                )
+                ON CONFLICT(userId) DO UPDATE SET
+                    latexBuyWeight = MAX(0, latexBuyWeight + COALESCE(excluded.latexBuyWeight, 0)),
+                    cupLumpBuyWeight = MAX(0, cupLumpBuyWeight + COALESCE(excluded.cupLumpBuyWeight, 0)),
+                    totalDrcWeight = MAX(0, totalDrcWeight + COALESCE(excluded.totalDrcWeight, 0)),
+                    ammonia = MAX(0, ammonia + COALESCE(excluded.ammonia, 0)),
+                    water = MAX(0, water + COALESCE(excluded.water, 0)),
+                    whiteMedicine = MAX(0, whiteMedicine + COALESCE(excluded.whiteMedicine, 0)),
+                    latexSellWeight = MAX(0, latexSellWeight + COALESCE(excluded.latexSellWeight, 0)),
+                    latexSellLoss = MAX(0, latexSellLoss + COALESCE(excluded.latexSellLoss, 0)),
+                    cupLumpSellWeight = MAX(0, cupLumpSellWeight + COALESCE(excluded.cupLumpSellWeight, 0)),
+                    updated_at = datetime('now')
+            `).bind(
+                storeId,
+                delta.latexBuyWeight || 0,
+                delta.cupLumpBuyWeight || 0,
+                delta.totalDrcWeight || 0,
+                delta.ammonia || 0,
+                delta.water || 0,
+                delta.whiteMedicine || 0,
+                delta.latexSellWeight || 0,
+                delta.latexSellLoss || 0,
+                delta.cupLumpSellWeight || 0
+            ).run();
+            return;
+        }
+
+        // Full Sync Fallback
+        await db.prepare(`
+            INSERT INTO store_stock_summary (
+                userId, latexBuyWeight, cupLumpBuyWeight, totalDrcWeight, 
+                ammonia, water, whiteMedicine, 
+                latexSellWeight, latexSellLoss, cupLumpSellWeight, updated_at
+            )
+            SELECT 
+                ? as userId,
+                COALESCE(b.latexBuyWeight, 0),
+                COALESCE(b.cupLumpBuyWeight, 0),
+                COALESCE(b.totalDrcWeight, 0),
+                COALESCE(c.ammonia, 0),
+                COALESCE(c.water, 0),
+                COALESCE(c.whiteMedicine, 0),
+                COALESCE(s.latexSellWeight, 0),
+                COALESCE(s.latexSellLoss, 0),
+                COALESCE(s.cupLumpSellWeight, 0),
+                datetime('now')
+            FROM (SELECT ? as storeId) u
+            LEFT JOIN (
+                SELECT 
+                    SUM(CASE WHEN (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN (weight - bucketWeight) ELSE 0 END) as latexBuyWeight,
+                    SUM(CASE WHEN (rubberType = 'cup_lump' OR rubberType = 'ขี้ยาง') THEN (weight - bucketWeight) ELSE 0 END) as cupLumpBuyWeight,
+                    SUM(CASE WHEN (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN ((weight - bucketWeight) * drc) ELSE 0 END) as totalDrcWeight
+                FROM buys WHERE userId = ?
+            ) b ON 1=1
+            LEFT JOIN (
+                SELECT 
+                    SUM(CASE WHEN chemicalId = 'ammonia' THEN amount ELSE 0 END) as ammonia,
+                    SUM(CASE WHEN chemicalId = 'water' THEN amount ELSE 0 END) as water,
+                    SUM(CASE WHEN chemicalId = 'whiteMedicine' THEN amount ELSE 0 END) as whiteMedicine
+                FROM chemical_usage WHERE userId = ?
+            ) c ON 1=1
+            LEFT JOIN (
+                SELECT 
+                    SUM(CASE WHEN (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN weight ELSE 0 END) as latexSellWeight,
+                    SUM(CASE WHEN (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN lossWeight ELSE 0 END) as latexSellLoss,
+                    SUM(CASE WHEN (rubberType = 'cup_lump' OR rubberType = 'ขี้ยาง') THEN weight ELSE 0 END) as cupLumpSellWeight
+                FROM sells WHERE userId = ?
+            ) s ON 1=1
+            ON CONFLICT(userId) DO UPDATE SET
+                latexBuyWeight = excluded.latexBuyWeight,
+                cupLumpBuyWeight = excluded.cupLumpBuyWeight,
+                totalDrcWeight = excluded.totalDrcWeight,
+                ammonia = excluded.ammonia,
+                water = excluded.water,
+                whiteMedicine = excluded.whiteMedicine,
+                latexSellWeight = excluded.latexSellWeight,
+                latexSellLoss = excluded.latexSellLoss,
+                cupLumpSellWeight = excluded.cupLumpSellWeight,
+                updated_at = datetime('now')
+        `).bind(storeId, storeId, storeId, storeId, storeId).run();
+    } catch (e) {
+        console.error("[syncStoreStockSummary Error]", e);
+    }
 };
 
 /**
@@ -367,5 +511,93 @@ export const getTimezoneOffset = (tz = 'Asia/Bangkok') => {
         return hours >= 0 ? `+${hours} hours` : `${hours} hours`;
     } catch (e) {
         return '+7 hours';
+    }
+};
+
+/**
+ * Synchronizes daily_buys_summary table for specific dates of a store.
+ * Ensures pre-calculated daily metrics for fast dashboard queries (~30 rows read max).
+ */
+export const syncDailyBuysSummary = async (db, storeId, dates) => {
+    if (!db || !storeId || !dates || dates.length === 0) return;
+    const uniqueDates = [...new Set(dates.filter(Boolean))];
+    for (const date of uniqueDates) {
+        try {
+            const row = await db.prepare(`
+                SELECT 
+                    COALESCE(SUM(total), 0) as totalAmount,
+                    COALESCE(SUM(weight - bucketWeight), 0) as totalWeight,
+                    COALESCE(SUM(CASE WHEN (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN total ELSE 0 END), 0) as latexTotal,
+                    COALESCE(SUM(CASE WHEN (rubberType = 'cup_lump' OR rubberType = 'ขี้ยาง') THEN total ELSE 0 END), 0) as cupLumpTotal
+                FROM buys
+                WHERE userId = ? AND date = ?
+            `).bind(storeId, date).first();
+
+            const totalAmount = Number(row?.totalAmount || 0);
+            const totalWeight = Number(row?.totalWeight || 0);
+            const latexTotal = Number(row?.latexTotal || 0);
+            const cupLumpTotal = Number(row?.cupLumpTotal || 0);
+
+            if (totalAmount === 0 && totalWeight === 0) {
+                await db.prepare("DELETE FROM daily_buys_summary WHERE userId = ? AND date = ?").bind(storeId, date).run();
+            } else {
+                await db.prepare(`
+                    INSERT INTO daily_buys_summary (userId, date, totalAmount, totalWeight, latexTotal, cupLumpTotal, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+                    ON CONFLICT(userId, date) DO UPDATE SET
+                        totalAmount = excluded.totalAmount,
+                        totalWeight = excluded.totalWeight,
+                        latexTotal = excluded.latexTotal,
+                        cupLumpTotal = excluded.cupLumpTotal,
+                        updated_at = datetime('now')
+                `).bind(storeId, date, totalAmount, totalWeight, latexTotal, cupLumpTotal).run();
+            }
+        } catch (e) {
+            console.error("[syncDailyBuysSummary Error]", e);
+        }
+    }
+};
+
+/**
+ * Synchronizes daily_sells_summary table for specific dates of a store.
+ * Ensures pre-calculated daily metrics for fast sells summary queries (~30 rows read max).
+ */
+export const syncDailySellsSummary = async (db, storeId, dates) => {
+    if (!db || !storeId || !dates || dates.length === 0) return;
+    const uniqueDates = [...new Set(dates.filter(Boolean))];
+    for (const date of uniqueDates) {
+        try {
+            const row = await db.prepare(`
+                SELECT 
+                    COALESCE(SUM(total), 0) as totalAmount,
+                    COALESCE(SUM(weight), 0) as totalWeight,
+                    COALESCE(SUM(CASE WHEN (rubberType = 'latex' OR rubberType IS NULL OR rubberType = '') THEN total ELSE 0 END), 0) as latexTotal,
+                    COALESCE(SUM(CASE WHEN (rubberType = 'cup_lump' OR rubberType = 'ขี้ยาง') THEN total ELSE 0 END), 0) as cupLumpTotal
+                FROM sells
+                WHERE userId = ? AND date = ?
+            `).bind(storeId, date).first();
+
+            const totalAmount = Number(row?.totalAmount || 0);
+            const totalWeight = Number(row?.totalWeight || 0);
+            const latexTotal = Number(row?.latexTotal || 0);
+            const cupLumpTotal = Number(row?.cupLumpTotal || 0);
+
+            if (totalAmount === 0 && totalWeight === 0) {
+                await db.prepare("DELETE FROM daily_sells_summary WHERE userId = ? AND date = ?").bind(storeId, date).run();
+            } else {
+                await db.prepare(`
+                    INSERT INTO daily_sells_summary (userId, date, totalAmount, totalWeight, latexTotal, cupLumpTotal, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+                    ON CONFLICT(userId, date) DO UPDATE SET
+                        totalAmount = excluded.totalAmount,
+                        totalWeight = excluded.totalWeight,
+                        latexTotal = excluded.latexTotal,
+                        cupLumpTotal = excluded.cupLumpTotal,
+                        updated_at = datetime('now')
+                `).bind(storeId, date, totalAmount, totalWeight, latexTotal, cupLumpTotal).run();
+            }
+        } catch (e) {
+            console.error("[syncDailySellsSummary Error]", e);
+        }
     }
 };

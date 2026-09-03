@@ -27,10 +27,12 @@ import {
     ShieldAlert,
     Tv,
     Maximize2,
-    Minimize2
+    Minimize2,
+    MapPin,
+    Sparkles
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { fetchNotificationStats, adminFetchAllMembers, clearAllCache, fetchTeamMembers } from '../services/apiService';
+import { fetchNotificationStats, adminFetchAllMembers, clearAllCache, fetchTeamMembers, getSettings } from '../services/apiService';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -141,7 +143,58 @@ export const Layout = () => {
     });
     const [showNotifDropdown, setShowNotifDropdown] = useState(false);
 
+    // Feature Toggles State (Enable/Disable Menus)
+    const parseBoolSetting = (val, defaultVal = true) => {
+        if (val === undefined || val === null) return defaultVal;
+        if (typeof val === 'boolean') return val;
+        const str = String(val).trim().toLowerCase();
+        if (str === 'false' || str === '0' || str === 'off') return false;
+        if (str === 'true' || str === '1' || str === 'on') return true;
+        return defaultVal;
+    };
+
+    const [featureToggles, setFeatureToggles] = useState(() => ({
+        enableBuyMap: parseBoolSetting(localStorage.getItem('rt_enable_buy_map'), true),
+        enableSellAI: parseBoolSetting(localStorage.getItem('rt_enable_sell_ai'), true)
+    }));
+
     useEffect(() => {
+        const updateTogglesState = (buyMapVal, sellAIVal) => {
+            const mapVal = parseBoolSetting(buyMapVal, true);
+            const aiVal = parseBoolSetting(sellAIVal, true);
+            localStorage.setItem('rt_enable_buy_map', String(mapVal));
+            localStorage.setItem('rt_enable_sell_ai', String(aiVal));
+            setFeatureToggles({ enableBuyMap: mapVal, enableSellAI: aiVal });
+        };
+
+        const loadFeatureSettings = async () => {
+            try {
+                const res = await getSettings();
+                if (res.status === 'success' && res.data) {
+                    updateTogglesState(res.data.enableBuyMap, res.data.enableSellAI);
+                }
+            } catch (e) {
+                console.error('Error loading feature toggles in Layout:', e);
+            }
+        };
+
+        loadFeatureSettings();
+
+        const handleSettingsUpdated = (e) => {
+            if (e?.detail?.payload) {
+                const p = e.detail.payload;
+                if (p.enableBuyMap !== undefined || p.enableSellAI !== undefined) {
+                    updateTogglesState(
+                        p.enableBuyMap !== undefined ? p.enableBuyMap : localStorage.getItem('rt_enable_buy_map'),
+                        p.enableSellAI !== undefined ? p.enableSellAI : localStorage.getItem('rt_enable_sell_ai')
+                    );
+                }
+            }
+            loadFeatureSettings();
+        };
+
+        window.addEventListener('settings-updated', handleSettingsUpdated);
+
         const updateQueueCount = async () => {
             try {
                 const { db } = await import('../services/db');
@@ -193,6 +246,7 @@ export const Layout = () => {
         }, 5 * 60 * 1000); // Poll every 5 minutes
 
         return () => {
+            window.removeEventListener('settings-updated', handleSettingsUpdated);
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
             window.removeEventListener('sync-complete', handleSyncComplete);
@@ -209,7 +263,8 @@ export const Layout = () => {
     const navItems = [
         { name: 'แดชบอร์ด', path: '/', icon: <LayoutDashboard size={20} />, roles: ['owner', 'admin', 'staff'] },
         { name: 'รับซื้อน้ำยาง', path: '/buy', icon: <Droplets size={20} />, roles: ['owner', 'admin', 'staff'] },
-        { name: 'ขายน้ำยาง', path: '/sell', icon: <Truck size={20} />, roles: ['owner', 'admin', 'staff'] },
+        { name: 'รับซื้อน้ำยาง (Map View)', path: '/buy-map', icon: <MapPin size={20} className="text-emerald-500" />, roles: ['owner', 'admin', 'staff'] },
+        { name: 'ขายน้ำยาง', path: '/sell-ai', icon: <Truck size={20} />, roles: ['owner', 'admin', 'staff'] },
         { 
             name: 'การชำระเงิน', 
             path: '/payments', 
@@ -267,6 +322,7 @@ export const Layout = () => {
             roles: ['owner', 'staff'],
             subItems: [
                 { name: 'ข้อมูลร้านค้า', path: '/settings' },
+                { name: 'จัดการแปลงสวนยาง', path: '/land-plots' },
                 { name: 'สถานะและการสมัครสมาชิก', path: '/subscription' },
                 { name: 'จัดการข้อมูล (Import/Export)', path: '/import' },
                 { name: 'บันทึกกิจกรรม', path: '/activity-log' },
@@ -276,6 +332,10 @@ export const Layout = () => {
     ];
 
     const filteredNavItems = navItems.filter(item => {
+        // Feature Toggles Check (Enable/Disable Menus)
+        if (item.path === '/buy-map' && !featureToggles.enableBuyMap) return false;
+        if (item.path === '/sell-ai' && !featureToggles.enableSellAI) return false;
+
         if (!item.roles) return true;
         const isSuperAdmin = user?.role?.toLowerCase() === 'super_admin' || 
                            user?.email === 'narapong.an@gmail.com' || 
@@ -535,13 +595,13 @@ export const Layout = () => {
                     <div className="flex items-center space-x-2">
                         <span className="text-lg font-bold text-rubber-600 lg:hidden">RubberTrade</span>
                         <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-rubber-50 text-rubber-700 rounded-full border border-rubber-200 lg:hidden">
-                            v1.5.4
+                            v1.7.4
                         </span>
                     </div>
 
                     <div className="flex items-center ml-auto space-x-3">
                         <span className="px-2.5 py-1 text-xs font-mono font-bold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200 shadow-xs hidden md:inline-flex items-center">
-                            v1.5.4
+                            v1.7.4
                         </span>
                         <StoreSwitcher />
                         <GlobalSearch />

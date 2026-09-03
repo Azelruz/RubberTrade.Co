@@ -32,7 +32,10 @@ const PageLoader = () => (
 const Login = lazy(() => import('./pages/Login'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Buy = lazy(() => import('./pages/Buy'));
+const BuyMap = lazy(() => import('./pages/BuyMap').then(m => ({ default: m.BuyMap })));
+const LandPlots = lazy(() => import('./pages/LandPlots').then(m => ({ default: m.LandPlots })));
 const Sell = lazy(() => import('./pages/Sell'));
+const SellAI = lazy(() => import('./pages/SellAI').then(m => ({ default: m.SellAI })));
 const TransactionHistory = lazy(() => import('./pages/TransactionHistory'));
 const Report = lazy(() => import('./pages/Report'));
 const MonthlyReport = lazy(() => import('./pages/MonthlyReport'));
@@ -112,7 +115,10 @@ function App() {
             <Route path="/" element={<RootIndex />}>
               <Route index element={<Dashboard />} />
               <Route path="buy" element={<Buy />} />
-              <Route path="sell" element={<Sell />} />
+              <Route path="buy-map" element={<BuyMap />} />
+              <Route path="land-plots" element={<LandPlots />} />
+              <Route path="sell" element={<Navigate to="/sell-ai" replace />} />
+              <Route path="sell-ai" element={<SellAI />} />
               <Route path="expenses" element={<Expenses />} />
               <Route path="payments" element={<Payments />} />
               <Route path="loans" element={

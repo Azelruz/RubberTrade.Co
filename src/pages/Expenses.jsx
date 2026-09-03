@@ -3,10 +3,10 @@ import { useAuth } from '../context/AuthContext';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
-import { PlusCircle, Trash2, Edit2, Receipt, Users, Search, Wallet, Calendar, Tag, FileText, Printer } from 'lucide-react';
+import { PlusCircle, Trash2, Edit2, Receipt, Users, Search, Wallet, Calendar, Tag, FileText, Printer, Sparkles, Camera } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { calculateWage } from '../utils/calculations';
-import { fetchExpenses, addExpense, fetchWages, addWage, fetchStaff, fetchBuyRecords, deleteRecord, updateRecord, getSettings, isCached } from '../services/apiService';
+import { fetchExpenses, addExpense, fetchWages, addWage, fetchStaff, fetchBuyRecords, deleteRecord, updateRecord, getSettings, isCached, scanExpenseReceiptWithAI } from '../services/apiService';
 import ReportPrintHeader from '../components/ReportPrintHeader';
 
 const EXPENSE_CATEGORIES = [
@@ -39,7 +39,92 @@ export const Expenses = () => {
     const [confirmDeleteId, setConfirmDeleteId] = useState(null);
     const [confirmDeleteSheet, setConfirmDeleteSheet] = useState('');
     const [editingRecord, setEditingRecord] = useState(null); // { id, sheetName }
+    const [isScanningAI, setIsScanningAI] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     const isDemo = false;
+
+    const compressImageForScan = (file) => {
+        return new Promise((resolve) => {
+            if (!file.type.startsWith('image/')) return resolve(file);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const MAX_WIDTH = 1600;
+                    const MAX_HEIGHT = 1600;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height = Math.round(height * (MAX_WIDTH / width));
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width = Math.round(width * (MAX_HEIGHT / height));
+                            height = MAX_HEIGHT;
+                        }
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    canvas.toBlob((blob) => {
+                        if (!blob) return resolve(file);
+                        const resizedFile = new File([blob], file.name || 'receipt.jpg', {
+                            type: 'image/jpeg',
+                            lastModified: Date.now(),
+                        });
+                        resolve(resizedFile);
+                    }, 'image/jpeg', 0.85);
+                };
+                img.onerror = () => resolve(file);
+                img.src = e.target.result;
+            };
+            reader.onerror = () => resolve(file);
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handleAIScan = async (e) => {
+        const rawFile = e.target.files?.[0];
+        if (!rawFile) return;
+
+        setIsScanningAI(true);
+        const toastId = toast.loading('⚡ AI กำลังสแกนข้อมูลใบเสร็จแบบเร่งด่วน...');
+        try {
+            const file = await compressImageForScan(rawFile);
+            const res = await scanExpenseReceiptWithAI(file);
+            if (res?.data) {
+                const { category, amount, date, description, tax_type } = res.data;
+                const exactModel = res.model || 'Google Gemini AI';
+
+                let noteDescription = description || 'ใบเสร็จค่าใช้จ่าย';
+                if (!noteDescription.includes('โมเดล:')) {
+                    noteDescription += ` [โมเดล: ${exactModel}]`;
+                }
+
+                if (date) expenseForm.setValue('date', date);
+                if (category) expenseForm.setValue('category', category);
+                if (amount) expenseForm.setValue('amount', amount);
+                expenseForm.setValue('description', noteDescription);
+                if (tax_type) expenseForm.setValue('tax_type', tax_type);
+
+                toast.success(`⚡ สแกนสำเร็จ! (${exactModel})`, { id: toastId, duration: 4000 });
+                setShowExpenseForm(true);
+            }
+        } catch (err) {
+            console.error('AI Scan Error:', err);
+            toast.error('ล้มเหลว: ' + err.message, { id: toastId });
+        } finally {
+            setIsScanningAI(false);
+            e.target.value = '';
+        }
+    };
 
     const expenseForm = useForm({ defaultValues: { date: format(new Date(), 'yyyy-MM-dd'), tax_type: 'none', tax_amount: 0 } });
     const wageForm = useForm({ defaultValues: { date: format(new Date(), 'yyyy-MM-dd'), workDays: 1, bonus: 0 } });
@@ -393,10 +478,17 @@ export const Expenses = () => {
                                         placeholder="ค้นหาคำอธิบาย, หมวดหมู่..."
                                         className="bg-transparent text-sm w-full focus:outline-none" />
                                 </div>
-                                <button onClick={() => setShowExpenseForm(!showExpenseForm)}
-                                    className="flex items-center space-x-2 px-4 py-2 bg-rubber-600 text-white rounded-lg hover:bg-rubber-700 text-sm font-medium">
-                                    <PlusCircle size={16} /><span>เพิ่มค่าใช้จ่าย</span>
-                                </button>
+                                <div className="flex items-center space-x-2">
+                                    <label className={`flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-lg text-sm font-bold shadow-sm cursor-pointer transition-all ${isScanningAI ? 'opacity-50 pointer-events-none' : ''}`}>
+                                        <Sparkles size={16} className={isScanningAI ? "animate-spin" : "animate-pulse"} />
+                                        <span>{isScanningAI ? 'AI กำลังสแกน...' : 'สแกนบิลด้วย AI'}</span>
+                                        <input type="file" accept="image/*" onChange={handleAIScan} className="hidden" disabled={isScanningAI} />
+                                    </label>
+                                    <button onClick={() => setShowExpenseForm(!showExpenseForm)}
+                                        className="flex items-center space-x-2 px-4 py-2 bg-rubber-600 text-white rounded-lg hover:bg-rubber-700 text-sm font-medium">
+                                        <PlusCircle size={16} /><span>เพิ่มค่าใช้จ่าย</span>
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Summary */}

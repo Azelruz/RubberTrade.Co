@@ -6,7 +6,7 @@ export const db = new Dexie('RubertradeOfflineDB');
 // Define the database schema
 // ++id means auto-incremented primary key for local queue
 // Other id fields (like farmer's id) are standard keys because they are UUIDs from backend.
-db.version(5).stores({
+db.version(6).stores({
     // Core Data
     farmers: 'id, name, fscId, phone, userId, updated_at',
     staff: 'id, name, phone, userId',
@@ -15,6 +15,7 @@ db.version(5).stores({
     trucks: 'id, plateNo, factoryId, userId',
     farmer_types: 'id, name, bonus, userId',
     service_catalog: 'id, name, unit_type, price_per_unit, is_active, userId',
+    land_plots: 'id, farmerId, employeeId, deedNumber, userId, updated_at',
     
     // Transactions
     buys: 'id, date, farmerId, farmerName, status, created_at, userId',

@@ -221,19 +221,25 @@ const BuyESlipCapture = ({ eslipRef, settings, watch, watchRubberType, printingR
                                     </div>
                                 )}
 
-                                {config.showBonusMember !== false && (Number(printingReceipt?.bonusMemberType ?? (farmers.find(f => f.id === watch('farmerId'))?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === watch('farmerId')).memberTypeId)?.bonus : 0))) > 0 && (
-                                    <div className="flex justify-between items-center text-[24px] text-rubber-700 bg-rubber-50 px-2 rounded-lg">
-                                        <span className="font-black">{memberTypes.find(mt => mt.id === (printingReceipt?.memberTypeId || farmers.find(f => f.id === watch('farmerId'))?.memberTypeId))?.name || labels.bonusMember}</span>
-                                        <span className="font-black font-mono">+฿{Number(printingReceipt?.bonusMemberType ?? (farmers.find(f => f.id === watch('farmerId'))?.memberTypeId ? memberTypes.find(mt => mt.id === farmers.find(f => f.id === watch('farmerId')).memberTypeId)?.bonus : 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
-                                    </div>
-                                )}
+                                {(() => {
+                                    const mId = printingReceipt?.memberTypeId || printingReceipt?.member_type_id || farmers.find(f => f.id === watch('farmerId'))?.memberTypeId || farmers.find(f => f.id === watch('farmerId'))?.member_type_id;
+                                    const mBonus = printingReceipt?.bonusMemberType ?? printingReceipt?.bonus_member_type ?? (mId ? memberTypes.find(mt => String(mt.id) === String(mId))?.bonus : 0);
+                                    if (!Number(mBonus)) return null;
+                                    const mType = mId ? memberTypes.find(mt => String(mt.id) === String(mId)) : null;
+                                    return (
+                                        <div className="flex justify-between items-center text-[24px] text-rubber-700 bg-rubber-50 px-2 rounded-lg">
+                                            <span className="font-black">{mType?.name || labels.bonusMember}</span>
+                                            <span className="font-black font-mono">+฿{Number(mBonus).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                        </div>
+                                    );
+                                })()}
                             </>
                         )}
 
                         {config.showActualPrice !== false && (
                             <div style={{ fontSize: `${(config.fontSizeBody || 10) * 2.8}px` }} className="flex justify-between items-center pt-2 border-t border-dotted border-gray-100 mt-2 font-black">
                                 <span className="text-gray-800">{labels.actualPrice}</span>
-                                <span className="text-gray-900 font-mono">฿{(Number(printingReceipt?.actualPrice ?? (Number(watch('basePrice') || 0) + Number(watch('bonusDrc') || 0) + ((watch('enableFsc') !== false && selectedFarmer?.fscId) ? (Number(settings.fscBonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0))) || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                <span className="text-gray-900 font-mono">฿{(Number(printingReceipt?.actualPrice ?? (Number(watch('basePrice') || 0) + Number(watch('bonusDrc') || 0) + ((watch('enableFsc') !== false && (selectedFarmer?.fscId || selectedFarmer?.fsc_id)) ? (Number(settings.fscBonus) || 1) : 0) + (selectedFarmer?.memberTypeId || selectedFarmer?.member_type_id ? (Number(memberTypes.find(mt => String(mt.id) === String(selectedFarmer.memberTypeId || selectedFarmer.member_type_id))?.bonus) || 0) : 0))) || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
                             </div>
                         )}
                     </div>

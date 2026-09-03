@@ -60,7 +60,7 @@ export const clearAllCache = () => {
     try {
         memoryCache.clear();
         Object.keys(sessionStorage)
-            .filter(k => k.startsWith('gc_'))
+            .filter(k => k.startsWith('gc_') || k.startsWith('rt_'))
             .forEach(k => sessionStorage.removeItem(k));
     } catch {}
 };
@@ -121,7 +121,7 @@ const sanitizePayload = (data) => {
 };
 
 // Internal fetch wrapper
-const fetchAPI = async (endpoint, options = {}) => {
+export const fetchAPI = async (endpoint, options = {}) => {
     try {
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
@@ -129,6 +129,7 @@ const fetchAPI = async (endpoint, options = {}) => {
 
         const fetchOptions = {
             method: options.method || 'GET',
+            cache: options.cache || 'no-store',
             headers: {
                 'Content-Type': 'application/json'
             }
@@ -172,7 +173,7 @@ const fetchAPI = async (endpoint, options = {}) => {
 }
 
 // --- HYBRID READ: Online = API, Offline = IndexedDB ---
-const offlineRead = async (table, fallbackEndpoint, force = false) => {
+export const offlineRead = async (table, fallbackEndpoint, force = false) => {
     const switchedStoreId = localStorage.getItem('rt_active_store_id');
 
     // ONLINE: Always fetch from API directly
@@ -225,7 +226,7 @@ const offlineRead = async (table, fallbackEndpoint, force = false) => {
 };
 
 // --- HYBRID WRITE: Online = API direct, Offline = queue ---
-const offlineWrite = async (table, endpoint, payload, action = 'POST') => {
+export const offlineWrite = async (table, endpoint, payload, action = 'POST') => {
     const switchedStoreId = localStorage.getItem('rt_active_store_id');
 
     // Validate data before proceeding
@@ -337,12 +338,13 @@ export const fetchDashboardData = async (force = false) => {
     }
 };
 
-export const fetchFarmers = async (includeStats = false) => {
+export const fetchFarmers = async (includeStats = false, force = false) => {
     const endpoint = includeStats ? '/farmers?includeStats=true' : '/farmers';
-    return await offlineRead('farmers', endpoint);
+    return await offlineRead('farmers', endpoint, force);
 };
 export const fetchBuyRecords = async (force = false, dateParams = null) => {
     let endpoint = '/buys';
+    let isForced = force;
     if (dateParams) {
         if (typeof dateParams === 'string') {
             endpoint = `/buys?startDate=${dateParams}&endDate=${dateParams}`;
@@ -350,11 +352,13 @@ export const fetchBuyRecords = async (force = false, dateParams = null) => {
             const query = new URLSearchParams(dateParams).toString();
             if (query) endpoint = `/buys?${query}`;
         }
+        isForced = true;
     }
-    return await offlineRead('buys', endpoint, force);
+    return await offlineRead('buys', endpoint, isForced);
 };
 export const fetchSellRecords = async (force = false, dateParams = null) => {
     let endpoint = '/sells';
+    let isForced = force;
     if (dateParams) {
         if (typeof dateParams === 'string') {
             endpoint = `/sells?startDate=${dateParams}&endDate=${dateParams}`;
@@ -362,16 +366,50 @@ export const fetchSellRecords = async (force = false, dateParams = null) => {
             const query = new URLSearchParams(dateParams).toString();
             if (query) endpoint = `/sells?${query}`;
         }
+        isForced = true;
     }
-    return await offlineRead('sells', endpoint, force);
+    return await offlineRead('sells', endpoint, isForced);
 };
 
-export const fetchStockSummary = async () => {
-    const res = await fetchAPI('/sells?stockSummary=true');
-    if (res && res.status === 'success') {
-        return res.stockMetrics;
+export const fetchStockSummary = async (force = false) => {
+    if (!force) {
+        const cached = getCache('stock_summary');
+        if (cached) return cached;
     }
-    return { currentStock: 0, cupLumpStock: 0, avgDrc: 0 };
+    if (!navigator.onLine) {
+        const cached = getCache('stock_summary');
+        return cached || { currentStock: 0, cupLumpStock: 0, avgDrc: 0 };
+    }
+    try {
+        const res = await fetchAPI('/sells?stockSummary=true');
+        if (res && res.status === 'success') {
+            setCache('stock_summary', res.stockMetrics);
+            return res.stockMetrics;
+        }
+        return { currentStock: 0, cupLumpStock: 0, avgDrc: 0 };
+    } catch {
+        const cached = getCache('stock_summary');
+        return cached || { currentStock: 0, cupLumpStock: 0, avgDrc: 0 };
+    }
+};
+
+export const fetchFarmerBuyStats = async (force = false) => {
+    if (!force) {
+        const cached = getCache('farmer_buy_stats');
+        if (cached) return cached;
+    }
+    if (!navigator.onLine) {
+        const cached = getCache('farmer_buy_stats');
+        return cached || [];
+    }
+    try {
+        const res = await fetchAPI('/buys?farmerStats=true');
+        if (res) setCache('farmer_buy_stats', res);
+        return res;
+    } catch {
+        const cached = getCache('farmer_buy_stats');
+        return cached || [];
+    }
 };
 
 // --- New Paginated History fetchers ---
@@ -392,12 +430,37 @@ export const fetchGlobalSearch = async (query) => {
     return await fetchAPI(`/global-search?q=${encodeURIComponent(query)}`);
 };
 
-export const fetchEmployees = async () => await offlineRead('employees', '/employees');
-export const fetchStaff = async () => await offlineRead('staff', '/staff');
+export const fetchEmployees = async (force = false) => await offlineRead('employees', '/employees', force);
+export const fetchFarmerEmployees = async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const endpoint = query ? `/farmer_employees?${query}` : '/farmer_employees';
+    return await fetchAPI(endpoint);
+};
+export const saveFarmerEmployeeLink = async (payload) => {
+    const res = await fetchAPI('/farmer_employees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    clearCache('farmer_employees', 'farmers', 'employees');
+    triggerDataRefresh();
+    return res;
+};
+export const deleteFarmerEmployeeLink = async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const res = await fetchAPI(`/farmer_employees?${query}`, {
+        method: 'DELETE'
+    });
+    clearCache('farmer_employees', 'farmers', 'employees');
+    triggerDataRefresh();
+    return res;
+};
+export const fetchStaff = async (force = false) => await offlineRead('staff', '/staff', force);
 export const fetchFactories = async () => await offlineRead('factories', '/factories');
 export const fetchTrucks = async () => await offlineRead('trucks', '/trucks');
-export const fetchExpenses = async (dateParams = null) => {
+export const fetchExpenses = async (dateParams = null, force = false) => {
     let endpoint = '/expenses';
+    let isForced = force;
     if (dateParams) {
         if (typeof dateParams === 'string') {
             endpoint = `/expenses?startDate=${dateParams}&endDate=${dateParams}`;
@@ -405,11 +468,13 @@ export const fetchExpenses = async (dateParams = null) => {
             const query = new URLSearchParams(dateParams).toString();
             if (query) endpoint = `/expenses?${query}`;
         }
+        isForced = true;
     }
-    return await offlineRead('expenses', endpoint);
+    return await offlineRead('expenses', endpoint, isForced);
 };
-export const fetchWages = async (dateParams = null) => {
+export const fetchWages = async (dateParams = null, force = false) => {
     let endpoint = '/wages';
+    let isForced = force;
     if (dateParams) {
         if (typeof dateParams === 'string') {
             endpoint = `/wages?startDate=${dateParams}&endDate=${dateParams}`;
@@ -417,8 +482,9 @@ export const fetchWages = async (dateParams = null) => {
             const query = new URLSearchParams(dateParams).toString();
             if (query) endpoint = `/wages?${query}`;
         }
+        isForced = true;
     }
-    return await offlineRead('wages', endpoint);
+    return await offlineRead('wages', endpoint, isForced);
 };
 export const fetchPromotions = async () => await offlineRead('promotions', '/promotions');
 export const fetchChemicalUsage = async () => await offlineRead('chemicals', '/chemicals');
@@ -467,25 +533,34 @@ export const fetchPublicQueues = async (storeId) => {
 
 export const getSettings = async () => {
     const switchedStoreId = localStorage.getItem('rt_active_store_id');
-    
-    // Bypass local cache if we are in God Mode
-    if (!switchedStoreId) {
+
+    if (navigator.onLine) {
         try {
-            const local = await db.settings.toArray();
-            if (local && local.length > 0) {
-                const dataObj = {};
-                local.forEach(s => dataObj[s.key] = s.value);
-                return { status: 'success', data: dataObj };
+            const res = await fetchAPI('/settings');
+            if (res && typeof res === 'object' && !res.error) {
+                if (!switchedStoreId) {
+                    try {
+                        const entries = Object.keys(res).map(k => ({ key: k, value: String(res[k]) }));
+                        await db.settings.bulkPut(entries);
+                    } catch {}
+                }
+                return { status: 'success', data: res };
             }
-        } catch {}
+        } catch (err) {
+            console.warn('[getSettings API failed, falling back to local DB]', err);
+        }
     }
 
     try {
-        const res = await fetchAPI('/settings');
-        return { status: 'success', data: res };
-    } catch {
-        return { status: 'success', data: {} };
-    }
+        const local = await db.settings.toArray();
+        if (local && local.length > 0) {
+            const dataObj = {};
+            local.forEach(s => dataObj[s.key] = s.value);
+            return { status: 'success', data: dataObj };
+        }
+    } catch {}
+
+    return { status: 'success', data: {} };
 };
 
 // Replace Write Operations with offlineWrite
@@ -497,6 +572,58 @@ export const addTruck = async (payload) => await offlineWrite('trucks', '/trucks
 export const addBuyRecord = async (payload) => await offlineWrite('buys', '/buys', payload);
 export const addSellRecord = async (payload) => await offlineWrite('sells', '/sells', payload);
 export const addExpense = async (payload) => await offlineWrite('expenses', '/expenses', payload);
+
+export const scanExpenseReceiptWithAI = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || '';
+    const switchedStoreId = localStorage.getItem('rt_active_store_id');
+    
+    const headers = {
+        'Authorization': `Bearer ${token}`
+    };
+    if (switchedStoreId) {
+        headers['X-Switch-Store-ID'] = switchedStoreId;
+    }
+
+    const res = await fetch('/api/expenses/scan', {
+        method: 'POST',
+        headers,
+        body: formData
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'สแกนใบเสร็จไม่สำเร็จ');
+    return data;
+};
+
+export const scanSellReceiptWithAI = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || '';
+    const switchedStoreId = localStorage.getItem('rt_active_store_id');
+    
+    const headers = {
+        'Authorization': `Bearer ${token}`
+    };
+    if (switchedStoreId) {
+        headers['X-Switch-Store-ID'] = switchedStoreId;
+    }
+
+    const res = await fetch('/api/sells/scan', {
+        method: 'POST',
+        headers,
+        body: formData
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'สแกนใบชั่ง/ใบเสร็จล้มเหลว');
+    return data;
+};
 export const addWage = async (payload) => await offlineWrite('wages', '/wages', payload);
 export const addPromotion = async (payload) => await offlineWrite('promotions', '/promotions', payload);
 export const addChemicalUsage = async (payload) => await offlineWrite('chemicals', '/chemicals', payload);
@@ -521,13 +648,22 @@ export const deleteMemberType = async (id) => {
 export const updateSettingsAPI = async (payload) => {
     if (!navigator.onLine) return { status: 'offline' };
     const res = await fetchAPI('/settings', { method: 'POST', body: { action: 'updateSettings', payload } });
-    triggerDataRefresh();
-    
-    // Only clear local cache if we are NOT in God Mode
+    clearCache('dashboard', 'settings', 'dailyPrice');
+
+    // Update local Dexie DB so getSettings() immediately returns fresh values
     const switchedStoreId = localStorage.getItem('rt_active_store_id');
-    if (!switchedStoreId) {
-        db.settings.clear(); 
+    if (!switchedStoreId && payload) {
+        try {
+            const entries = Object.keys(payload).map(k => ({ key: k, value: String(payload[k]) }));
+            await db.settings.bulkPut(entries);
+        } catch (e) {
+            console.warn('Failed to update local Dexie settings:', e);
+        }
     }
+
+    triggerDataRefresh();
+    window.dispatchEvent(new CustomEvent('price-updated', { detail: { payload } }));
+    window.dispatchEvent(new CustomEvent('settings-updated', { detail: { payload } }));
     
     return res;
 };
@@ -646,9 +782,21 @@ export const addBulkWages = async (payloads) => {
     return res;
 };
 
-export const fetchDailyPrice = async () => {
+export const fetchDailyPrice = async (force = false) => {
     try {
-        const dash = await fetchDashboardData();
+        if (force) clearCache('dashboard', 'settings', 'dailyPrice');
+        const settingsRes = await getSettings();
+        if (settingsRes && settingsRes.status === 'success' && settingsRes.data?.daily_price) {
+            return { 
+                status: 'success', 
+                data: { 
+                    price: String(settingsRes.data.daily_price), 
+                    cupLumpPrice: String(settingsRes.data.cupLumpPrice || '0'),
+                    date: new Date().toISOString().split('T')[0] 
+                } 
+            };
+        }
+        const dash = await fetchDashboardData(force);
         return { status: 'success', data: dash?.dailyPrice || { price: "0", date: new Date().toISOString().split('T')[0] } };
     } catch {
         return { status: 'success', data: { price: "0", date: new Date().toISOString().split('T')[0] } };
@@ -658,7 +806,11 @@ export const fetchDailyPrice = async () => {
 export const updateDailyPriceAPI = async (price) => {
     if (!navigator.onLine) return { status: 'offline' };
     const res = await fetchAPI('/settings', { method: 'POST', body: { action: 'updateDailyPrice', payload: { price } } });
-    if (res.status === 'success') clearCache('dashboard');
+    if (res.status === 'success') {
+        clearCache('dashboard', 'settings', 'dailyPrice');
+        triggerDataRefresh();
+        window.dispatchEvent(new CustomEvent('price-updated', { detail: { price } }));
+    }
     return res;
 };
 

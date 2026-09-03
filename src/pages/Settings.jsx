@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { 
     Settings as SettingsIcon, Building2, UserCircle, Leaf, 
     Users, DollarSign, Truck, Shield, MessageSquare, ClipboardList, Beaker,
-    ChevronRight, Layout, Database, Radio, Receipt, Wrench
+    ChevronRight, Layout, Database, Radio, Receipt, Wrench, MapPin
 } from 'lucide-react';
 
 // Sub-components (Self-contained)
@@ -18,6 +18,7 @@ import { TruckManagement } from './settings/TruckManagement';
 import { ChemicalManagement } from './settings/ChemicalManagement';
 import { PaperSlipSettings } from './settings/PaperSlipSettings';
 import { ServiceManagement } from './settings/ServiceManagement';
+import { LandPlots } from './LandPlots';
 
 const Settings = () => {
     const location = useLocation();
@@ -50,6 +51,7 @@ const Settings = () => {
         {
             title: 'ทรัพยากรและระบบ',
             items: [
+                { id: 'land_plots', icon: <MapPin size={20} />, label: 'จัดการแปลงสวนยาง', desc: 'ข้อมูลแปลงสวนยางพารา และพิกัดแผนที่' },
                 { id: 'services', icon: <Wrench size={20} />, label: 'รายการบริการและราคา', desc: 'ตั้งค่าการคิดราคาตัดหญ้า, ฉีดพ่นยา, ไถสวน' },
                 { id: 'factories', icon: <Building2 size={20} />, label: 'โรงงานส่งขาย', desc: 'จัดการโรงงานปลายทาง' },
                 { id: 'trucks', icon: <Truck size={20} />, label: 'รถส่งน้ำยาง', desc: 'ข้อมูลทะเบียนรถขนส่ง' },
@@ -138,7 +140,7 @@ const Settings = () => {
 
                     {/* Content Section */}
                     <div className="flex-1 p-6 md:p-10 print:p-0">
-                        <div className="max-w-4xl mx-auto print:max-w-none print:w-full">
+                        <div className={activeTab === 'land_plots' ? 'max-w-7xl mx-auto print:max-w-none print:w-full' : 'max-w-4xl mx-auto print:max-w-none print:w-full'}>
                             {/* Content Area */}
                             {activeTab === 'general' && <GeneralSettings />}
                             {activeTab === 'paper_slip' && <PaperSlipSettings />}
@@ -146,6 +148,7 @@ const Settings = () => {
                             {activeTab === 'farmers_employees' && <UserManagement />}
                             {activeTab === 'staff' && <StaffManagement />}
                             {activeTab === 'team' && <TeamManagement />}
+                            {activeTab === 'land_plots' && <LandPlots />}
                             {activeTab === 'services' && <ServiceManagement />}
                             {activeTab === 'factories' && <FactoryManagement />}
                             {activeTab === 'trucks' && <TruckManagement />}

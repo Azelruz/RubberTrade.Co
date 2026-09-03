@@ -266,6 +266,15 @@ export const TransactionHistory = () => {
         }, 0);
         const totalAmount = reportRecords.reduce((sum, r) => sum + Number(r.total || 0), 0);
 
+        const totalFarmerAmount = reportRecords.reduce((sum, r) => {
+            const empPct = Number(r.empPct ?? r.emp_pct ?? 0);
+            return sum + Number(r.farmerTotal ?? r.farmer_total ?? (Number(r.total || 0) * (100 - empPct) / 100));
+        }, 0);
+        const totalEmployeeAmount = reportRecords.reduce((sum, r) => {
+            const empPct = Number(r.empPct ?? r.emp_pct ?? 0);
+            return sum + Number(r.employeeTotal ?? r.employee_total ?? (Number(r.total || 0) * empPct / 100));
+        }, 0);
+
         const validDrcs = reportRecords.filter(r => Number(r.drc) > 0);
         const avgDrc = validDrcs.length > 0 ? (validDrcs.reduce((sum, r) => sum + Number(r.drc), 0) / validDrcs.length) : 0;
 
@@ -277,7 +286,7 @@ export const TransactionHistory = () => {
         }, 0);
         const avgPrice = reportRecords.length > 0 ? (sumPrice / reportRecords.length) : 0;
 
-        return { totalBills, totalWeight, totalDryWeight, totalAmount, avgDrc, avgPrice };
+        return { totalBills, totalWeight, totalDryWeight, totalAmount, totalFarmerAmount, totalEmployeeAmount, avgDrc, avgPrice };
     }, [reportRecords, activeTab]);
 
     const handlePrintReport = async () => {
@@ -464,6 +473,12 @@ export const TransactionHistory = () => {
                             <th className="border border-black p-1.5 text-right">ยางแห้ง (กก.)</th>
                             <th className="border border-black p-1.5 text-right">ราคา/กก. (฿)</th>
                             <th className="border border-black p-1.5 text-right">ยอดรวม (฿)</th>
+                            {activeTab === 'buy' && (
+                                <>
+                                    <th className="border border-black p-1.5 text-right">ยอดเกษตรกร (฿)</th>
+                                    <th className="border border-black p-1.5 text-right">ยอดลูกจ้าง (฿)</th>
+                                </>
+                            )}
                         </tr>
                     </thead>
                     <tbody>
@@ -475,6 +490,11 @@ export const TransactionHistory = () => {
                             const dryWeight = isCupLump ? netWeight : (r.dry_weight ?? r.dryWeight ?? ((netWeight * (r.drc || 0)) / 100));
                             const price = Number(activeTab === 'buy' ? (r.actual_price ?? r.actualPrice ?? r.price_per_kg ?? r.pricePerKg ?? 0) : (r.pricePerKg ?? r.price_per_kg ?? 0));
                             
+                            const empPct = Number(r.empPct ?? r.emp_pct ?? 0);
+                            const farmerPct = 100 - empPct;
+                            const farmerTotal = Number(r.farmerTotal ?? r.farmer_total ?? (Number(r.total || 0) * farmerPct / 100));
+                            const employeeTotal = Number(r.employeeTotal ?? r.employee_total ?? (Number(r.total || 0) * empPct / 100));
+
                             return (
                                 <tr key={r.id} className="border-b border-black">
                                     <td className="border border-black p-1.5 text-center">{index + 1}</td>
@@ -486,6 +506,12 @@ export const TransactionHistory = () => {
                                     <td className="border border-black p-1.5 text-right font-semibold">{Number(dryWeight).toFixed(1)}</td>
                                     <td className="border border-black p-1.5 text-right">{price.toFixed(1)}</td>
                                     <td className="border border-black p-1.5 text-right font-bold">{Number(r.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                    {activeTab === 'buy' && (
+                                        <>
+                                            <td className="border border-black p-1.5 text-right font-semibold text-emerald-800 bg-emerald-50/50">{farmerTotal.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                            <td className="border border-black p-1.5 text-right font-semibold text-amber-800 bg-amber-50/50">{employeeTotal.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                        </>
+                                    )}
                                 </tr>
                             );
                         })}
@@ -504,6 +530,12 @@ export const TransactionHistory = () => {
                                 <span>฿{reportSummary.avgPrice.toFixed(2)}</span>
                             </td>
                             <td className="border border-black p-1.5 text-right text-xs">฿{reportSummary.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                            {activeTab === 'buy' && (
+                                <>
+                                    <td className="border border-black p-1.5 text-right text-xs bg-emerald-100/50">฿{reportSummary.totalFarmerAmount.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                    <td className="border border-black p-1.5 text-right text-xs bg-amber-100/50">฿{reportSummary.totalEmployeeAmount.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                                </>
+                            )}
                         </tr>
                     </tfoot>
                 </table>

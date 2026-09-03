@@ -207,7 +207,7 @@ async function handleGet(context) {
             };
         });
 
-        return jsonResponse({
+        const res = jsonResponse({
             status: 'success',
             latitude,
             longitude,
@@ -216,6 +216,14 @@ async function handleGet(context) {
             dailyPrice,
             forecasts: processedForecasts
         });
+
+        res.headers.set('Vary', 'Accept-Encoding, Authorization, X-Switch-Store-ID');
+        if (context.user?.isSwitched) {
+            res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        } else {
+            res.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+        }
+        return res;
 
     } catch (e) {
         return errorResponse(e.message);

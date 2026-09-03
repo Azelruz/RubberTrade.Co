@@ -30,7 +30,7 @@ export const Report = () => {
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [fStart, fEnd]);
 
     const loadData = async () => {
         if (!isCached('buys', 'sells', 'settings', 'expenses', 'wages', 'chemicals')) setLoading(true);
@@ -47,9 +47,10 @@ export const Report = () => {
                 return;
             }
 
+            const dateParams = { startDate: fStart, endDate: fEnd };
             const [b, s, setRes, expRes, wageRes, chemUsage] = await Promise.all([
-                fetchBuyRecords(),
-                fetchSellRecords(),
+                fetchBuyRecords(false, dateParams),
+                fetchSellRecords(false, dateParams),
                 getSettings(),
                 fetchExpenses(),
                 fetchWages(),

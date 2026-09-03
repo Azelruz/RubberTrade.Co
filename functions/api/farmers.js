@@ -7,33 +7,19 @@ async function handleGet(context) {
         const url = new URL(context.request.url);
         const includeStats = url.searchParams.get('includeStats') === 'true';
 
-        if (includeStats) {
-            const query = `
-                SELECT 
-                    f.*,
-                    b.lastBuyDate,
-                    COALESCE(b.buyCount, 0) as buyCount
-                FROM farmers f
-                LEFT JOIN (
-                    SELECT farmerId, MAX(date) as lastBuyDate, COUNT(id) as buyCount
-                    FROM buys
-                    WHERE userId = ? AND date >= date('now', '-60 days')
-                    GROUP BY farmerId
-                ) b ON f.id = b.farmerId
-                WHERE f.userId = ?
-                ORDER BY f.name ASC
-            `;
-            const { results } = await context.env.DB.prepare(query).bind(storeId, storeId).all();
-            return jsonResponse(results);
-        }
-
         const query = `
-            SELECT * FROM farmers 
+            SELECT 
+                *,
+                COALESCE(buyCount, 0) as buyCount
+            FROM farmers 
             WHERE userId = ? 
             ORDER BY name ASC
         `;
         const { results } = await context.env.DB.prepare(query).bind(storeId).all();
-        return jsonResponse(results);
+        const res = jsonResponse(results || []);
+        res.headers.set('Vary', 'Accept-Encoding, Authorization, X-Switch-Store-ID');
+        res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        return res;
     } catch (e) {
         return errorResponse(e.message);
     }

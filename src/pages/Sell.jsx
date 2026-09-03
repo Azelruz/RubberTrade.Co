@@ -108,12 +108,13 @@ export const Sell = () => {
      const loadData = async () => {
          setIsLoading(true);
          try {
+             const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
              const [recs, facs, trks, stf, buys, chems, stockRes] = await Promise.all([
                  fetchSellRecords(),
                  fetchFactories(),
                  fetchTrucks(),
                  fetchStaff(),
-                 fetchBuyRecords(),
+                 fetchBuyRecords(false, { startDate: thirtyDaysAgo }),
                  fetchChemicalUsage(),
                  fetchStockSummary()
              ]);

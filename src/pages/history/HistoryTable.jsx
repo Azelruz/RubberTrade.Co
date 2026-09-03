@@ -48,102 +48,144 @@ const HistoryTable = ({
                                     <th className="px-6 py-5 text-[11px] font-black text-emerald-600 uppercase tracking-[0.2em] border-b border-gray-100 text-center">ยางแห้ง (กก.)</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-100 text-center">ราคา/กก.</th>
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-100 text-right">ยอดรวม (฿)</th>
+                                    {activeTab === 'buy' && (
+                                        <>
+                                            <th className="px-6 py-5 text-[11px] font-black text-emerald-700 uppercase tracking-[0.2em] border-b border-gray-100 text-right">ยอดเกษตรกร</th>
+                                            <th className="px-6 py-5 text-[11px] font-black text-amber-700 uppercase tracking-[0.2em] border-b border-gray-100 text-right">ยอดลูกจ้าง</th>
+                                        </>
+                                    )}
                                     <th className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-100 text-center">จัดการ</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                                 {filteredRecords.length === 0 ? (
                                     <tr>
-                                        <td colSpan="8" className="px-6 py-24 text-center">
+                                        <td colSpan={activeTab === 'buy' ? 10 : 8} className="px-6 py-24 text-center">
                                             <Search size={48} className="mx-auto mb-4 text-gray-200" />
                                             <p className="text-gray-400 font-black text-lg">ไม่พบข้อมูลประจำวันที่คุณเลือก</p>
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredRecords.map((r) => (
-                                        <tr key={r.id} className="group hover:bg-gray-50/60 transition-colors">
-                                            <td className="px-6 py-5">
-                                                <div className="font-bold text-gray-600 whitespace-nowrap">
-                                                    {format(parseISO(r.date), 'dd MMM yyyy', { locale: th })}
-                                                </div>
-                                                <div className="text-[10px] font-black text-gray-300 uppercase tracking-tighter mt-1 italic">
-                                                    {r.id}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                <div className="flex items-center space-x-3">
-                                                    <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 border border-gray-100">
-                                                        <User size={14} />
+                                    filteredRecords.map((r) => {
+                                        const empPct = Number(r.empPct ?? r.emp_pct ?? 0);
+                                        const farmerPct = 100 - empPct;
+                                        const farmerTotal = Number(r.farmerTotal ?? r.farmer_total ?? (Number(r.total || 0) * farmerPct / 100));
+                                        const employeeTotal = Number(r.employeeTotal ?? r.employee_total ?? (Number(r.total || 0) * empPct / 100));
+
+                                        return (
+                                            <tr key={r.id} className="group hover:bg-gray-50/60 transition-colors">
+                                                <td className="px-6 py-5">
+                                                    <div className="font-bold text-gray-600 whitespace-nowrap">
+                                                        {format(parseISO(r.date), 'dd MMM yyyy', { locale: th })}
                                                     </div>
-                                                    <span className="font-black text-gray-800 text-sm">
-                                                        <span className="flex items-center gap-2">
-                                                            {activeTab === 'buy' ? (r.farmerName || 'ลูกค้าทั่วไป') : r.buyerName}
-                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${
-                                                                (r.rubberType === 'cup_lump' || r.rubber_type === 'cup_lump') 
-                                                                    ? 'bg-amber-100 text-amber-700 border border-amber-200' 
-                                                                    : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                                                            }`}>
-                                                                {(r.rubberType === 'cup_lump' || r.rubber_type === 'cup_lump') ? 'ขี้ยาง' : 'น้ำยาง'}
+                                                    <div className="text-[10px] font-black text-gray-300 uppercase tracking-tighter mt-1 italic">
+                                                        {r.id}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-5">
+                                                    <div className="flex items-center space-x-3">
+                                                        <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 border border-gray-100">
+                                                            <User size={14} />
+                                                        </div>
+                                                        <span className="font-black text-gray-800 text-sm">
+                                                            <span className="flex items-center gap-2">
+                                                                {activeTab === 'buy' ? (r.farmerName || 'ลูกค้าทั่วไป') : r.buyerName}
+                                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${
+                                                                    (r.rubberType === 'cup_lump' || r.rubber_type === 'cup_lump') 
+                                                                        ? 'bg-amber-100 text-amber-700 border border-amber-200' 
+                                                                        : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                                                }`}>
+                                                                    {(r.rubberType === 'cup_lump' || r.rubber_type === 'cup_lump') ? 'ขี้ยาง' : 'น้ำยาง'}
+                                                                </span>
                                                             </span>
                                                         </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-5 text-center">
+                                                    <div className="font-black text-gray-900 text-base">{Number(r.weight || 0).toFixed(1)}</div>
+                                                    <div className="text-[10px] font-bold text-red-400">-{Number(r.bucket_weight ?? r.bucketWeight ?? 0).toFixed(1)} (ถัง)</div>
+                                                    <div className="text-[10px] font-black text-gray-400 mt-0.5">
+                                                        {Number((r.weight || 0) - (r.bucket_weight ?? r.bucketWeight ?? 0)).toFixed(1)} <span className="opacity-50">สุทธิ</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-5 text-center">
+                                                    <span className="font-bold text-gray-600">{Number(r.drc || 0).toFixed(1)}%</span>
+                                                </td>
+                                                <td className="px-6 py-5 text-center">
+                                                    <span className="font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 text-sm">
+                                                        {getDryWeight(r).toFixed(1)}
                                                     </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5 text-center">
-                                                <div className="font-black text-gray-900 text-base">{Number(r.weight || 0).toFixed(1)}</div>
-                                                <div className="text-[10px] font-bold text-red-400">-{Number(r.bucket_weight ?? r.bucketWeight ?? 0).toFixed(1)} (ถัง)</div>
-                                                <div className="text-[10px] font-black text-gray-400 mt-0.5">
-                                                    {Number((r.weight || 0) - (r.bucket_weight ?? r.bucketWeight ?? 0)).toFixed(1)} <span className="opacity-50">สุทธิ</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5 text-center">
-                                                <span className="font-bold text-gray-600">{Number(r.drc || 0).toFixed(1)}%</span>
-                                            </td>
-                                            <td className="px-6 py-5 text-center">
-                                                <span className="font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 text-sm">
-                                                    {getDryWeight(r).toFixed(1)}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-5 text-center">
-                                                <span className="font-bold text-gray-600">
-                                                    {Number(activeTab === 'buy' 
-                                                        ? (r.actual_price ?? r.actualPrice ?? r.price_per_kg ?? r.pricePerKg ?? 0) 
-                                                        : (r.pricePerKg ?? r.price_per_kg ?? 0)
-                                                    ).toFixed(1)}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-5 text-right">
-                                                <div className="font-black text-rubber-500 text-lg">
-                                                    {Number(r.total).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                <div className="flex items-center justify-center space-x-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
-                                                    <button 
-                                                        onClick={() => activeTab === 'buy' ? handlePrintBuy(r) : handlePrintSell(r)}
-                                                        className="p-2.5 bg-gray-50 text-gray-500 hover:text-rubber-600 hover:bg-rubber-50 rounded-xl transition-all shadow-sm"
-                                                        title="พิมพ์"
-                                                    >
-                                                        <Printer size={20} />
-                                                    </button>
-                                                    
-                                                    <button 
-                                                        onClick={() => setViewingEslip(r)}
-                                                        className="p-2.5 bg-blue-50 text-blue-500 hover:bg-blue-100 rounded-xl transition-all shadow-sm"
-                                                        title="ดู E-Slip"
-                                                    >
-                                                        <Eye size={20} />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
+                                                </td>
+                                                <td className="px-6 py-5 text-center">
+                                                    <span className="font-bold text-gray-600">
+                                                        {Number(activeTab === 'buy' 
+                                                            ? (r.actual_price ?? r.actualPrice ?? r.price_per_kg ?? r.pricePerKg ?? 0) 
+                                                            : (r.pricePerKg ?? r.price_per_kg ?? 0)
+                                                        ).toFixed(1)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-5 text-right">
+                                                    <div className="font-black text-rubber-500 text-lg">
+                                                        {Number(r.total).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                                    </div>
+                                                </td>
+                                                {activeTab === 'buy' && (
+                                                    <>
+                                                        <td className="px-6 py-5 text-right bg-emerald-50/20">
+                                                            <div className="font-black text-emerald-700 text-sm">
+                                                                ฿{farmerTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                                            </div>
+                                                            {empPct > 0 && (
+                                                                <div className="text-[10px] font-bold text-emerald-500">{farmerPct}%</div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-5 text-right bg-amber-50/20">
+                                                            <div className="font-black text-amber-700 text-sm">
+                                                                ฿{employeeTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                                                            </div>
+                                                            {empPct > 0 && (
+                                                                <div className="text-[10px] font-bold text-amber-500">{empPct}%</div>
+                                                            )}
+                                                        </td>
+                                                    </>
+                                                )}
+                                                <td className="px-6 py-5">
+                                                    <div className="flex items-center justify-center space-x-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                                                        <button 
+                                                            onClick={() => activeTab === 'buy' ? handlePrintBuy(r) : handlePrintSell(r)}
+                                                            className="p-2.5 bg-gray-50 text-gray-500 hover:text-rubber-600 hover:bg-rubber-50 rounded-xl transition-all shadow-sm"
+                                                            title="พิมพ์"
+                                                        >
+                                                            <Printer size={20} />
+                                                        </button>
+                                                        
+                                                        <button 
+                                                            onClick={() => setViewingEslip(r)}
+                                                            className="p-2.5 bg-blue-50 text-blue-500 hover:bg-blue-100 rounded-xl transition-all shadow-sm"
+                                                            title="ดู E-Slip"
+                                                        >
+                                                            <Eye size={20} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
                                 )}
                             </tbody>
                             {filteredRecords.length > 0 && (() => {
                                 const totalNetWeight = filteredRecords.reduce((sum, r) => sum + Math.max(0, Number(r.weight || 0) - Number(r.bucket_weight ?? r.bucketWeight ?? 0)), 0);
                                 const totalDryWeight = filteredRecords.reduce((sum, r) => sum + getDryWeight(r), 0);
                                 const totalAmount = filteredRecords.reduce((sum, r) => sum + Number(r.total || 0), 0);
+
+                                const totalFarmerAmount = filteredRecords.reduce((sum, r) => {
+                                    const empPct = Number(r.empPct ?? r.emp_pct ?? 0);
+                                    return sum + Number(r.farmerTotal ?? r.farmer_total ?? (Number(r.total || 0) * (100 - empPct) / 100));
+                                }, 0);
+                                const totalEmployeeAmount = filteredRecords.reduce((sum, r) => {
+                                    const empPct = Number(r.empPct ?? r.emp_pct ?? 0);
+                                    return sum + Number(r.employeeTotal ?? r.employee_total ?? (Number(r.total || 0) * empPct / 100));
+                                }, 0);
 
                                 const validDrcs = filteredRecords.filter(r => Number(r.drc) > 0);
                                 const avgDrc = validDrcs.length > 0 ? (validDrcs.reduce((sum, r) => sum + Number(r.drc), 0) / validDrcs.length) : 0;
@@ -181,6 +223,18 @@ const HistoryTable = ({
                                             <td className="px-6 py-4 text-right text-base font-black text-rubber-600">
                                                 ฿{totalAmount.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                                             </td>
+                                            {activeTab === 'buy' && (
+                                                <>
+                                                    <td className="px-6 py-4 text-right text-sm font-black text-emerald-700 bg-emerald-50/40">
+                                                        <div>฿{totalFarmerAmount.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</div>
+                                                        <div className="text-[10px] text-emerald-500 font-bold">รวมจ่ายเกษตรกร</div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right text-sm font-black text-amber-700 bg-amber-50/40">
+                                                        <div>฿{totalEmployeeAmount.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</div>
+                                                        <div className="text-[10px] text-amber-500 font-bold">รวมจ่ายลูกจ้าง</div>
+                                                    </td>
+                                                </>
+                                            )}
                                             <td></td>
                                         </tr>
                                     </tfoot>

@@ -46,6 +46,10 @@ const SellPaperReceipt = ({ printingRecord, printRef, settings, paperSlipConfig,
     };
 
     const headerTitle = config.headerTitle || (isCupLump ? 'ใบส่งสินค้า (ขี้ยางก้อน)' : 'ใบส่งสินค้า / DELIVERY NOTE');
+    const logoUrl = settings?.logoUrl || settings?.logo_url || settings?.logo_Url;
+    const isLogoEnabled = config?.showLogo !== false && config?.showLogo !== 'false' && config?.showLogo !== 0;
+    const hasValidLogoUrl = typeof logoUrl === 'string' && logoUrl.trim().length > 0 && logoUrl !== 'null' && logoUrl !== 'undefined';
+    const shouldShowLogo = isLogoEnabled && hasValidLogoUrl;
 
     return (
         <div style={{ display: 'none' }}>
@@ -61,10 +65,10 @@ const SellPaperReceipt = ({ printingRecord, printRef, settings, paperSlipConfig,
 
                         {/* Header */}
                         <div className="text-center mb-4 border-b-2 border-black pb-2">
-                            {(config.showLogo !== false && (settings.logoUrl || settings.logo_url || settings.logo_Url)) && (
+                            {shouldShowLogo && (
                                 <div className="h-16 flex items-center justify-center mb-2">
                                     <img 
-                                        src={settings.logoUrl || settings.logo_url || settings.logo_Url} 
+                                        src={logoUrl} 
                                         alt="Logo" 
                                         className="h-16 mx-auto object-contain" 
                                         style={{ filter: 'grayscale(1) contrast(2)' }} 

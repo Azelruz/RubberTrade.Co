@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Gift, Wallet, Sliders } from 'lucide-react';
 import { 
     fetchDashboardData, fetchFarmers, fetchChemicalUsage, 
-    addBulkWages, addPromotion, addChemicalUsage, fetchBuyRecords 
+    addBulkWages, addPromotion, addChemicalUsage, fetchBuyRecords,
+    updateDailyPriceAPI, updateSettingsAPI
 } from '../services/apiService';
 import { format, subDays, startOfDay, endOfDay, isWithinInterval, differenceInDays } from 'date-fns';
 import { th } from 'date-fns/locale';
@@ -21,7 +22,7 @@ import { DashboardForecast } from './dashboard/DashboardForecast';
 import DashboardCharts, { ActivityChart, PriceChart } from './dashboard/DashboardCharts';
 import DashboardChemicals from './dashboard/DashboardChemicals';
 import DashboardRecent from './dashboard/DashboardRecent';
-import { WageConfirmModal, LuckyDrawModal } from './dashboard/DashboardModals';
+import { WageConfirmModal, LuckyDrawModal, PriceEditModal } from './dashboard/DashboardModals';
 import DashboardCustomizeModal from './dashboard/DashboardCustomizeModal';
 
 export const Dashboard = () => {
@@ -65,6 +66,10 @@ export const Dashboard = () => {
     const [savingReward, setSavingReward] = useState(false);
     const [showPrizeDrawBtn, setShowPrizeDrawBtn] = useState(true);
     
+    // Price Edit Modal State
+    const [showPriceEditModal, setShowPriceEditModal] = useState(false);
+    const [savingPrice, setSavingPrice] = useState(false);
+
     // Dashboard Customization State
     const [dashboardConfig, setDashboardConfig] = useState(getDefaultDashboardConfig());
     const [showCustomizeModal, setShowCustomizeModal] = useState(false);
@@ -180,6 +185,15 @@ export const Dashboard = () => {
             // Use server-side stats if available, otherwise fallback to local calc
             if (dashData?.stats) {
                 const s = dashData.stats;
+                const latexBuy = Number(s.todayLatexBuy || 0);
+                const cupLumpWeight = Number(s.todayCupLumpWeight || 0);
+                const cupLumpBuy = Number(s.todayCupLumpBuy || 0);
+                const dryWeight = Number(todayDryWeightTotal || s.todayTotalDryWeight || 0);
+
+                const todayAvgLatexPrice = dryWeight > 0 ? truncateOneDecimal(latexBuy / dryWeight) : 0;
+                const todayAvgCupLumpPrice = cupLumpWeight > 0 ? truncateOneDecimal(cupLumpBuy / cupLumpWeight) : 0;
+                const todayAvgBuyPrice = todayAvgLatexPrice || todayAvgCupLumpPrice || 0;
+
                 setStats({
                     ...s,
                     todayAvgDrc: truncateOneDecimal(s.todayAvgDrc || 0),
@@ -187,7 +201,10 @@ export const Dashboard = () => {
                     inactiveFarmers15Days: inactiveFarmersCount,
                     dailyPrice: Number(dashData?.dailyPrice?.price || 0),
                     cupLumpPrice: Number(dashData?.dailyPrice?.cupLumpPrice || dashData?.settings?.cupLumpPrice || 0),
-                    monthProfit: s.monthProfit !== undefined ? s.monthProfit : truncateOneDecimal((s.monthIncome || 0) - (s.monthCost || 0))
+                    monthProfit: s.monthProfit !== undefined ? s.monthProfit : truncateOneDecimal((s.monthIncome || 0) - (s.monthCost || 0)),
+                    todayAvgBuyPrice,
+                    todayAvgLatexPrice,
+                    todayAvgCupLumpPrice
                 });
                 calculateChemicals(s.todayLatexWeight, settings.chemicalSettings);
             } else {
@@ -325,6 +342,11 @@ export const Dashboard = () => {
         const dailyPrice = Number(dashData?.dailyPrice?.price || dashData?.settings?.daily_price || 0);
         const cupLumpPrice = Number(dashData?.dailyPrice?.cupLumpPrice || dashData?.settings?.cupLumpPrice || 0);
 
+        const dryWeightCalc = Number(todayDryWeightTotal || todayTotalDry || 0);
+        const todayAvgLatexPrice = dryWeightCalc > 0 ? truncateOneDecimal(todayLatexBuyTotal / dryWeightCalc) : 0;
+        const todayAvgCupLumpPrice = todayCupLumpWeight > 0 ? truncateOneDecimal(todayCupLumpBuyTotal / todayCupLumpWeight) : 0;
+        const todayAvgBuyPrice = todayAvgLatexPrice || todayAvgCupLumpPrice || 0;
+
         setStats({
             todayBuy: truncateOneDecimal(todayLatexBuyTotal + todayCupLumpBuyTotal),
             todayLatexBuy: truncateOneDecimal(todayLatexBuyTotal),
@@ -338,7 +360,10 @@ export const Dashboard = () => {
             monthIncome, monthCost, monthProfit: profit, dailyPrice, cupLumpPrice,
             unpaidBills, totalMembers: Array.isArray(farmers) ? farmers.length : 0,
             inactiveFarmers15Days: inactiveFarmersCount || 0,
-            todayAvgDrc
+            todayAvgDrc,
+            todayAvgBuyPrice,
+            todayAvgLatexPrice,
+            todayAvgCupLumpPrice
         });
 
         calculateChemicals(todayLatexWeight, dashData?.settings?.chemicalSettings);
@@ -504,6 +529,34 @@ export const Dashboard = () => {
         finally { setSavingReward(false); }
     };
 
+    // Daily Rubber Price Handler
+    const handleSavePrice = async ({ dailyPrice, cupLumpPrice }) => {
+        setSavingPrice(true);
+        const toastId = toast.loading('กำลังบันทึกราคายางประจำวัน...');
+        try {
+            const resLatex = await updateDailyPriceAPI(dailyPrice);
+            const resCup = await updateSettingsAPI({ cupLumpPrice });
+
+            if (resLatex.status === 'success' || resCup.status === 'success') {
+                toast.success('อัปเดตราคายางเรียบร้อยแล้ว', { id: toastId });
+                setStats(prev => ({
+                    ...prev,
+                    dailyPrice: Number(dailyPrice),
+                    cupLumpPrice: Number(cupLumpPrice)
+                }));
+                setShowPriceEditModal(false);
+                window.dispatchEvent(new CustomEvent('price-updated', { detail: { price: dailyPrice, cupLumpPrice } }));
+                window.dispatchEvent(new CustomEvent('dashboard-refresh'));
+            } else {
+                toast.error(resLatex.message || resCup.message || 'บันทึกล้มเหลว', { id: toastId });
+            }
+        } catch (error) {
+            toast.error('เกิดข้อผิดพลาด: ' + error.message, { id: toastId });
+        } finally {
+            setSavingPrice(false);
+        }
+    };
+
     // Dashboard Customization Handlers
     const handleSaveConfig = async (newConfig) => {
         const res = await saveDashboardConfig(newConfig);
@@ -613,8 +666,21 @@ export const Dashboard = () => {
                 onReset={handleResetConfig}
             />
 
+            <PriceEditModal
+                isOpen={showPriceEditModal}
+                onClose={() => setShowPriceEditModal(false)}
+                currentDailyPrice={stats.dailyPrice}
+                currentCupLumpPrice={stats.cupLumpPrice}
+                onSave={handleSavePrice}
+                saving={savingPrice}
+            />
+
             {/* Stat Cards Block */}
-            <DashboardStats stats={stats} visibleStats={dashboardConfig.visibleStats} />
+            <DashboardStats 
+                stats={stats} 
+                visibleStats={dashboardConfig.visibleStats} 
+                onEditPrice={() => setShowPriceEditModal(true)}
+            />
 
             {/* Dynamic Widget Sections in user-defined order */}
             <div className="space-y-6">

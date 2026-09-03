@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { addBuyRecord, fetchBuyRecords, deleteRecord, updateRecord, fetchFarmers, fetchDailyPrice, getSettings, fetchEmployees, saveReceiptImageToDrive, deleteReceiptFileToDrive, sendLineReceipt, fetchMemberTypes, isCached, addFarmer, updateQueue, fetchQueues, fetchLoans, fetchLoanDeductions, getPendingDeletes, getPendingUpdates } from '../services/apiService';
+import { addBuyRecord, fetchBuyRecords, deleteRecord, updateRecord, fetchFarmers, fetchDailyPrice, getSettings, fetchEmployees, fetchFarmerEmployees, saveReceiptImageToDrive, deleteReceiptFileToDrive, sendLineReceipt, fetchMemberTypes, isCached, addFarmer, updateQueue, fetchQueues, fetchLoans, fetchLoanDeductions, getPendingDeletes, getPendingUpdates } from '../services/apiService';
 import { db } from '../services/db';
 import { truncateOneDecimal, calculateDrcBonus } from '../utils/calculations';
 import { printRecord } from '../utils/PrintService';
@@ -22,6 +22,7 @@ export const Buy = () => {
     const { user } = useAuth();
     const [farmers, setFarmers] = useState([]);
     const [employees, setEmployees] = useState([]);
+    const [farmerEmployees, setFarmerEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -151,11 +152,13 @@ export const Buy = () => {
         const bonusDrc = calculateDrcBonus(drc, drcBonuses);
         
         const selectedFarmer = farmers.find(f => f.id === watchFarmerId);
-        const fscBonus = (watchEnableFsc !== false && selectedFarmer?.fscId) ? (Number(settings.fscBonus) || 1) : 0;
+        const fscId = selectedFarmer?.fscId || selectedFarmer?.fsc_id;
+        const fscBonus = (watchEnableFsc !== false && fscId) ? (Number(settings.fscBonus) || 1) : 0;
 
         let memberBonus = 0;
-        if (selectedFarmer?.memberTypeId) {
-            const mType = memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId);
+        const mId = selectedFarmer?.memberTypeId || selectedFarmer?.member_type_id;
+        if (mId) {
+            const mType = memberTypes.find(mt => String(mt.id) === String(mId));
             if (mType) memberBonus = Number(mType.bonus) || 0;
         }
 
@@ -168,8 +171,10 @@ export const Buy = () => {
         }
 
         const finalPrice = isCupLump ? base : (base + bonusDrc + fscBonus + memberBonus);
-        setValue('pricePerKg', finalPrice.toString());
-    }, [watchDrc, watchFarmerId, watchRubberType, farmers, memberTypes, dailyPriceObj.price, settings.cupLumpPrice, setValue, drcBonuses, dirtyFields.basePrice, dirtyFields.bonusDrc, settings.fscBonus, watchEnableFsc]);
+        if (String(watchPricePerKg || '') !== String(finalPrice || '')) {
+            setValue('pricePerKg', finalPrice.toString());
+        }
+    }, [watchDrc, watchFarmerId, watchRubberType, farmers, memberTypes, dailyPriceObj.price, settings.cupLumpPrice, setValue, drcBonuses, dirtyFields.basePrice, dirtyFields.bonusDrc, settings.fscBonus, watchEnableFsc, watchPricePerKg]);
 
     // Load data
     useEffect(() => {
@@ -186,6 +191,7 @@ export const Buy = () => {
             loadData(true);
         };
         window.addEventListener('dashboard-refresh', handleRefresh);
+        window.addEventListener('price-updated', handleRefresh);
 
         const handleVisibilityChange = () => {
             if (!document.hidden && navigator.onLine) {
@@ -194,18 +200,11 @@ export const Buy = () => {
         };
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
-        // Real-time background sync interval (polls Cloudflare D1 every 5 seconds ONLY when tab is active)
-        const pollInterval = setInterval(() => {
-            if (navigator.onLine && !document.hidden) {
-                loadData(true);
-            }
-        }, 5000);
-
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             window.removeEventListener('dashboard-refresh', handleRefresh);
-            clearInterval(pollInterval);
+            window.removeEventListener('price-updated', handleRefresh);
         };
     }, []);
 
@@ -316,6 +315,30 @@ export const Buy = () => {
         }
     };
 
+    const isSameMemberTypes = (a, b) => {
+        if (!Array.isArray(a) || !Array.isArray(b)) return false;
+        if (a.length !== b.length) return false;
+        return a.every((itemA, i) => {
+            const itemB = b[i];
+            return itemA && itemB && 
+                String(itemA.id) === String(itemB.id) && 
+                String(itemA.name) === String(itemB.name) && 
+                Number(itemA.bonus || 0) === Number(itemB.bonus || 0);
+        });
+    };
+
+    const isSameFarmerEmployees = (a, b) => {
+        if (!Array.isArray(a) || !Array.isArray(b)) return false;
+        if (a.length !== b.length) return false;
+        return a.every((itemA, i) => {
+            const itemB = b[i];
+            return itemA && itemB && 
+                String(itemA.farmerId || itemA.farmer_id) === String(itemB.farmerId || itemB.farmer_id) && 
+                String(itemA.employeeId || itemA.employee_id) === String(itemB.employeeId || itemB.employee_id) && 
+                Number(itemA.profitSharePct ?? itemA.profit_share_pct ?? 0) === Number(itemB.profitSharePct ?? itemB.profit_share_pct ?? 0);
+        });
+    };
+
     const loadData = async (force = false) => {
         // Step 1: Read locally from Dexie (Instant - <10ms)
         try {
@@ -332,11 +355,11 @@ export const Buy = () => {
                 !currentStoreId || !r.userId || String(r.userId) === String(currentStoreId)
             );
             setRecords(prev => mergeRecords(prev, storeLocalBuys));
-            setFarmers(localFarmers || []);
-            setEmployees(localEmployees || []);
-            setLoans(localLoans || []);
-            setLoanDeductions(localDeds || []);
-            setMemberTypes(localMts || []);
+            setFarmers(prev => isSameData(prev, localFarmers) ? prev : (localFarmers || []));
+            setEmployees(prev => isSameData(prev, localEmployees) ? prev : (localEmployees || []));
+            setLoans(prev => isSameData(prev, localLoans) ? prev : (localLoans || []));
+            setLoanDeductions(prev => isSameData(prev, localDeds) ? prev : (localDeds || []));
+            setMemberTypes(prev => isSameMemberTypes(prev, localMts) ? prev : (localMts || []));
             
             if ((localBuys && localBuys.length > 0) || (localFarmers && localFarmers.length > 0)) {
                 setLoading(false);
@@ -367,7 +390,7 @@ export const Buy = () => {
                 return;
             }
 
-            const [buyData, farmersData, priceData, settingsRes, employeesData, mtData, loansData, dedsData] = await Promise.all([
+            const [buyData, farmersData, priceData, settingsRes, employeesData, mtData, loansData, dedsData, feLinksData] = await Promise.all([
                 fetchBuyRecords(force, selectedDate ? { startDate: selectedDate, endDate: selectedDate } : null),
                 fetchFarmers(),
                 fetchDailyPrice(),
@@ -375,7 +398,8 @@ export const Buy = () => {
                 fetchEmployees(),
                 fetchMemberTypes(),
                 fetchLoans(),
-                fetchLoanDeductions()
+                fetchLoanDeductions(),
+                fetchFarmerEmployees()
             ]);
 
             React.startTransition(() => {
@@ -387,7 +411,8 @@ export const Buy = () => {
                 }
                 if (Array.isArray(farmersData)) setFarmers(prev => isSameData(prev, farmersData) ? prev : farmersData);
                 if (Array.isArray(employeesData)) setEmployees(prev => isSameData(prev, employeesData) ? prev : employeesData);
-                if (Array.isArray(mtData)) setMemberTypes(prev => isSameData(prev, mtData) ? prev : mtData);
+                if (Array.isArray(feLinksData)) setFarmerEmployees(prev => isSameFarmerEmployees(prev, feLinksData) ? prev : feLinksData);
+                if (Array.isArray(mtData)) setMemberTypes(prev => isSameMemberTypes(prev, mtData) ? prev : mtData);
                 if (Array.isArray(loansData)) setLoans(prev => isSameData(prev, loansData) ? prev : loansData);
                 if (Array.isArray(dedsData)) setLoanDeductions(prev => isSameData(prev, dedsData) ? prev : dedsData);
 
@@ -453,10 +478,17 @@ export const Buy = () => {
             let bp = Number(data.basePrice) || 0;
             let bDrc = Number(data.bonusDrc) || 0;
 
-            const isCupLump = (data.rubberType || watchRubberType) === 'cup_lump';
-            const p = isCupLump ? bp : (bp + bDrc + ((data.enableFsc !== false && selectedFarmer?.fscId) ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0));
-            const farmerEmps = employees.filter(e => e.farmerId === farmerId);
-            const empPct = farmerEmps.length > 0 ? Number(farmerEmps[0].profitSharePct) : 0;
+            const isCupLump = (data.rubberType || watchRubberType) === 'cup_lump' || (data.rubberType || watchRubberType) === 'ขี้ยาง';
+            const mId = selectedFarmer?.memberTypeId || selectedFarmer?.member_type_id;
+            const mBonus = mId ? (Number(memberTypes.find(mt => String(mt.id) === String(mId))?.bonus) || 0) : 0;
+            const fscId = selectedFarmer?.fscId || selectedFarmer?.fsc_id;
+            const fBonus = (data.enableFsc !== false && fscId) ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0;
+            const p = isCupLump ? bp : (bp + bDrc + fBonus + mBonus);
+            let empPct = Number(data.empPct || 0);
+            if (data.employeeId && empPct === 0) {
+                const link = farmerEmployees.find(fe => fe.farmerId === farmerId && fe.employeeId === data.employeeId);
+                if (link) empPct = Number(link.profitSharePct || 0);
+            }
 
             const netWeight = truncateOneDecimal(w - bw);
             const dryRubber = truncateOneDecimal((netWeight * d) / 100);
@@ -526,7 +558,7 @@ export const Buy = () => {
             }
 
             const payload = {
-                date: data.date, farmerId, farmerName,
+                date: data.date, farmerId, farmerName, employeeId: data.employeeId || selectedEmployee?.id || null,
                 weight: Number(data.weight) || 0, bucketWeight: Number(data.bucketWeight) || 0,
                 drc: isCupLump ? (Number(data.drc) || 1) : (Number(data.drc) || 0), basePrice: bp, bonusDrc: bDrc,
                 actualPrice, pricePerKg: Number(actualPrice), total: Math.floor(total),
@@ -534,8 +566,8 @@ export const Buy = () => {
                 dryWeight: isCupLump ? Number(netWeight) : Number(dryRubber),
                 empPct: Number(empPct), employeeTotal: Math.floor(netEmployeeTotal),
                 farmerTotal: Math.floor(netFarmerTotal),
-                loanDeductions, fscBonus: Number((data.enableFsc !== false && selectedFarmer?.fscId) ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0),
-                bonusMemberType: Number(selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0), note: data.note,
+                loanDeductions, fscBonus: Number(fBonus),
+                bonusMemberType: Number(mBonus), note: data.note,
                 rubberType: data.rubberType || 'latex', receiptUrl,
                 status: 'Completed', farmerStatus: 'Pending', employeeStatus: 'Pending',
                 createdBy: user?.username || 'Owner',
@@ -757,10 +789,12 @@ export const Buy = () => {
             return Math.floor(netWeight * actualPrice);
         }
 
-        const fscBonus = (watchEnableFsc !== false && sf?.fscId) ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0;
+        const fscId = sf?.fscId || sf?.fsc_id;
+        const fscBonus = (watchEnableFsc !== false && fscId) ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0;
         let memberBonus = 0;
-        if (sf?.memberTypeId) {
-            const mType = memberTypes.find(mt => mt.id === sf.memberTypeId);
+        const mId = sf?.memberTypeId || sf?.member_type_id;
+        if (mId) {
+            const mType = memberTypes.find(mt => String(mt.id) === String(mId));
             if (mType) memberBonus = Number(mType.bonus) || 0;
         }
         
@@ -769,8 +803,16 @@ export const Buy = () => {
     };
 
     const getEmpPct = () => {
-        const emp = employees.find(e => e.farmerId === watchFarmerId);
-        return emp ? Number(emp.profitSharePct) : 0;
+        const formPct = watch('empPct');
+        if (formPct !== undefined && formPct !== null && formPct !== '') {
+            return Number(formPct);
+        }
+        const selectedEmpId = watch('employeeId');
+        if (selectedEmpId && watchFarmerId) {
+            const link = farmerEmployees.find(fe => fe.farmerId === watchFarmerId && fe.employeeId === selectedEmpId);
+            if (link) return Number(link.profitSharePct || 0);
+        }
+        return 0;
     };
 
     const calculateDryRubber = () => {
@@ -800,8 +842,16 @@ export const Buy = () => {
 
     const selectedEmployee = React.useMemo(() => {
         if (!watchFarmerId) return null;
+        const formEmpId = watch('employeeId');
+        if (formEmpId) {
+            return employees.find(e => e.id === formEmpId);
+        }
+        const link = farmerEmployees.find(fe => fe.farmerId === watchFarmerId);
+        if (link) {
+            return employees.find(e => e.id === link.employeeId);
+        }
         return employees.find(e => e.farmerId === watchFarmerId);
-    }, [employees, watchFarmerId]);
+    }, [employees, farmerEmployees, watchFarmerId, watch]);
 
     const employeeActiveLoans = React.useMemo(() => {
         if (!selectedEmployee) return [];
@@ -830,7 +880,10 @@ export const Buy = () => {
             suggestedFarmerDed = Math.min(suggestedFarmerDed, farmerGrossShare);
             suggestedFarmerDed = Math.round(suggestedFarmerDed);
         }
-        setValue('farmerDeduction', suggestedFarmerDed || '');
+        const finalFarmerDed = suggestedFarmerDed ? String(suggestedFarmerDed) : '';
+        if (String(watch('farmerDeduction') || '') !== finalFarmerDed) {
+            setValue('farmerDeduction', finalFarmerDed);
+        }
 
         // Suggested deduction for Employee
         let suggestedEmployeeDed = 0;
@@ -849,8 +902,11 @@ export const Buy = () => {
             suggestedEmployeeDed = Math.min(suggestedEmployeeDed, employeeGrossShare);
             suggestedEmployeeDed = Math.round(suggestedEmployeeDed);
         }
-        setValue('employeeDeduction', suggestedEmployeeDed || '');
-    }, [watchFarmerId, farmerGrossShare, employeeGrossShare, farmerDebt, employeeDebt, farmerActiveLoans, employeeActiveLoans]);
+        const finalEmpDed = suggestedEmployeeDed ? String(suggestedEmployeeDed) : '';
+        if (String(watch('employeeDeduction') || '') !== finalEmpDed) {
+            setValue('employeeDeduction', finalEmpDed);
+        }
+    }, [watchFarmerId, farmerGrossShare, employeeGrossShare, farmerDebt, employeeDebt, farmerActiveLoans, employeeActiveLoans, setValue, watch]);
 
     const filteredRecords = records.filter(r => {
         const matchesSearch = (r.farmerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -889,7 +945,7 @@ export const Buy = () => {
         totalAmount: filteredRecords.reduce((sum, r) => sum + Number(r.total), 0)
     };
 
-    const currentEmpPct = Number(employees.find(e => e.farmerId === watchFarmerId)?.profitSharePct) || 0;
+    const currentEmpPct = Number(watch('empPct') !== undefined ? watch('empPct') : (selectedEmployee?.profitSharePct || 0));
 
 
     return (
@@ -971,7 +1027,7 @@ export const Buy = () => {
                         watchRubberType={watchRubberType} watchWeight={watchWeight} watchBucketWeight={watchBucketWeight}
                         watchBasePrice={watchBasePrice} watchBonusDrc={watchBonusDrc}
                         watchFarmerId={watchFarmerId} watchFarmerName={watchFarmerName} watchEnableFsc={watchEnableFsc}
-                        farmers={farmers} employees={employees} memberTypes={memberTypes}
+                        farmers={farmers} employees={employees} farmerEmployees={farmerEmployees} memberTypes={memberTypes}
                         settings={settings} selectedFarmer={selectedFarmer}
                         farmerSearch={farmerSearch} setFarmerSearch={setFarmerSearch}
                         showFarmerDropdown={showFarmerDropdown} setShowFarmerDropdown={setShowFarmerDropdown}

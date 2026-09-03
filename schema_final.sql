@@ -348,4 +348,10 @@ CREATE INDEX IF NOT EXISTS idx_employees_user ON employees(userId);
 CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(userId, date DESC);
 CREATE INDEX IF NOT EXISTS idx_wages_user_date ON wages(userId, date DESC);
 
+-- Foreign Key Optimization Indexes for DELETE FROM farmers
+CREATE INDEX IF NOT EXISTS idx_buys_farmer_fk ON buys(farmerId);
+CREATE INDEX IF NOT EXISTS idx_promotions_farmer_fk ON promotions(farmerId);
+CREATE INDEX IF NOT EXISTS idx_land_plots_farmer_fk ON land_plots(farmerId);
+
+
 

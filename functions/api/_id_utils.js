@@ -22,30 +22,42 @@ export async function generateNextId(db, table, format, stationCode, userId, non
     const prefix = searchPattern.substring(0, seqMatch.index);
     const suffix = searchPattern.substring(seqMatch.index + seqMatch[0].length);
 
-    // 3. SINGLE-QUERY ATOMIC UPSERT
-    // This query handles both initialization (if counter missing) and incrementing in one atomic step.
-    // It uses a subquery to find the MAX existing sequence only if the row doesn't exist yet.
+    // 3. TWO-STEP FAST-PATH ATOMIC COUNTER
+    // Step 1: Fast path - Try updating existing counter row directly (1 row read, 1 row written)
+    // Step 2: Slow path - Only if counter row missing, run INSERT with MAX(id) subquery to initialize
     let nextSeq = 1;
 
     try {
-        const sql = `
-            INSERT INTO counters (table_name, id_prefix, userId, last_seq) 
-            VALUES (
-                ?, ?, ?, 
-                (SELECT COALESCE(MAX(CAST(substr(id, ?, ?) AS INTEGER)), 0) FROM ${table} WHERE id LIKE ? AND userId = ?) + 1
-            )
-            ON CONFLICT(table_name, id_prefix, userId) 
-            DO UPDATE SET last_seq = last_seq + 1, updated_at = CURRENT_TIMESTAMP
+        const updateSql = `
+            UPDATE counters 
+            SET last_seq = last_seq + 1, updated_at = CURRENT_TIMESTAMP 
+            WHERE table_name = ? AND id_prefix = ? AND userId = ? 
             RETURNING last_seq
         `;
+        const updated = await db.prepare(updateSql).bind(table, prefix, userId).first();
 
-        const result = await db.prepare(sql).bind(
-            table, prefix, userId, 
-            prefix.length + 1, seqLen, prefix + '%', userId
-        ).first();
+        if (updated && updated.last_seq) {
+            nextSeq = updated.last_seq;
+        } else {
+            const initSql = `
+                INSERT INTO counters (table_name, id_prefix, userId, last_seq) 
+                VALUES (
+                    ?, ?, ?, 
+                    (SELECT COALESCE(MAX(CAST(substr(id, ?, ?) AS INTEGER)), 0) FROM ${table} WHERE id LIKE ? AND userId = ?) + 1
+                )
+                ON CONFLICT(table_name, id_prefix, userId) 
+                DO UPDATE SET last_seq = last_seq + 1, updated_at = CURRENT_TIMESTAMP
+                RETURNING last_seq
+            `;
 
-        if (result && result.last_seq) {
-            nextSeq = result.last_seq;
+            const result = await db.prepare(initSql).bind(
+                table, prefix, userId, 
+                prefix.length + 1, seqLen, prefix + '%', userId
+            ).first();
+
+            if (result && result.last_seq) {
+                nextSeq = result.last_seq;
+            }
         }
     } catch (err) {
         console.error("[ID_UTILS] Atomic counter failed:", err.message);

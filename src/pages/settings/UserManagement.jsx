@@ -3,7 +3,8 @@ import { useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { 
     Leaf, RefreshCw, Plus, Phone, MapPin, Database, Edit2, Trash2, 
-    UserCircle, Percent, X, Save, Search, Clock, Filter, AlertTriangle, ShoppingBag
+    UserCircle, Percent, X, Save, Search, Clock, Filter, AlertTriangle, ShoppingBag,
+    Link2, ChevronDown, ChevronUp, Star
 } from 'lucide-react';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
@@ -13,6 +14,9 @@ import ReportPrintHeader from '../../components/ReportPrintHeader';
 import { 
     fetchFarmers, 
     fetchEmployees, 
+    fetchFarmerEmployees,
+    saveFarmerEmployeeLink,
+    deleteFarmerEmployeeLink,
     fetchMemberTypes, 
     fetchBuyRecords,
     getSettings,
@@ -33,6 +37,7 @@ export const UserManagement = () => {
     // Lists
     const [farmers, setFarmers] = useState([]);
     const [employees, setEmployees] = useState([]);
+    const [farmerEmployees, setFarmerEmployees] = useState([]);
     const [memberTypes, setMemberTypes] = useState([]);
     const [buys, setBuys] = useState([]);
     const [settings, setSettings] = useState({});
@@ -58,6 +63,49 @@ export const UserManagement = () => {
     const [showMemberTypeForm, setShowMemberTypeForm] = useState(false);
     const [editingMemberType, setEditingMemberType] = useState(null);
     const [mtFormData, setMtFormData] = useState({ name: '', bonus: '0' });
+
+    // Link Modal States
+    const [linkingEmployee, setLinkingEmployee] = useState(null);
+    const [showLinkModal, setShowLinkModal] = useState(false);
+    const [linkFarmerId, setLinkFarmerId] = useState('');
+    const [linkPct, setLinkPct] = useState('50');
+    const [linkIsDefault, setLinkIsDefault] = useState(false);
+    const [editingAssignment, setEditingAssignment] = useState(null);
+
+    // Expandable Sub-row States
+    const [expandedFarmerIds, setExpandedFarmerIds] = useState({});
+    const [expandedEmployeeIds, setExpandedEmployeeIds] = useState({});
+    const [assignmentSearch, setAssignmentSearch] = useState('');
+
+    const toggleFarmerExpand = (id) => {
+        setExpandedFarmerIds(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    const toggleEmployeeExpand = (id) => {
+        setExpandedEmployeeIds(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    const handleSaveLink = async () => {
+        if (!linkingEmployee || !linkFarmerId) return toast.error('กรุณาเลือกเกษตรกร');
+        setSaving(true);
+        try {
+            await saveFarmerEmployeeLink({
+                farmerId: linkFarmerId,
+                employeeId: linkingEmployee.id,
+                profitSharePct: Number(linkPct || 50),
+                isDefault: linkIsDefault ? 1 : 0
+            });
+            toast.success(`ผูกสวนยางให้ ${linkingEmployee.name} สำเร็จ`);
+            setShowLinkModal(false);
+            setLinkingEmployee(null);
+            setLinkFarmerId('');
+            loadData();
+        } catch (e) {
+            toast.error('ผูกสวนล้มเหลว: ' + e.message);
+        } finally {
+            setSaving(false);
+        }
+    };
 
     // Search States
     const [farmerSearch, setFarmerSearch] = useState('');
@@ -88,15 +136,17 @@ export const UserManagement = () => {
                 if (localBuys && localBuys.length > 0) setBuys(localBuys);
             } catch (e) { console.error(e); }
 
-            const [fRes, eRes, mtRes, bRes, sRes] = await Promise.all([
+            const [fRes, eRes, feRes, mtRes, bRes, sRes] = await Promise.all([
                 fetchFarmers(true),
                 fetchEmployees(),
+                fetchFarmerEmployees(),
                 fetchMemberTypes(),
                 fetchBuyRecords(),
                 getSettings()
             ]);
             setFarmers(Array.isArray(fRes) ? fRes : []);
             setEmployees(Array.isArray(eRes) ? eRes : []);
+            setFarmerEmployees(Array.isArray(feRes) ? feRes : []);
             setMemberTypes(Array.isArray(mtRes) ? mtRes : []);
             if (Array.isArray(bRes)) setBuys(bRes);
             if (sRes && sRes.status === 'success' && sRes.data) setSettings(sRes.data);
@@ -155,8 +205,24 @@ export const UserManagement = () => {
             let res;
             if (editingEmployee) {
                 res = await updateRecord('employees', editingEmployee.id, data);
+                if (data.farmerId) {
+                    await saveFarmerEmployeeLink({
+                        farmerId: data.farmerId,
+                        employeeId: editingEmployee.id,
+                        profitSharePct: data.profitSharePct,
+                        isDefault: 1
+                    });
+                }
             } else {
                 res = await addEmployee(data);
+                if (res && res.id && data.farmerId) {
+                    await saveFarmerEmployeeLink({
+                        farmerId: data.farmerId,
+                        employeeId: res.id,
+                        profitSharePct: data.profitSharePct,
+                        isDefault: 1
+                    });
+                }
             }
             
             if (res.status === 'success') {
@@ -317,6 +383,20 @@ export const UserManagement = () => {
         });
     }, [farmers, farmerSearch, activityFilter, farmerActivityMap, customDaysThreshold]);
 
+    // Filtered Assignments List
+    const filteredAssignments = React.useMemo(() => {
+        return farmerEmployees.filter(fe => {
+            if (!assignmentSearch) return true;
+            const search = assignmentSearch.toLowerCase();
+            const farmerName = fe.farmerName || farmers.find(f => f.id === fe.farmerId)?.name || '';
+            const employeeName = fe.employeeName || employees.find(e => e.id === fe.employeeId)?.name || '';
+            return farmerName.toLowerCase().includes(search) ||
+                   employeeName.toLowerCase().includes(search) ||
+                   String(fe.farmerId).toLowerCase().includes(search) ||
+                   String(fe.employeeId).toLowerCase().includes(search);
+        });
+    }, [farmerEmployees, assignmentSearch, farmers, employees]);
+
     return (
         <div className="space-y-6">
             <style dangerouslySetInnerHTML={{ __html: `
@@ -375,6 +455,22 @@ export const UserManagement = () => {
                 >
                     <Percent size={16} />
                     <span>ประเภทและโบนัส</span>
+                </button>
+                <button
+                    onClick={() => setActiveSubTab('assignments')}
+                    className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-bold transition-all duration-200 ${
+                        activeSubTab === 'assignments'
+                            ? 'bg-white text-emerald-700 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                >
+                    <Link2 size={16} />
+                    <span>ผูกคนกรีด-สวน</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        activeSubTab === 'assignments' ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600'
+                    }`}>
+                        {farmerEmployees.length}
+                    </span>
                 </button>
             </div>
 
@@ -617,7 +713,8 @@ export const UserManagement = () => {
                                 {filteredFarmers.map(f => {
                                     const act = farmerActivityMap[f.id];
                                     return (
-                                    <tr key={f.id} className={`hover:bg-rubber-50/30 transition-colors group ${editingFarmer?.id === f.id ? 'bg-amber-50/30' : ''}`}>
+                                        <React.Fragment key={f.id}>
+                                            <tr className={`hover:bg-rubber-50/30 transition-colors group ${editingFarmer?.id === f.id ? 'bg-amber-50/30' : ''}`}>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center space-x-3">
                                                 {f.linePicture ? (
@@ -630,6 +727,40 @@ export const UserManagement = () => {
                                                 <div>
                                                     <div className="font-bold text-gray-900">{f.name}</div>
                                                     <div className="text-[10px] text-gray-400 font-mono">ID: {f.id}</div>
+                                                    {(() => {
+                                                        const farmerEmps = farmerEmployees.filter(fe => fe.farmerId === f.id);
+                                                        if (farmerEmps.length > 0) {
+                                                            return (
+                                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                                    {farmerEmps.map(fe => (
+                                                                        <span key={fe.id || fe.employeeId} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${fe.isDefault ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
+                                                                            👤 {fe.employeeName || employees.find(e => e.id === fe.employeeId)?.name || 'ลูกจ้าง'} ({fe.profitSharePct}%)
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            );
+                                                        }
+                                                        const legacy = employees.filter(e => e.farmerId === f.id);
+                                                        if (legacy.length > 0) {
+                                                            return (
+                                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                                    {legacy.map(e => (
+                                                                        <span key={e.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
+                                                                            👤 {e.name} ({e.profitSharePct}%)
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return <div className="text-[10px] text-amber-600 font-medium mt-0.5">🌾 เจ้าของกรีดเอง</div>;
+                                                    })()}
+                                                    <button
+                                                        onClick={() => toggleFarmerExpand(f.id)}
+                                                        className="inline-flex items-center space-x-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200 mt-1.5 transition-all"
+                                                    >
+                                                        <span>👥 ตารางคนกรีด ({farmerEmployees.filter(fe => fe.farmerId === f.id).length})</span>
+                                                        {expandedFarmerIds[f.id] ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                                    </button>
                                                 </div>
                                             </div>
                                         </td>
@@ -723,6 +854,86 @@ export const UserManagement = () => {
                                             </div>
                                         </td>
                                     </tr>
+                                    {expandedFarmerIds[f.id] && (
+                                        <tr key={`sub-farmer-${f.id}`} className="bg-blue-50/40 animate-in fade-in">
+                                            <td colSpan="6" className="px-6 py-3 border-y border-blue-100">
+                                                <div className="bg-white p-3 rounded-lg border border-blue-200 shadow-inner space-y-2">
+                                                    <div className="flex justify-between items-center border-b pb-2">
+                                                        <span className="font-bold text-xs text-blue-900 flex items-center">
+                                                            <UserCircle size={14} className="mr-1 text-blue-600" />
+                                                            รายชื่อคนกรีดประจำสวน: {f.name}
+                                                        </span>
+                                                        <button
+                                                            onClick={() => {
+                                                                setLinkingEmployee(null);
+                                                                setLinkFarmerId(f.id);
+                                                                setLinkPct('50');
+                                                                setLinkIsDefault(false);
+                                                                setShowLinkModal(true);
+                                                            }}
+                                                            className="px-2.5 py-1 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 transition"
+                                                        >
+                                                            + ผูกคนกรีดประจำสวนนี้เพิ่ม
+                                                        </button>
+                                                    </div>
+                                                    {(() => {
+                                                        const links = farmerEmployees.filter(fe => fe.farmerId === f.id);
+                                                        if (links.length === 0) {
+                                                            return <p className="text-xs text-gray-400 italic py-1">ยังไม่มีการผูกคนกรีด (เจ้าของสวนกรีดเอง)</p>;
+                                                        }
+                                                        return (
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                                                {links.map(fe => {
+                                                                    const empObj = employees.find(e => e.id === fe.employeeId);
+                                                                    return (
+                                                                        <div key={fe.id || fe.employeeId} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-gray-200 text-xs">
+                                                                            <div>
+                                                                                <div className="font-bold text-gray-900 flex items-center">
+                                                                                    👤 {fe.employeeName || empObj?.name || fe.employeeId}
+                                                                                    {fe.isDefault === 1 && <span className="ml-1 text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-bold">หลัก</span>}
+                                                                                </div>
+                                                                                <div className="text-gray-500 font-mono text-[10px]">% ส่วนแบ่ง: <span className="font-bold text-blue-700">{fe.profitSharePct}%</span></div>
+                                                                            </div>
+                                                                            <div className="flex space-x-1">
+                                                                                <button
+                                                                                    onClick={() => {
+                                                                                        setEditingAssignment(fe);
+                                                                                        setLinkFarmerId(fe.farmerId);
+                                                                                        setLinkingEmployee(empObj || { id: fe.employeeId, name: fe.employeeName });
+                                                                                        setLinkPct(fe.profitSharePct.toString());
+                                                                                        setLinkIsDefault(fe.isDefault === 1);
+                                                                                        setShowLinkModal(true);
+                                                                                    }}
+                                                                                    className="p-1 text-gray-400 hover:text-blue-600"
+                                                                                    title="แก้ไข %"
+                                                                                >
+                                                                                    <Edit2 size={13} />
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={async () => {
+                                                                                        if (window.confirm(`ยกเลิกการผูกสวนนี้?`)) {
+                                                                                            await deleteFarmerEmployeeLink({ farmerId: fe.farmerId, employeeId: fe.employeeId });
+                                                                                            toast.success('ยกเลิกแล้ว');
+                                                                                            loadData();
+                                                                                        }
+                                                                                    }}
+                                                                                    className="p-1 text-gray-400 hover:text-red-600"
+                                                                                    title="ลบ"
+                                                                                >
+                                                                                    <Trash2 size={13} />
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                        </React.Fragment>
                                     );
                                 })}
                                 {filteredFarmers.length === 0 && !loading && (
@@ -864,15 +1075,65 @@ export const UserManagement = () => {
                                         farmers.find(f => f.id === e.farmerId)?.name?.toLowerCase().includes(employeeSearch.toLowerCase())
                                     )
                                     .map(e => (
-                                    <tr key={e.id} className={`hover:bg-blue-50/30 transition-colors ${editingEmployee?.id === e.id ? 'bg-amber-50/30' : ''}`}>
+                                    <React.Fragment key={e.id}>
+                                    <tr className={`hover:bg-blue-50/30 transition-colors ${editingEmployee?.id === e.id ? 'bg-amber-50/30' : ''}`}>
                                         <td className="px-6 py-4">
                                             <div className="font-bold text-gray-900">{e.name}</div>
                                             <div className="text-[11px] text-gray-400">ID: {e.id}</div>
+                                            <button
+                                                onClick={() => toggleEmployeeExpand(e.id)}
+                                                className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 mt-1.5 transition-all"
+                                            >
+                                                <span>🌿 ตารางสวนที่รับกรีด ({farmerEmployees.filter(fe => fe.employeeId === e.id).length})</span>
+                                                {expandedEmployeeIds[e.id] ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                            </button>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-gray-700 text-xs border border-gray-200">
-                                                <Leaf size={12} className="mr-1 text-rubber-500" />
-                                                {farmers.find(f => f.id === e.farmerId)?.name || <span className="text-red-400 italic">ไม่ระบุ</span>}
+                                            <div className="flex flex-wrap gap-1.5 items-center">
+                                                {(() => {
+                                                    const links = farmerEmployees.filter(fe => fe.employeeId === e.id);
+                                                    if (links.length === 0) {
+                                                        const legacyFarmer = farmers.find(f => f.id === e.farmerId);
+                                                        return legacyFarmer ? (
+                                                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-gray-700 text-xs border border-gray-200">
+                                                                <Leaf size={12} className="mr-1 text-rubber-500" />
+                                                                {legacyFarmer.name} ({e.profitSharePct}%)
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-gray-400 italic text-xs">ยังไม่ผูกสวน</span>
+                                                        );
+                                                    }
+                                                    return links.map(link => (
+                                                        <span key={link.id || link.farmerId} className="inline-flex items-center px-2 py-1 rounded-md bg-emerald-50 text-emerald-800 text-xs border border-emerald-200 font-medium">
+                                                            <Leaf size={12} className="mr-1 text-emerald-600" />
+                                                            {link.farmerName || farmers.find(f => f.id === link.farmerId)?.name || link.farmerId} ({link.profitSharePct}%)
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (window.confirm(`ลบการผูกสวนนี้ออก?`)) {
+                                                                        await deleteFarmerEmployeeLink({ farmerId: link.farmerId, employeeId: e.id });
+                                                                        toast.success('ลบการผูกสวนแล้ว');
+                                                                        loadData();
+                                                                    }
+                                                                }}
+                                                                className="ml-1.5 text-red-400 hover:text-red-600 font-bold"
+                                                                title="ยกเลิกการผูกสวนนี้"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </span>
+                                                    ));
+                                                })()}
+                                                
+                                                <button
+                                                    onClick={() => {
+                                                        setLinkingEmployee(e);
+                                                        setShowLinkModal(true);
+                                                    }}
+                                                    className="inline-flex items-center px-2 py-1 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs border border-blue-200 font-bold transition-all"
+                                                    title="ผูกสวนเพิ่ม"
+                                                >
+                                                    + ผูกสวนเพิ่ม
+                                                </button>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -905,6 +1166,7 @@ export const UserManagement = () => {
                                             </div>
                                         </td>
                                     </tr>
+                                    </React.Fragment>
                                 ))}
                                 {employees.length === 0 && !loading && (
                                     <tr>
@@ -1042,6 +1304,183 @@ export const UserManagement = () => {
                     </div>
                 </section>
             )}
+
+            {/* ===================== ASSIGNMENTS TAB ===================== */}
+            {activeSubTab === 'assignments' && (
+                <section className="animate-in fade-in duration-300 space-y-6">
+                    {/* Header & Search */}
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div className="relative w-full md:w-80">
+                            <input
+                                type="text"
+                                placeholder="ค้นหาชื่อเกษตรกร หรือชื่อคนกรีด..."
+                                value={assignmentSearch}
+                                onChange={(e) => setAssignmentSearch(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 text-sm shadow-sm font-medium"
+                            />
+                            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                            {assignmentSearch && (
+                                <button onClick={() => setAssignmentSearch('')} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
+                                    <X size={16} />
+                                </button>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => {
+                                setEditingAssignment(null);
+                                setLinkingEmployee(null);
+                                setLinkFarmerId('');
+                                setLinkPct('50');
+                                setLinkIsDefault(false);
+                                setShowLinkModal(true);
+                            }}
+                            className="w-full md:w-auto inline-flex items-center justify-center px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition shadow-sm font-bold text-sm"
+                        >
+                            <Plus size={18} className="mr-1.5" />
+                            ผูกคนกรีดกับสวนยางเพิ่ม
+                        </button>
+                    </div>
+
+                    {/* Summary Counter Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-emerald-50/60 border border-emerald-100 p-4 rounded-xl flex items-center space-x-3 shadow-sm">
+                            <div className="p-3 bg-emerald-600 text-white rounded-lg shadow-sm">
+                                <Link2 size={20} />
+                            </div>
+                            <div>
+                                <div className="text-xs text-emerald-800 font-bold uppercase">การผูกสวนทั้งหมด</div>
+                                <div className="text-2xl font-black text-emerald-900">{farmerEmployees.length} <span className="text-xs font-medium">รายการ</span></div>
+                            </div>
+                        </div>
+
+                        <div className="bg-blue-50/60 border border-blue-100 p-4 rounded-xl flex items-center space-x-3 shadow-sm">
+                            <div className="p-3 bg-blue-600 text-white rounded-lg shadow-sm">
+                                <Leaf size={20} />
+                            </div>
+                            <div>
+                                <div className="text-xs text-blue-800 font-bold uppercase">สวนยางที่มีคนกรีด</div>
+                                <div className="text-2xl font-black text-blue-900">
+                                    {new Set(farmerEmployees.map(fe => fe.farmerId)).size} <span className="text-xs font-medium">สวน</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-purple-50/60 border border-purple-100 p-4 rounded-xl flex items-center space-x-3 shadow-sm">
+                            <div className="p-3 bg-purple-600 text-white rounded-lg shadow-sm">
+                                <UserCircle size={20} />
+                            </div>
+                            <div>
+                                <div className="text-xs text-purple-800 font-bold uppercase">ลูกจ้างที่รับกรีด</div>
+                                <div className="text-2xl font-black text-purple-900">
+                                    {new Set(farmerEmployees.map(fe => fe.employeeId)).size} <span className="text-xs font-medium">คน</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Assignments Table */}
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50 font-bold text-gray-500 text-xs uppercase tracking-wider">
+                                <tr>
+                                    <th className="px-6 py-4 text-left">เกษตรกร (เจ้าของสวน)</th>
+                                    <th className="px-6 py-4 text-left">คนกรีด (ลูกจ้าง)</th>
+                                    <th className="px-6 py-4 text-center">% ส่วนแบ่งกำไร</th>
+                                    <th className="px-6 py-4 text-center">สถานะคนกรีดหลัก</th>
+                                    <th className="px-6 py-4 text-center">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 text-sm">
+                                {filteredAssignments.map(item => {
+                                    const farmerObj = farmers.find(f => f.id === item.farmerId);
+                                    const empObj = employees.find(e => e.id === item.employeeId);
+                                    return (
+                                        <tr key={item.id || `${item.farmerId}-${item.employeeId}`} className="hover:bg-emerald-50/30 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="font-bold text-gray-900 flex items-center">
+                                                    🌿 {item.farmerName || farmerObj?.name || item.farmerId}
+                                                </div>
+                                                <div className="text-[10px] text-gray-400 font-mono">ID: {item.farmerId}</div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="font-bold text-gray-900 flex items-center">
+                                                    👤 {item.employeeName || empObj?.name || item.employeeId}
+                                                </div>
+                                                <div className="text-[10px] text-gray-400 font-mono">ID: {item.employeeId}</div>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-800 font-black rounded-lg border border-emerald-200">
+                                                    {item.profitSharePct}%
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                {item.isDefault === 1 ? (
+                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                                        <Star size={12} className="mr-1 fill-amber-500 text-amber-500" /> คนกรีดหลัก (Default)
+                                                    </span>
+                                                ) : (
+                                                    <button
+                                                        onClick={async () => {
+                                                            await saveFarmerEmployeeLink({
+                                                                farmerId: item.farmerId,
+                                                                employeeId: item.employeeId,
+                                                                profitSharePct: item.profitSharePct,
+                                                                isDefault: 1
+                                                            });
+                                                            toast.success('ตั้งเป็นคนกรีดหลักเรียบร้อย');
+                                                            loadData();
+                                                        }}
+                                                        className="text-xs text-gray-400 hover:text-amber-600 font-bold underline transition"
+                                                    >
+                                                        ตั้งเป็นหลัก
+                                                    </button>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 text-center space-x-1">
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingAssignment(item);
+                                                        setLinkFarmerId(item.farmerId);
+                                                        setLinkingEmployee(empObj || { id: item.employeeId, name: item.employeeName });
+                                                        setLinkPct(item.profitSharePct.toString());
+                                                        setLinkIsDefault(item.isDefault === 1);
+                                                        setShowLinkModal(true);
+                                                    }}
+                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                    title="แก้ไข % ส่วนแบ่ง"
+                                                >
+                                                    <Edit2 size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (window.confirm(`ยกเลิกการผูกสวนนี้?`)) {
+                                                            await deleteFarmerEmployeeLink({ farmerId: item.farmerId, employeeId: item.employeeId });
+                                                            toast.success('ลบการผูกสวนแล้ว');
+                                                            loadData();
+                                                        }
+                                                    }}
+                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                    title="ลบการผูก"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {filteredAssignments.length === 0 && (
+                                    <tr>
+                                        <td colSpan="5" className="px-6 py-12 text-center text-gray-400 italic">
+                                            <Link2 size={40} className="mb-2 opacity-20 mx-auto text-emerald-600" />
+                                            ยังไม่มีข้อมูลการผูกคนกรีดกับสวนยางในระบบ
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            )}
             </div>
             {/* End no-print wrapper */}
 
@@ -1147,6 +1586,105 @@ export const UserManagement = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Modal ผูกสวนยางเพิ่ม / แก้ไข % */}
+            {showLinkModal && (
+                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+                        <div className="flex justify-between items-center border-b pb-3">
+                            <h3 className="font-bold text-gray-900 text-base flex items-center">
+                                <Link2 className="mr-2 text-emerald-600" size={20} />
+                                {editingAssignment ? 'แก้ไขข้อมูลการผูกสวน' : 'ผูกคนกรีดกับสวนยางเพิ่ม'}
+                            </h3>
+                            <button onClick={() => { setShowLinkModal(false); setLinkingEmployee(null); setEditingAssignment(null); }} className="text-gray-400 hover:text-gray-600">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4 text-xs font-medium">
+                            <div>
+                                <label className="block text-gray-700 font-bold mb-1">เกษตรกร (เจ้าของสวน) <span className="text-red-500">*</span></label>
+                                <select
+                                    value={linkFarmerId}
+                                    disabled={!!editingAssignment}
+                                    onChange={(e) => setLinkFarmerId(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white focus:ring-emerald-500 font-bold disabled:bg-gray-100"
+                                >
+                                    <option value="">-- เลือกเจ้าของสวน --</option>
+                                    {farmers.map(f => (
+                                        <option key={f.id} value={f.id}>{f.name} ({f.id})</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-gray-700 font-bold mb-1">คนกรีด (ลูกจ้าง) <span className="text-red-500">*</span></label>
+                                {linkingEmployee ? (
+                                    <div className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 font-bold text-gray-800">
+                                        👤 {linkingEmployee.name} ({linkingEmployee.id})
+                                    </div>
+                                ) : (
+                                    <select
+                                        value={linkingEmployee?.id || ''}
+                                        disabled={!!editingAssignment}
+                                        onChange={(e) => setLinkingEmployee(employees.find(emp => emp.id === e.target.value) || null)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white focus:ring-emerald-500 font-bold disabled:bg-gray-100"
+                                    >
+                                        <option value="">-- เลือกคนกรีด (ลูกจ้าง) --</option>
+                                        {employees.map(e => (
+                                            <option key={e.id} value={e.id}>{e.name} ({e.id})</option>
+                                        ))}
+                                    </select>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-gray-700 font-bold mb-1">% ส่วนแบ่งลูกจ้างในสวนนี้ <span className="text-red-500">*</span></label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    value={linkPct}
+                                    onChange={(e) => setLinkPct(e.target.value)}
+                                    placeholder="50"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-emerald-500 font-bold"
+                                />
+                            </div>
+
+                            <div className="flex items-center space-x-2 pt-1">
+                                <input
+                                    type="checkbox"
+                                    id="linkIsDefault"
+                                    checked={linkIsDefault}
+                                    onChange={(e) => setLinkIsDefault(e.target.checked)}
+                                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                                />
+                                <label htmlFor="linkIsDefault" className="text-xs text-gray-700 cursor-pointer font-bold">
+                                    ตั้งเป็นคนกรีดหลักประจำสวนนี้ (Default Tapper)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end space-x-2 pt-3 border-t">
+                            <button
+                                type="button"
+                                onClick={() => { setShowLinkModal(false); setLinkingEmployee(null); setEditingAssignment(null); }}
+                                className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-xl font-bold"
+                            >
+                                ยกเลิก
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSaveLink}
+                                disabled={saving || !linkFarmerId || (!linkingEmployee && !editingAssignment)}
+                                className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-bold disabled:opacity-50 transition-all flex items-center space-x-1 shadow-sm"
+                            >
+                                <Save size={16} />
+                                <span>บันทึกข้อมูล</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

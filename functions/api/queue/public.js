@@ -25,7 +25,9 @@ export async function onRequestGet(context) {
             ORDER BY created_at ASC
         `).bind(storeId, `${dateStr}%`).all();
 
-        return jsonResponse(results);
+        const res = jsonResponse(results);
+        res.headers.set('Cache-Control', 'public, max-age=15, s-maxage=15');
+        return res;
     } catch (e) {
         console.error("[GET /api/queue/public Error]", e);
         return errorResponse(e.message);

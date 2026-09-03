@@ -8,10 +8,14 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
     const [qrModalData, setQrModalData] = useState(null);
 
     const handleShowQR = (record) => {
-        const farmer = (farmers || []).find(f => f.id === record.farmerId || f.name === record.farmerName);
+        const farmer = (farmers || []).find(f => String(f.id) === String(record.farmerId || record.farmer_id) || f.name === record.farmerName);
         const farmerPromptpay = farmer?.phone || farmer?.bankAccount || record.phone || '';
         
-        const emp = (employees || []).find(e => e.farmerId === record.farmerId || e.farmerId === farmer?.id);
+        const empId = record.employeeId || record.employee_id;
+        const emp = empId 
+            ? (employees || []).find(e => String(e.id) === String(empId))
+            : (employees || []).find(e => String(e.farmerId) === String(record.farmerId || farmer?.id));
+            
         const empPromptpay = emp?.phone || emp?.bankAccount || '';
         
         const hasEmp = Number(record.employeeTotal) > 0;

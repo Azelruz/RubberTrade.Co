@@ -1,7 +1,7 @@
 {
   "name": "rubertrade-co-ltd",
   "private": true,
-  "version": "1.5.4",
+  "version": "1.7.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,16 +18,19 @@
     "@capacitor/core": "^8.4.2",
     "@line/liff": "^2.27.3",
     "@supabase/supabase-js": "^2.102.1",
+    "@turf/turf": "^7.4.0",
     "axios": "^1.13.6",
     "date-fns": "^4.1.0",
     "dexie": "^4.4.2",
     "jose": "^6.2.2",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.577.0",
     "papaparse": "^5.5.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.71.2",
     "react-hot-toast": "^2.6.0",
+    "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.13.1",
     "recharts": "^3.7.0",
     "vite-plugin-pwa": "^1.2.0"

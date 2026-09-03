@@ -1,4 +1,4 @@
-import { jsonResponse, errorResponse, withAuth, isUUID, trackUsage, recordAuditLog, getTodayDateStr } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth, isUUID, trackUsage, recordAuditLog, getTodayDateStr, syncDailyBuysSummary, updateFarmerStats, syncStoreStockSummary } from './_utils.js';
 import { generateNextId, getSetting } from './_id_utils.js';
 import { validatePayload } from './_validation.js';
 import { refundLoanDeductions } from './_loan_helpers.js';
@@ -9,6 +9,31 @@ async function handleGet(context) {
         const url = new URL(context.request.url);
         
         // --- Input Parameters ---
+        const farmerStatsParam = url.searchParams.get('farmerStats') === 'true';
+        if (farmerStatsParam) {
+            const storeId = context.user.storeId;
+            const query = `
+                SELECT 
+                    b.farmerId,
+                    COALESCE(f.name, b.farmerName) as farmerName,
+                    SUM(
+                        CASE 
+                            WHEN b.dryRubber IS NOT NULL AND b.dryRubber > 0 THEN b.dryRubber
+                            WHEN (b.rubberType = 'latex' OR b.rubberType IS NULL OR b.rubberType = '') 
+                                 THEN ((b.weight - b.bucketWeight) * b.drc) / 100.0
+                            ELSE 0 
+                        END
+                    ) as totalDryRubber
+                FROM buys b
+                LEFT JOIN farmers f ON b.farmerId = f.id
+                WHERE b.userId = ?
+                GROUP BY b.farmerId, COALESCE(f.name, b.farmerName)
+            `;
+            const { results } = await context.env.DB.prepare(query).bind(storeId).all();
+            context.waitUntil?.(trackUsage(context, { rowsRead: results ? results.length : 0 }));
+            return jsonResponse(results || []);
+        }
+
         const since = url.searchParams.get('since');
         let startDate = url.searchParams.get('startDate');
         let endDate = url.searchParams.get('endDate');
@@ -98,8 +123,8 @@ async function handleGet(context) {
         const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
         // --- Execute Queries in Batch ---
-        // 1. Paginated or Safety-limited Records (Default limit 100 if unpaginated to prevent massive D1 rows read)
-        const defaultLimit = (!isPaginated && !startDate && !endDate && !search && !since) ? 100 : null;
+        // 1. Paginated or Safety-limited Records (Default limit 100/200 if unpaginated to prevent massive D1 rows read)
+        const defaultLimit = (!isPaginated && !startDate && !endDate && !search && !since) ? 100 : (allParam ? 200 : null);
         
         // Only JOIN farmers if searching across f.name, otherwise b.farmerName is already present in buys table
         const fromClause = search ? 'FROM buys b LEFT JOIN farmers f ON b.farmerId = f.id' : 'FROM buys b';
@@ -213,7 +238,7 @@ async function handlePost(context) {
                     id = await generateNextId(context.env.DB, 'buys', format, stationCode, storeId, nonce, i);
                 }
                 const {
-                    date, farmerId, farmerName, weight, drc, pricePerKg, total,
+                    date, farmerId, farmerName, employeeId, weight, drc, pricePerKg, total,
                     dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                     farmerStatus, employeeStatus, receiptUrl, bucketWeight,
                     basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, createdBy
@@ -221,15 +246,16 @@ async function handlePost(context) {
 
                 stmts.push(context.env.DB.prepare(`
                     INSERT INTO buys (
-                        id, date, farmerId, farmerName, weight, drc, pricePerKg, total, 
+                        id, date, farmerId, farmerName, employeeId, weight, drc, pricePerKg, total, 
                         dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                         farmerStatus, employeeStatus, receiptUrl, bucketWeight,
                         basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, createdBy, userId, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         date = excluded.date,
                         farmerId = excluded.farmerId,
                         farmerName = excluded.farmerName,
+                        employeeId = excluded.employeeId,
                         weight = excluded.weight,
                         drc = excluded.drc,
                         pricePerKg = excluded.pricePerKg,
@@ -250,7 +276,7 @@ async function handlePost(context) {
                         bonusMemberType = excluded.bonusMemberType,
                         rubberType = excluded.rubberType
                 `).bind(
-                    id, date || null, farmerId || null, farmerName || null, 
+                    id, date || null, farmerId || null, farmerName || null, employeeId || null,
                     weight || 0, drc || 0, pricePerKg || 0, total || 0, 
                     dryRubber || 0, empPct || 0, employeeTotal || 0, farmerTotal || 0, 
                     note || null, status || null, 
@@ -276,6 +302,8 @@ async function handlePost(context) {
                     });
                 })));
             }
+
+            context.waitUntil?.(syncDailyBuysSummary(context.env.DB, storeId, body.payloads.map(p => p.date)));
 
             return jsonResponse({ status: 'success', count: stmts.length });
         }
@@ -318,7 +346,7 @@ async function handlePost(context) {
         const isUpdate = !!existingRecord;
 
         const { 
-            date, farmerId, farmerName, weight, drc, pricePerKg, total, 
+            date, farmerId, farmerName, employeeId, weight, drc, pricePerKg, total, 
             dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
             farmerStatus, employeeStatus, receiptUrl, bucketWeight,
             basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, createdBy
@@ -326,15 +354,16 @@ async function handlePost(context) {
         
         await context.env.DB.prepare(`
             INSERT INTO buys (
-                id, date, farmerId, farmerName, weight, drc, pricePerKg, total, 
+                id, date, farmerId, farmerName, employeeId, weight, drc, pricePerKg, total, 
                 dryRubber, empPct, employeeTotal, farmerTotal, note, status, 
                 farmerStatus, employeeStatus, receiptUrl, bucketWeight,
                 basePrice, bonusDrc, actualPrice, bonusMemberType, rubberType, createdBy, userId, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 date = excluded.date,
                 farmerId = excluded.farmerId,
                 farmerName = excluded.farmerName,
+                employeeId = excluded.employeeId,
                 weight = excluded.weight,
                 drc = excluded.drc,
                 pricePerKg = excluded.pricePerKg,
@@ -355,7 +384,7 @@ async function handlePost(context) {
                 bonusMemberType = excluded.bonusMemberType,
                 rubberType = excluded.rubberType
         `).bind(
-            id, date || null, farmerId || null, farmerName || null, 
+            id, date || null, farmerId || null, farmerName || null, employeeId || null,
             weight || 0, drc || 0, pricePerKg || 0, total || 0, 
             dryRubber || 0, empPct || 0, employeeTotal || 0, farmerTotal || 0, 
             note || null, status || null, 
@@ -426,6 +455,35 @@ async function handlePost(context) {
             oldData: isUpdate ? existingRecord : null,
             newData: { ...buyData, id }
         }));
+
+        // --- Stock Delta Calculation ---
+        let stockDelta = {};
+        const netW = Math.max(0, Number(payload.weight || 0) - Number(payload.bucketWeight || 0));
+        const drcVal = Number(payload.drc || 0);
+        const rType = payload.rubberType || 'latex';
+
+        if (rType === 'cup_lump' || rType === 'ขี้ยาง') {
+            stockDelta.cupLumpBuyWeight = netW;
+        } else {
+            stockDelta.latexBuyWeight = netW;
+            stockDelta.totalDrcWeight = netW * drcVal;
+        }
+
+        if (isUpdate && existingRecord) {
+            const oldNet = Math.max(0, Number(existingRecord.weight || 0) - Number(existingRecord.bucketWeight || 0));
+            const oldDrc = Number(existingRecord.drc || 0);
+            const oldType = existingRecord.rubberType || 'latex';
+            if (oldType === 'cup_lump' || oldType === 'ขี้ยาง') {
+                stockDelta.cupLumpBuyWeight = (stockDelta.cupLumpBuyWeight || 0) - oldNet;
+            } else {
+                stockDelta.latexBuyWeight = (stockDelta.latexBuyWeight || 0) - oldNet;
+                stockDelta.totalDrcWeight = (stockDelta.totalDrcWeight || 0) - (oldNet * oldDrc);
+            }
+        }
+
+        context.waitUntil?.(syncDailyBuysSummary(context.env.DB, storeId, [payload.date, existingRecord?.date]));
+        context.waitUntil?.(updateFarmerStats(context.env.DB, farmerId, storeId));
+        context.waitUntil?.(syncStoreStockSummary(context.env.DB, storeId, stockDelta));
 
         return jsonResponse({ status: 'success', id });
     } catch (e) {

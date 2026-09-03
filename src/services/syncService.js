@@ -96,7 +96,8 @@ export const hydrateLocalDB = async () => {
             { path: '/promotions', table: 'promotions' },
             { path: '/settings', table: 'settings' },
             { path: '/services/catalog', table: 'service_catalog' },
-            { path: '/services/queues', table: 'service_queues' }
+            { path: '/services/queues', table: 'service_queues' },
+            { path: '/land_plots', table: 'land_plots' }
         ];
 
         for (const ep of endpoints) {

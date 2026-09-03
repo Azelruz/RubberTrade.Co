@@ -16,7 +16,9 @@ import {
     LayoutDashboard,
     Quote,
     Maximize2,
-    X
+    X,
+    Printer,
+    ExternalLink
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -31,6 +33,7 @@ const Home = () => {
     const navigate = useNavigate();
     const [isScrolled, setIsScrolled] = useState(false);
     const [activePreview, setActivePreview] = useState(null);
+    const [showDriverModal, setShowDriverModal] = useState(false);
 
     useEffect(() => {
         const handleScroll = () => {
@@ -140,6 +143,13 @@ const Home = () => {
                         <a href="#features" className="hover:text-rubber-600 transition-colors">คุณสมบัติ</a>
                         <a href="#preview" className="hover:text-rubber-600 transition-colors">ตัวอย่างระบบ</a>
                         <a href="#packages" className="hover:text-rubber-600 transition-colors">แพ็กเกจ</a>
+                        <button 
+                            onClick={() => setShowDriverModal(true)} 
+                            className="hover:text-rubber-600 transition-colors flex items-center gap-1.5 font-bold text-rubber-600 bg-rubber-50 px-3 py-1.5 rounded-full border border-rubber-100/80 shadow-sm"
+                        >
+                            <Printer size={15} />
+                            <span>ไดรเวอร์เครื่องพิมพ์</span>
+                        </button>
                         <a href="#about" className="hover:text-rubber-600 transition-colors">เกี่ยวกับเรา</a>
                     </div>
 
@@ -478,7 +488,10 @@ const Home = () => {
                         <div className="space-y-6">
                             <h5 className="font-black uppercase text-xs tracking-widest text-gray-900">Support</h5>
                             <ul className="space-y-4 text-sm font-bold text-gray-400">
-                                <li className="hover:text-rubber-600 cursor-pointer">ศูนย์ช่วยเหลือ</li>
+                                <li onClick={() => setShowDriverModal(true)} className="hover:text-rubber-600 cursor-pointer flex items-center gap-1.5 text-rubber-600 font-bold">
+                                    <Printer size={15} />
+                                    <span>ดาวน์โหลด Driver เครื่องพิมพ์ (58mm/80mm)</span>
+                                </li>
                                 <li className="hover:text-rubber-600 cursor-pointer">
                                     <a href="https://www.facebook.com/profile.php?id=61572159400802" target="_blank" rel="noopener noreferrer">
                                         ติดต่อเรา
@@ -548,6 +561,128 @@ const Home = () => {
                                     <p className="text-gray-500 font-bold">{activePreview.desc}</p>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Driver Download Modal */}
+            {showDriverModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 animate-in fade-in duration-300">
+                    <div 
+                        className="absolute inset-0 bg-gray-900/80 backdrop-blur-md"
+                        onClick={() => setShowDriverModal(false)}
+                    ></div>
+                    
+                    <div className="relative w-full max-w-3xl bg-white rounded-[2rem] md:rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 border border-gray-100 max-h-[90vh] flex flex-col">
+                        {/* Modal Header */}
+                        <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-rubber-900 p-6 md:p-8 text-white flex items-center justify-between relative overflow-hidden">
+                            <div className="flex items-center gap-4 relative z-10">
+                                <div className="p-3 bg-rubber-600/30 rounded-2xl border border-rubber-400/30 backdrop-blur-md">
+                                    <Printer size={28} className="text-rubber-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl md:text-2xl font-black tracking-tight">ดาวน์โหลดไดรเวอร์เครื่องพิมพ์</h3>
+                                    <p className="text-gray-300 text-xs md:text-sm font-medium mt-0.5">สำหรับเครื่องพิมพ์สลิปความร้อน (Thermal POS Printer) 58mm & 80mm</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setShowDriverModal(false)}
+                                className="relative z-10 p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="p-6 md:p-8 overflow-y-auto space-y-6 flex-1 bg-gray-50/50">
+                            {/* Driver 58mm Card */}
+                            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                                <div className="space-y-2 flex-1">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-black">
+                                        <Printer size={14} />
+                                        รุ่น 58mm (2 นิ้ว)
+                                    </div>
+                                    <h4 className="text-lg font-black text-gray-900">POS-58 Thermal Printer Driver</h4>
+                                    <p className="text-sm text-gray-500 font-medium leading-relaxed">
+                                        สำหรับเครื่องพิมพ์ใบเสร็จความร้อนขนาดเล็ก 58mm (Windows XP / 7 / 8 / 10 / 11) รองรับการพิมพ์สลิปรับซื้อและใบเสร็จความร้อนทุกรุ่น
+                                    </p>
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                                    <a
+                                        href="https://drive.google.com/file/d/14PYUpoPaCOYs-m-xHagdjqO36ZuTjJfF/view?usp=sharing"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-5 py-3 bg-rubber-600 hover:bg-rubber-700 text-white rounded-2xl font-bold text-sm shadow-md hover:shadow-rubber-600/20 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Download size={16} />
+                                        <span>ดาวน์โหลด Driver 58mm</span>
+                                    </a>
+                                </div>
+                            </div>
+
+                            {/* Driver 80mm Card */}
+                            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                                <div className="space-y-2 flex-1">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-black">
+                                        <Printer size={14} />
+                                        รุ่น 80mm (3 นิ้ว)
+                                    </div>
+                                    <h4 className="text-lg font-black text-gray-900">POS-80 Thermal Printer Driver</h4>
+                                    <p className="text-sm text-gray-500 font-medium leading-relaxed">
+                                        สำหรับเครื่องพิมพ์ใบเสร็จความร้อนขนาดใหญ่ 80mm (Windows XP / 7 / 8 / 10 / 11) รองรับระบบตัดกระดาษอัตโนมัติ (Auto-Cutter)
+                                    </p>
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                                    <a
+                                        href="https://drive.google.com/file/d/17YH5GWs8i5IeNGCdH2jZsnT-Zlokcltj/view?usp=sharing"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-sm shadow-md hover:shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Download size={16} />
+                                        <span>ดาวน์โหลด Driver 80mm</span>
+                                    </a>
+                                </div>
+                            </div>
+
+                            {/* Mobile RawBT App Card */}
+                            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                                <div className="space-y-2 flex-1">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-xs font-black">
+                                        <Smartphone size={14} />
+                                        สำหรับ Android / มือถือ
+                                    </div>
+                                    <h4 className="text-lg font-black text-gray-900">RawBT Print Service (App / Driver)</h4>
+                                    <p className="text-sm text-gray-500 font-medium leading-relaxed">
+                                        แอปพลิเคชันและไดรเวอร์สำหรับสั่งพิมพ์ผ่าน Bluetooth / USB OTG บนมือถือและแท็บเล็ต Android
+                                    </p>
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                                    <a
+                                        href="https://drive.google.com/file/d/177ebMhGHaVMIG67JSKPceCc9nuKCKuSz/view?usp=sharing"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-5 py-3 bg-gray-900 hover:bg-gray-800 text-white rounded-2xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Download size={16} />
+                                        <span>ดาวน์โหลด Android App</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-6 bg-white border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <p className="text-xs font-bold text-gray-400 text-center sm:text-left">
+                                * รองรับ Windows 7/8/10/11 และเครื่องพิมพ์ความร้อนแบบ ESC/POS ทุกแบรนด์
+                            </p>
+                            <button
+                                onClick={() => setShowDriverModal(false)}
+                                className="w-full sm:w-auto px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-colors"
+                            >
+                                ปิดหน้าต่าง
+                            </button>
                         </div>
                     </div>
                 </div>

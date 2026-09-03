@@ -13,19 +13,19 @@ async function handleGet(context) {
         const searchPattern = `%${query}%`;
         const stmts = [];
 
-        // 1. Buys (ID, FarmerName)
+        // 1. Buys (ID, FarmerName - restricted to recent 180 days for fast search)
         stmts.push(context.env.DB.prepare(`
             SELECT 'buy' as type, id, date, farmerName as title, total as subtitle 
             FROM buys 
-            WHERE userId = ? AND (id LIKE ? OR farmerName LIKE ?) 
+            WHERE userId = ? AND date >= date('now', '-180 days') AND (id LIKE ? OR farmerName LIKE ?) 
             ORDER BY date DESC LIMIT 5
         `).bind(userId, searchPattern, searchPattern));
 
-        // 2. Sells (ID, BuyerName)
+        // 2. Sells (ID, BuyerName - restricted to recent 180 days)
         stmts.push(context.env.DB.prepare(`
             SELECT 'sell' as type, id, date, buyerName as title, total as subtitle 
             FROM sells 
-            WHERE userId = ? AND (id LIKE ? OR buyerName LIKE ?) 
+            WHERE userId = ? AND date >= date('now', '-180 days') AND (id LIKE ? OR buyerName LIKE ?) 
             ORDER BY date DESC LIMIT 5
         `).bind(userId, searchPattern, searchPattern));
 
@@ -71,14 +71,14 @@ async function handleGet(context) {
         stmts.push(context.env.DB.prepare(`
             SELECT 'expense' as type, id, description as title, category as subtitle, date 
             FROM expenses 
-            WHERE userId = ? AND (description LIKE ? OR category LIKE ?) 
+            WHERE userId = ? AND date >= date('now', '-180 days') AND (description LIKE ? OR category LIKE ?) 
             ORDER BY date DESC LIMIT 3
         `).bind(userId, searchPattern, searchPattern));
 
         stmts.push(context.env.DB.prepare(`
             SELECT 'wage' as type, id, staffName as title, total as subtitle, date 
             FROM wages 
-            WHERE userId = ? AND (staffName LIKE ? OR description LIKE ?) 
+            WHERE userId = ? AND date >= date('now', '-180 days') AND (staffName LIKE ? OR description LIKE ?) 
             ORDER BY date DESC LIMIT 3
         `).bind(userId, searchPattern, searchPattern));
 
@@ -98,7 +98,10 @@ async function handleGet(context) {
         const totalFound = Object.values(results).reduce((sum, list) => sum + list.length, 0);
         context.waitUntil?.(trackUsage(context, { rowsRead: totalFound }));
 
-        return jsonResponse({ results });
+        const res = jsonResponse({ results });
+        res.headers.set('Vary', 'Accept-Encoding, Authorization, X-Switch-Store-ID');
+        res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        return res;
     } catch (e) {
         console.error("[Global Search Error]", e);
         return errorResponse(e.message);

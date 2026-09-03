@@ -1,4 +1,4 @@
-import { jsonResponse, errorResponse, withAuth, withRateLimit, recordAuditLog } from './_utils.js';
+import { jsonResponse, errorResponse, withAuth, withRateLimit, recordAuditLog, syncDailyBuysSummary, syncDailySellsSummary, syncStoreStockSummary } from './_utils.js';
 import { refundLoanDeductions } from './_loan_helpers.js';
 
 async function handleDelete(context) {
@@ -13,7 +13,7 @@ async function handleDelete(context) {
         }
 
 
-        const validTables = ['farmers', 'staff', 'employees', 'buys', 'sells', 'expenses', 'wages', 'promotions', 'trucks', 'factories', 'chemicals', 'loans', 'loan_deductions', 'service_catalog', 'service_queues'];
+        const validTables = ['farmers', 'staff', 'employees', 'buys', 'sells', 'expenses', 'wages', 'promotions', 'trucks', 'factories', 'chemicals', 'loans', 'loan_deductions', 'service_catalog', 'service_queues', 'land_plots'];
         let tableName = sheetName.toLowerCase();
         
         // Map frontend table names to actual database table names if they differ
@@ -57,6 +57,35 @@ async function handleDelete(context) {
         
         if (res.meta.rows_written === 0) {
             return errorResponse('Record not found or unauthorized', 404);
+        }
+
+        if (tableName === 'buys' && oldRecord) {
+            context.waitUntil?.(syncDailyBuysSummary(context.env.DB, oldRecord.userId, [oldRecord.date]));
+            const netW = Math.max(0, Number(oldRecord.weight || 0) - Number(oldRecord.bucketWeight || 0));
+            const drcVal = Number(oldRecord.drc || 0);
+            const rType = oldRecord.rubberType || 'latex';
+            let delDelta = {};
+            if (rType === 'cup_lump' || rType === 'ขี้ยาง') {
+                delDelta.cupLumpBuyWeight = -netW;
+            } else {
+                delDelta.latexBuyWeight = -netW;
+                delDelta.totalDrcWeight = -(netW * drcVal);
+            }
+            context.waitUntil?.(syncStoreStockSummary(context.env.DB, oldRecord.userId, delDelta));
+        }
+        if (tableName === 'sells' && oldRecord) {
+            context.waitUntil?.(syncDailySellsSummary(context.env.DB, oldRecord.userId, [oldRecord.date]));
+            const sellW = Number(oldRecord.weight || 0);
+            const lossW = Number(oldRecord.lossWeight || 0);
+            const rType = oldRecord.rubberType || 'latex';
+            let delDelta = {};
+            if (rType === 'cup_lump' || rType === 'ขี้ยาง') {
+                delDelta.cupLumpSellWeight = -sellW;
+            } else {
+                delDelta.latexSellWeight = -sellW;
+                delDelta.latexSellLoss = -lossW;
+            }
+            context.waitUntil?.(syncStoreStockSummary(context.env.DB, oldRecord.userId, delDelta));
         }
 
         // --- Audit Logging ---

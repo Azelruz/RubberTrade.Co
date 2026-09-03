@@ -42,16 +42,17 @@ const DailySummaryReport = () => {
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [startDate, endDate]);
 
     const loadData = async () => {
         setLoading(true);
         try {
+            const dateParams = { startDate, endDate };
             const [b, s, e, w, setRes] = await Promise.all([
-                fetchBuyRecords(),
-                fetchSellRecords(),
-                fetchExpenses(),
-                fetchWages(),
+                fetchBuyRecords(true, dateParams),
+                fetchSellRecords(true, dateParams),
+                fetchExpenses(dateParams, true),
+                fetchWages(dateParams, true),
                 getSettings()
             ]);
             
@@ -70,7 +71,10 @@ const DailySummaryReport = () => {
     };
 
     const dailyData = useMemo(() => {
-        const filterFn = item => item.date >= startDate && item.date <= endDate;
+        const filterFn = item => {
+            const itemDate = (item.date || '').substring(0, 10);
+            return itemDate >= startDate && itemDate <= endDate;
+        };
         
         // Sort buys by Farmer ID
         const filteredBuys = buys.filter(filterFn).sort((a, b) => {

@@ -5,13 +5,63 @@ import { truncateOneDecimal } from '../../utils/calculations';
 const BuyForm = ({
     register, handleSubmit, onSubmit, watch, setValue, errors,
     watchRubberType, watchWeight, watchBucketWeight, watchBasePrice, watchBonusDrc, watchFarmerId, watchFarmerName, watchEnableFsc,
-    farmers, employees, memberTypes, settings, selectedFarmer,
+    farmers, employees, farmerEmployees = [], memberTypes, settings, selectedFarmer,
     farmerSearch, setFarmerSearch, showFarmerDropdown, setShowFarmerDropdown, farmerDropdownRef,
     submitting, calculateTotal, calculateDryRubber, getEmpPct, setShowCalculator,
     templateConfig,
     activeQueue, onOpenQueueModal, onClearQueue,
     farmerDebt, employeeDebt, selectedEmployee
 }) => {
+    // Compute available tappers for the selected farmer
+    const availableTappers = React.useMemo(() => {
+        if (!watchFarmerId) return [];
+        const links = (farmerEmployees || [])
+            .filter(fe => fe.farmerId === watchFarmerId)
+            .map(fe => ({
+                employeeId: fe.employeeId,
+                employeeName: fe.employeeName || (employees || []).find(e => e.id === fe.employeeId)?.name || 'ลูกจ้าง',
+                profitSharePct: fe.profitSharePct ?? 50,
+                isDefault: fe.isDefault === 1
+            }));
+
+        // Fallback for legacy employees table
+        const legacyEmps = (employees || [])
+            .filter(e => e.farmerId === watchFarmerId && !links.some(l => l.employeeId === e.id))
+            .map(e => ({
+                employeeId: e.id,
+                employeeName: e.name,
+                profitSharePct: e.profitSharePct ?? 50,
+                isDefault: true
+            }));
+
+        return [...links, ...legacyEmps].sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
+    }, [watchFarmerId, farmerEmployees, employees]);
+
+    // Auto-select primary tapper when watchFarmerId changes
+    React.useEffect(() => {
+        if (!watchFarmerId) {
+            if (watch('employeeId')) setValue('employeeId', '');
+            if (watch('empPct') !== 0) setValue('empPct', 0);
+            return;
+        }
+        if (availableTappers.length > 0) {
+            const currentSelectedId = watch('employeeId');
+            const found = availableTappers.find(t => t.employeeId === currentSelectedId);
+            if (!found) {
+                const defaultTapper = availableTappers[0];
+                if (watch('employeeId') !== defaultTapper.employeeId) {
+                    setValue('employeeId', defaultTapper.employeeId);
+                }
+                if (Number(watch('empPct')) !== Number(defaultTapper.profitSharePct)) {
+                    setValue('empPct', defaultTapper.profitSharePct);
+                }
+            }
+        } else {
+            if (watch('employeeId')) setValue('employeeId', '');
+            if (watch('empPct') !== 0) setValue('empPct', 0);
+        }
+    }, [watchFarmerId, availableTappers, setValue, watch]);
+
     return (
         <div className="lg:col-span-1">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -115,25 +165,81 @@ const BuyForm = ({
 
                         <input type="hidden" {...register('farmerId', { required: !watchFarmerName })} />
 
-                        <div className="flex items-center text-[10px] text-gray-400 my-2 px-1">
-                            <span className="flex-grow border-t border-gray-100"></span>
-                            <span className="px-2 uppercase font-bold tracking-widest">หรือระบุชื่อใหม่</span>
-                            <span className="flex-grow border-t border-gray-100"></span>
-                        </div>
+                        {!watchFarmerId && (
+                            <>
+                                <div className="flex items-center text-[10px] text-gray-400 my-2 px-1">
+                                    <span className="flex-grow border-t border-gray-100"></span>
+                                    <span className="px-2 uppercase font-bold tracking-widest">หรือระบุชื่อใหม่</span>
+                                    <span className="flex-grow border-t border-gray-100"></span>
+                                </div>
 
-                        <input
-                            type="text"
-                            placeholder="ระบุชื่อ-นามสกุล (ถ้าไม่มีในรายการ)"
-                            {...register('farmerName', { required: !watchFarmerId })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500"
-                            onChange={(e) => {
-                                if (e.target.value) {
-                                    setValue('farmerId', '');
-                                    setFarmerSearch('');
-                                }
-                            }}
-                        />
+                                <input
+                                    type="text"
+                                    placeholder="ระบุชื่อ-นามสกุล (ถ้าไม่มีในรายการ)"
+                                    {...register('farmerName', { required: !watchFarmerId })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rubber-500 focus:border-rubber-500"
+                                    onChange={(e) => {
+                                        if (e.target.value) {
+                                            setValue('farmerId', '');
+                                            setFarmerSearch('');
+                                        }
+                                    }}
+                                />
+                            </>
+                        )}
                         {(errors.farmerName || errors.farmerId) && <span className="text-red-500 text-xs mt-1 block font-medium">กรุณาระบุหรือเลือกเกษตรกร</span>}
+
+                        <input type="hidden" {...register('employeeId')} />
+                        <input type="hidden" {...register('empPct')} />
+
+                        {/* Smart Tapper (Employee) Selection */}
+                        {watchFarmerId && availableTappers.length === 1 && (
+                            <div className="mt-3 p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center justify-between animate-in fade-in">
+                                <div className="flex items-center space-x-2">
+                                    <span className="text-xs font-bold text-gray-700">คนกรีด:</span>
+                                    <span className="text-xs font-black text-emerald-900">
+                                        👤 {availableTappers[0].employeeName}
+                                    </span>
+                                </div>
+                                <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold border border-emerald-200">
+                                    ส่วนแบ่ง {availableTappers[0].profitSharePct}%
+                                </span>
+                            </div>
+                        )}
+
+                        {watchFarmerId && availableTappers.length > 1 && (
+                            <div className="mt-3 p-3 bg-rubber-50/70 border border-rubber-200 rounded-xl space-y-2 animate-in fade-in">
+                                <label className="block text-xs font-bold text-gray-800 flex justify-between items-center">
+                                    <span>คนกรีดยางประจำสวน:</span>
+                                    <span className="text-[10px] bg-rubber-100 text-rubber-800 px-2 py-0.5 rounded-full font-bold">
+                                        {availableTappers.length} คน
+                                    </span>
+                                </label>
+
+                                <select
+                                    value={watch('employeeId') || (availableTappers[0]?.employeeId || '')}
+                                    onChange={(e) => {
+                                        const selectedId = e.target.value;
+                                        if (!selectedId) {
+                                            setValue('employeeId', '');
+                                            setValue('empPct', 0);
+                                        } else {
+                                            const found = availableTappers.find(t => t.employeeId === selectedId);
+                                            setValue('employeeId', selectedId);
+                                            setValue('empPct', found ? found.profitSharePct : 50);
+                                        }
+                                    }}
+                                    className="w-full px-3 py-2 bg-white border border-rubber-300 rounded-lg text-xs font-bold text-gray-800 focus:ring-rubber-500 focus:border-rubber-500 shadow-sm cursor-pointer"
+                                >
+                                    {availableTappers.map(t => (
+                                        <option key={t.employeeId} value={t.employeeId}>
+                                            {t.employeeName} ({t.profitSharePct}%) {t.isDefault ? '⭐ คนกรีดหลัก' : ''}
+                                        </option>
+                                    ))}
+                                    <option value="">-- เจ้าของสวนกรีดเอง (0%) --</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     {/* Product Type Selector */}
@@ -271,24 +377,36 @@ const BuyForm = ({
                         </div>
                     )}
 
-                    {selectedFarmer?.memberTypeId && memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId) && (
-                        <div className="mb-2 p-2 bg-rubber-50 border border-rubber-200 rounded-lg flex items-center justify-between text-rubber-800">
-                            <div className="flex items-center text-xs font-black uppercase">
-                                <Percent size={14} className="mr-1.5 text-rubber-600" />
-                                กลุ่ม: {memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId).name}
+                    {(() => {
+                        const mId = selectedFarmer?.memberTypeId || selectedFarmer?.member_type_id;
+                        const mType = mId ? memberTypes.find(mt => String(mt.id) === String(mId)) : null;
+                        if (!mType) return null;
+                        return (
+                            <div className="mb-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-amber-900 shadow-xs">
+                                <div className="flex items-center text-xs font-black">
+                                    <Percent size={14} className="mr-1.5 text-amber-600" />
+                                    <span>โบนัสประเภทสมาชิก ({mType.name}):</span>
+                                </div>
+                                <span className="text-xs font-black bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md font-mono border border-amber-300">
+                                    +{Number(mType.bonus || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} บาท/กก.
+                                </span>
                             </div>
-                            <span className="text-xs font-black">+{Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId).bonus).toLocaleString(undefined, { minimumFractionDigits: 1 })} บาท/กก.</span>
-                        </div>
-                    )}
+                        );
+                    })()}
 
                     <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
                         <div className="flex justify-between items-center">
                             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">ราคาจริงรวมโบนัส:</span>
                             <span className="text-sm font-black text-gray-700 font-mono">
-                                ฿{(watchRubberType === 'cup_lump'
-                                    ? Number(watchBasePrice || 0)
-                                    : (Number(watchBasePrice || 0) + Number(watchBonusDrc || 0) + ((watchEnableFsc !== false && selectedFarmer?.fscId) ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0) + (selectedFarmer?.memberTypeId ? (Number(memberTypes.find(mt => mt.id === selectedFarmer.memberTypeId)?.bonus) || 0) : 0))
-                                ).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.
+                                ฿{(() => {
+                                    if (watchRubberType === 'cup_lump') return Number(watchBasePrice || 0);
+                                    const fscId = selectedFarmer?.fscId || selectedFarmer?.fsc_id;
+                                    const fscBonus = (watchEnableFsc !== false && fscId) ? (Number(settings.fscBonus || settings.fsc_bonus) || 1) : 0;
+                                    const mId = selectedFarmer?.memberTypeId || selectedFarmer?.member_type_id;
+                                    const mType = mId ? memberTypes.find(mt => String(mt.id) === String(mId)) : null;
+                                    const memberBonus = mType ? (Number(mType.bonus) || 0) : 0;
+                                    return Number(watchBasePrice || 0) + Number(watchBonusDrc || 0) + fscBonus + memberBonus;
+                                })().toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.
                             </span>
                         </div>
                     </div>

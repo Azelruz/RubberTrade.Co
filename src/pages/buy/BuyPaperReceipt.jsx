@@ -67,6 +67,11 @@ const BuyPaperReceipt = ({ printingReceipt, printRef, setPrintingReceipt, settin
         finalFscBonus = derived;
     }
 
+    const logoUrl = settings?.logoUrl || settings?.logo_url || settings?.logo_Url;
+    const isLogoEnabled = config?.showLogo !== false && config?.showLogo !== 'false' && config?.showLogo !== 0;
+    const hasValidLogoUrl = typeof logoUrl === 'string' && logoUrl.trim().length > 0 && logoUrl !== 'null' && logoUrl !== 'undefined';
+    const shouldShowLogo = isLogoEnabled && hasValidLogoUrl;
+
     return (
         <div style={{ display: 'none' }}>
             <div ref={printRef}>
@@ -101,9 +106,9 @@ const BuyPaperReceipt = ({ printingReceipt, printRef, setPrintingReceipt, settin
 
                         {/* Header - High Contrast for Thermal */}
                         <div className="text-center mb-4 border-b-2 border-black pb-2">
-                            {(config.showLogo !== false && (settings.logoUrl || settings.logo_url || settings.logo_Url)) && (
+                            {shouldShowLogo && (
                                 <div className="h-16 flex items-center justify-center mb-2">
-                                    <img src={settings.logoUrl || settings.logo_url || settings.logo_Url} alt="Logo" className="h-16 mx-auto object-contain" style={{ filter: 'grayscale(1) contrast(2)' }} />
+                                    <img src={logoUrl} alt="Logo" className="h-16 mx-auto object-contain" style={{ filter: 'grayscale(1) contrast(2)' }} />
                                 </div>
                             )}
                             {config.showStoreName !== false && <h1 style={{ fontSize: `${(config.fontSizeStoreName || 12) * 2}px` }} className="font-bold leading-tight">{settings.factoryName || settings.factory_name || 'ร้านรับซื้อน้ำยางพารา'}</h1>}

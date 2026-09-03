@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Gift, CheckSquare, Square, UserX } from 'lucide-react';
+import { Wallet, Gift, CheckSquare, Square, UserX, DollarSign, X, Save } from 'lucide-react';
 
 const WageConfirmModal = ({ 
     wageConfirmData, setWageConfirmData, confirmAndRecordWages, stats 
@@ -249,4 +249,115 @@ const LuckyDrawModal = ({
     );
 };
 
-export { WageConfirmModal, LuckyDrawModal };
+const PriceEditModal = ({ isOpen, onClose, currentDailyPrice, currentCupLumpPrice, onSave, saving }) => {
+    const [dailyPrice, setDailyPrice] = useState(currentDailyPrice || 0);
+    const [cupLumpPrice, setCupLumpPrice] = useState(currentCupLumpPrice || 0);
+
+    useEffect(() => {
+        if (isOpen) {
+            setDailyPrice(currentDailyPrice || 0);
+            setCupLumpPrice(currentCupLumpPrice || 0);
+        }
+    }, [isOpen, currentDailyPrice, currentCupLumpPrice]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSave({
+            dailyPrice: Number(dailyPrice),
+            cupLumpPrice: Number(cupLumpPrice)
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-5 text-white flex justify-between items-center">
+                    <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-white/20 rounded-xl">
+                            <DollarSign size={22} className="text-white" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold">แก้ไขราคากลางยางพารา</h3>
+                            <p className="text-xs text-emerald-100">ปรับเปลี่ยนราคาน้ำยางสดและขี้ยางประจำวัน</p>
+                        </div>
+                    </div>
+                    <button 
+                        type="button"
+                        onClick={onClose} 
+                        className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                            <span>💧 ราคาน้ำยางสด (บาท/กก.)</span>
+                            <span className="text-xs text-emerald-600 font-normal">ราคากลางฐาน DRC 100%</span>
+                        </label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            required
+                            value={dailyPrice}
+                            onChange={(e) => setDailyPrice(e.target.value)}
+                            placeholder="กรอกราคาน้ำยางสด..."
+                            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-bold text-gray-900 text-lg"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                            <span>📦 ราคาขี้ยาง / ยางก้อนถ้วย (บาท/กก.)</span>
+                            <span className="text-xs text-emerald-600 font-normal">ราคาซื้อขี้ยาง</span>
+                        </label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            required
+                            value={cupLumpPrice}
+                            onChange={(e) => setCupLumpPrice(e.target.value)}
+                            placeholder="กรอกราคาขี้ยาง..."
+                            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-bold text-gray-900 text-lg"
+                        />
+                    </div>
+
+                    <div className="pt-3 flex space-x-3">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex-1 py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl text-sm transition-colors"
+                        >
+                            ยกเลิก
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={saving}
+                            className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white font-bold rounded-xl text-sm shadow-md transition-all flex justify-center items-center space-x-2"
+                        >
+                            {saving ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    <span>กำลังบันทึก...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Save size={18} />
+                                    <span>บันทึกราคา</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+export { WageConfirmModal, LuckyDrawModal, PriceEditModal };
+

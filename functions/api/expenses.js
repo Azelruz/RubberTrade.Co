@@ -38,7 +38,10 @@ async function handleGet(context) {
 
         const query = `SELECT * FROM expenses WHERE ${whereClauses.join(' AND ')} ORDER BY date DESC, created_at DESC`;
         const { results } = await context.env.DB.prepare(query).bind(...params).all();
-        return jsonResponse(results);
+        const res = jsonResponse(results);
+        res.headers.set('Vary', 'Accept-Encoding, Authorization, X-Switch-Store-ID');
+        res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        return res;
     } catch (e) {
         return errorResponse(e.message);
     }

@@ -17,7 +17,10 @@ async function handleGet(context) {
         sortedResults.forEach(row => {
             settingsObj[row.key] = row.value;
         });
-        return jsonResponse(settingsObj);
+        const res = jsonResponse(settingsObj);
+        res.headers.set('Vary', 'Accept-Encoding, Authorization, X-Switch-Store-ID');
+        res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        return res;
     } catch (e) {
         return errorResponse(e.message);
     }
@@ -43,6 +46,19 @@ async function handlePost(context) {
         if (body.action === 'checkStationCode') {
             const code = (payload?.code || '').trim().toUpperCase();
             if (!code) return jsonResponse({ status: 'success', isAvailable: true });
+
+            // Fetch current store's station code
+            const current = await context.env.DB.prepare(
+                "SELECT value FROM settings WHERE key = 'station_code' AND userId = ?"
+            ).bind(context.user.storeId).first();
+
+            const currentCode = current ? String(current.value).trim().toUpperCase() : '';
+
+            // If checking current store's own code, skip check
+            if (code === currentCode) {
+                return jsonResponse({ status: 'success', isAvailable: true });
+            }
+
             const existing = await context.env.DB.prepare(
                 "SELECT userId FROM settings WHERE key = 'station_code' AND UPPER(value) = ? AND userId != ?"
             ).bind(code, context.user.storeId).first();
@@ -82,15 +98,25 @@ async function handlePost(context) {
 
         // Handle generic updateSettings
         if (body.action === 'updateSettings' && payload) {
-            // Check station_code uniqueness before updating
+            // Check station_code uniqueness before updating (only if changed)
             if (payload.station_code) {
                 const code = String(payload.station_code).trim().toUpperCase();
-                const existing = await context.env.DB.prepare(
-                    "SELECT userId FROM settings WHERE key = 'station_code' AND UPPER(value) = ? AND userId != ?"
-                ).bind(code, context.user.storeId).first();
 
-                if (existing) {
-                    return errorResponse(`รหัสสถานี '${code}' ถูกใช้งานแล้วโดยร้านค้าอื่น กรุณาเลือกใช้รหัสอื่น`, 400);
+                const current = await context.env.DB.prepare(
+                    "SELECT value FROM settings WHERE key = 'station_code' AND userId = ?"
+                ).bind(context.user.storeId).first();
+
+                const currentCode = current ? String(current.value).trim().toUpperCase() : '';
+
+                // Only check for duplicates if station_code is actually changed
+                if (code !== currentCode) {
+                    const existing = await context.env.DB.prepare(
+                        "SELECT userId FROM settings WHERE key = 'station_code' AND UPPER(value) = ? AND userId != ?"
+                    ).bind(code, context.user.storeId).first();
+
+                    if (existing) {
+                        return errorResponse(`รหัสสถานี '${code}' ถูกใช้งานแล้วโดยร้านค้าอื่น กรุณาเลือกใช้รหัสอื่น`, 400);
+                    }
                 }
             }
 

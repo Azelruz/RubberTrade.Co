@@ -29,7 +29,7 @@ export const Payments = () => {
     const [employees, setEmployees] = useState([]);
     const [settings, setSettings] = useState({});
     const [loading, setLoading] = useState(true);
-    const [filterDate, setFilterDate] = useState('');
+    const [filterDate, setFilterDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedPayment, setSelectedPayment] = useState(null); // { type: 'farmer'|'employee', amount, name, targetId, buyId }
     const [statusUpdating, setStatusUpdating] = useState(false);
@@ -41,7 +41,8 @@ export const Payments = () => {
     const loadData = async () => {
         if (!isCached('buys', 'farmers', 'employees')) setLoading(true);
         try {
-            const dateParams = filterDate ? { startDate: filterDate, endDate: filterDate } : { all: 'true' };
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+            const dateParams = filterDate ? { startDate: filterDate, endDate: filterDate } : { startDate: todayStr, endDate: todayStr };
             const [buysData, farmersData, empsData, setRes] = await Promise.all([
                 fetchBuyRecords(false, dateParams),
                 fetchFarmers(),
@@ -243,7 +244,10 @@ export const Payments = () => {
                                 filteredRecords.map((r) => {
                                     const farmerPaid = r.farmerStatus === 'Paid';
                                     const employeePaid = r.employeeStatus === 'Paid';
-                                    const recordEmp = employees.find(e => e.farmerId === r.farmerId);
+                                    const empId = r.employeeId || r.employee_id;
+                                    const recordEmp = empId 
+                                        ? employees.find(e => String(e.id) === String(empId))
+                                        : employees.find(e => String(e.farmerId) === String(r.farmerId));
                                     const hasEmployee = r.employeeTotal > 0;
                                     
                                     return (

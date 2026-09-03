@@ -1,19 +1,22 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-    Droplets, TrendingUp, Activity, Truck, DollarSign, Wallet, FileText, Users, TrendingDown, FlaskConical, UserX
+    Droplets, TrendingUp, Activity, Truck, DollarSign, Wallet, FileText, Users, TrendingDown, FlaskConical, UserX, Edit3, Tag
 } from 'lucide-react';
 
-const StatCard = ({ title, value, icon, bgColor, valueColor, details, onClick }) => (
+const StatCard = ({ title, value, icon, bgColor, valueColor, details, onClick, actionButton }) => (
     <div 
         onClick={onClick}
-        className={`bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex items-center space-x-4 ${onClick ? 'cursor-pointer hover:border-rose-300 hover:shadow-md transition-all' : ''}`}
+        className={`bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex items-start space-x-4 ${onClick ? 'cursor-pointer hover:border-rose-300 hover:shadow-md transition-all' : ''}`}
     >
-        <div className={`p-4 rounded-full ${bgColor}`}>
+        <div className={`p-4 rounded-full ${bgColor} flex-shrink-0`}>
             {icon}
         </div>
-        <div className="flex-1">
-            <p className="text-sm font-medium text-gray-500">{title}</p>
+        <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-0.5">
+                <p className="text-sm font-medium text-gray-500">{title}</p>
+                {actionButton}
+            </div>
             <p className={`text-2xl font-bold ${valueColor || 'text-gray-900'}`}>{value}</p>
             {details && details.length > 0 && (
                 <div className="mt-2 space-y-1">
@@ -36,7 +39,7 @@ const formatVal = (val, prefix = '', suffix = '') => {
     return `${prefix}${num.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${suffix}`;
 };
 
-const DashboardStats = ({ stats, visibleStats }) => {
+const DashboardStats = ({ stats, visibleStats, onEditPrice }) => {
     const navigate = useNavigate();
     const isVisible = (id) => !visibleStats || visibleStats.includes(id);
 
@@ -105,6 +108,23 @@ const DashboardStats = ({ stats, visibleStats }) => {
             )
         },
         {
+            id: 'today_avg_buy_price',
+            component: (
+                <StatCard
+                    key="today_avg_buy_price"
+                    title="ราคารับซื้อเฉลี่ยวันนี้"
+                    value={formatVal(stats.todayAvgBuyPrice, '฿', '/กก.')}
+                    icon={<Tag className="text-teal-500" size={24} />}
+                    bgColor="bg-teal-50"
+                    valueColor="text-teal-900"
+                    details={[
+                        { label: 'น้ำยางสด (ต่อ กก.ยางแห้ง)', value: formatVal(stats.todayAvgLatexPrice, '฿', '/กก.') },
+                        { label: 'ขี้ยาง (ต่อ กก.ขี้ยาง)', value: formatVal(stats.todayAvgCupLumpPrice, '฿', '/กก.') }
+                    ]}
+                />
+            )
+        },
+        {
             id: 'today_sell',
             component: (
                 <StatCard
@@ -125,6 +145,21 @@ const DashboardStats = ({ stats, visibleStats }) => {
                     value={formatVal(stats.dailyPrice || stats.cupLumpPrice || 0, '฿')}
                     icon={<DollarSign className="text-emerald-500" size={24} />}
                     bgColor="bg-emerald-50"
+                    actionButton={
+                        onEditPrice ? (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onEditPrice();
+                                }}
+                                className="p-1 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100/60 rounded-md transition-colors flex items-center space-x-1 text-xs font-bold bg-emerald-50 border border-emerald-200/60"
+                                title="แก้ไขราคากลางยางพารา"
+                            >
+                                <Edit3 size={13} />
+                                <span>แก้ไข</span>
+                            </button>
+                        ) : null
+                    }
                     details={[
                         { label: 'น้ำยางสด', value: formatVal(stats.dailyPrice, '฿') },
                         { label: 'ขี้ยาง', value: formatVal(stats.cupLumpPrice, '฿') }
@@ -141,19 +176,6 @@ const DashboardStats = ({ stats, visibleStats }) => {
                     value={formatVal(stats.todayExpense, '฿')}
                     icon={<Wallet className="text-red-500" size={24} />}
                     bgColor="bg-red-50"
-                />
-            )
-        },
-        {
-            id: 'unpaid_bills',
-            component: (
-                <StatCard
-                    key="unpaid_bills"
-                    title="รายการค้างจ่าย"
-                    value={`${stats.unpaidBills || 0} รายการ`}
-                    icon={<FileText className="text-amber-500" size={24} />}
-                    bgColor="bg-amber-50"
-                    valueColor="text-amber-700"
                 />
             )
         },

@@ -5,10 +5,10 @@ export const STAT_CARD_DEFINITIONS = [
     { id: 'today_weight', label: 'ปริมาณยางวันนี้', category: 'daily' },
     { id: 'today_dry_weight', label: 'ยอดรวมยางแห้งวันนี้', category: 'daily' },
     { id: 'today_drc', label: 'เฉลี่ย % DRC วันนี้', category: 'daily' },
+    { id: 'today_avg_buy_price', label: 'ราคารับซื้อเฉลี่ยวันนี้', category: 'daily' },
     { id: 'today_sell', label: 'ยอดขายวันนี้', category: 'daily' },
     { id: 'daily_price', label: 'ราคายางวันนี้', category: 'daily' },
     { id: 'today_expense', label: 'ค่าใช้จ่ายวันนี้', category: 'daily' },
-    { id: 'unpaid_bills', label: 'รายการค้างจ่าย', category: 'daily' },
     { id: 'total_members', label: 'สมาชิกในระบบ', category: 'members' },
     { id: 'inactive_farmers_15d', label: 'ลูกค้าไม่เคลื่อนไหว (15 วัน)', category: 'members' },
     { id: 'monthly_income', label: 'รายรับรวมเดือนนี้', category: 'monthly' },
@@ -39,7 +39,7 @@ export const PRESET_CONFIGS = {
         description: 'เน้นรายรับ ต้นทุน กำไรสุทธิ ยอดซื้อ-ขาย และแนวโน้มราคายาง',
         visibleStats: [
             'monthly_profit', 'monthly_income', 'monthly_cost',
-            'today_buy', 'today_sell', 'daily_price', 'today_expense', 'unpaid_bills'
+            'today_buy', 'today_sell', 'daily_price', 'today_expense'
         ],
         widgetOrder: ['charts_price', 'forecast_widget', 'charts_activity', 'recent_transactions'],
         visibleWidgets: ['charts_price', 'forecast_widget', 'charts_activity', 'recent_transactions']
@@ -50,7 +50,7 @@ export const PRESET_CONFIGS = {
         description: 'เน้นการรับซื้อ ปริมาณยาง ยางแห้ง DRC สารเคมี และลูกค้าไม่เคลื่อนไหว',
         visibleStats: [
             'today_buy', 'today_weight', 'today_dry_weight', 'today_drc',
-            'daily_price', 'inactive_farmers_15d', 'unpaid_bills', 'total_members'
+            'daily_price', 'inactive_farmers_15d', 'total_members'
         ],
         widgetOrder: ['chemical_widget', 'recent_transactions', 'charts_activity', 'forecast_widget'],
         visibleWidgets: ['chemical_widget', 'recent_transactions', 'charts_activity', 'forecast_widget']

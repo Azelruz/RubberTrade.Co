@@ -4,7 +4,10 @@ async function handleGet(context) {
     try {
         const storeId = context.user.storeId || context.user.id;
         const { results } = await context.env.DB.prepare("SELECT * FROM staff WHERE userId = ? ORDER BY name ASC").bind(storeId).all();
-        return jsonResponse(results);
+        const res = jsonResponse(results);
+        res.headers.set('Vary', 'Accept-Encoding, Authorization, X-Switch-Store-ID');
+        res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        return res;
     } catch (e) {
         return errorResponse(e.message);
     }

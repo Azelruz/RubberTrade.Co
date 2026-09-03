@@ -11,21 +11,79 @@ const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, membe
     
     // Resolve configuration from Multi-Template / Multi-Platform schema
     const resolveConfig = () => {
-        if (!paperSlipConfig || !paperSlipConfig.templates) return null;
-        
-        // Use user-selected template ID if provided, otherwise find assigned default for the rubber type
-        const templateId = selectedTemplateId || (isCupLump ? paperSlipConfig.defaultCupLumpId : paperSlipConfig.defaultLatexId);
-        const template = paperSlipConfig.templates.find(t => t.id === templateId) || paperSlipConfig.templates[0];
-        
-        if (!template) return null;
+        let rawConfig = paperSlipConfig;
 
-        return {
-            ...(template.common || {}),
-            ...(template.eslip || {}), // Specific configuration for digital E-Slip
-        };
+        if (!rawConfig && settings && (settings.paperSlipConfig || settings.paper_slip_config)) {
+            rawConfig = settings.paperSlipConfig || settings.paper_slip_config;
+        }
+
+        if (typeof rawConfig === 'string') {
+            try {
+                rawConfig = JSON.parse(rawConfig);
+            } catch (e) {
+                console.error("[BuyESlipModal] Error parsing paperSlipConfig JSON:", e);
+                rawConfig = null;
+            }
+        }
+
+        if (!rawConfig) return null;
+
+        if (rawConfig.templates && Array.isArray(rawConfig.templates) && rawConfig.templates.length > 0) {
+            const templateId = selectedTemplateId ||
+                (isCupLump ? rawConfig.defaultCupLumpId : rawConfig.defaultLatexId) ||
+                rawConfig.activeTemplateId;
+
+            const template = rawConfig.templates.find(t => t.id === templateId) ||
+                             rawConfig.templates[0];
+
+            if (template) {
+                const platformConfig = template.eslip || template.paper || template;
+                return {
+                    ...(template.common || {}),
+                    ...platformConfig,
+                    labels: {
+                        ...(template.common?.labels || {}),
+                        ...(platformConfig?.labels || {})
+                    }
+                };
+            }
+        }
+
+        if (rawConfig.eslip || rawConfig.paper) {
+            const platformConfig = rawConfig.eslip || rawConfig.paper;
+            return {
+                ...(rawConfig.common || {}),
+                ...platformConfig,
+                labels: {
+                    ...(rawConfig.common?.labels || {}),
+                    ...(platformConfig?.labels || {})
+                }
+            };
+        }
+
+        return rawConfig;
     };
 
-    const config = resolveConfig() || { 
+    const defaultLabels = {
+        rawWeight: isCupLump ? 'น้ำหนักขี้ยาง' : 'น้ำหนักยางดิบ',
+        bucketWeight: 'หักถังยาง',
+        netWeight: 'น้ำหนักสุทธิ',
+        drc: '% DRC',
+        dryWeight: 'ยางแห้ง',
+        basePrice: 'ราคากลาง',
+        bonusDrc: 'โบนัส DRC',
+        bonusFsc: 'โบนัส FSC',
+        bonusMember: 'โบนัสสมาชิก',
+        actualPrice: 'ราคาจริง (สุทธิ)',
+        farmerSplit: 'เกษตรกร',
+        employeeSplit: 'ลูกจ้าง',
+        selectedDate: 'วันที่ทำรายการ',
+        recordingTime: 'เวลาบันทึก',
+        fscCode: 'รหัส FSC'
+    };
+
+    const resolved = resolveConfig();
+    const config = resolved || { 
         showLogo: true, showStoreName: true, showAddress: true, showPhone: true, 
         showBillType: true, showBillId: true, showDateTime: true, showSelectedDate: true, showRecordingTime: true, showFarmerName: true, 
         showRawWeight: true, showBucketWeight: true, showNetWeight: true, showDrc: true, 
@@ -34,23 +92,13 @@ const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, membe
         showPurchaseDetailsHeader: true,
         footerText: '=== ขอบคุณที่ใช้บริการ ===',
         headerTitle: isCupLump ? 'ใบรับซื้อขี้ยางพารา' : 'ใบรับซื้อน้ำยางพารา',
-        labels: {
-            rawWeight: isCupLump ? 'น้ำหนักขี้ยาง' : 'น้ำหนักยางดิบ',
-            bucketWeight: 'หักถังยาง',
-            netWeight: 'น้ำหนักสุทธิ',
-            drc: '% DRC',
-            dryWeight: 'ยางแห้ง',
-            basePrice: 'ราคากลาง',
-            bonusDrc: 'โบนัส DRC',
-            bonusFsc: 'โบนัส FSC',
-            bonusMember: 'โบนัสสมาชิก',
-            actualPrice: 'ราคาจริง (สุทธิ)',
-            farmerSplit: 'เกษตรกร',
-            employeeSplit: 'ลูกจ้าง'
-        }
+        labels: defaultLabels
     };
 
-    const labels = config.labels;
+    const labels = {
+        ...defaultLabels,
+        ...(config.labels || {})
+    };
     const headerTitle = config.headerTitle;
     const rawWeightLabel = labels.rawWeight;
     const farmerId = viewingEslip.farmerId || viewingEslip.farmer_id;
@@ -259,7 +307,7 @@ const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, membe
                                     
                                     {config.showBonusMember !== false && (Number(viewingEslip.bonus_member_type ?? viewingEslip.bonusMemberType ?? 0)) > 0 && (
                                         <div className="flex justify-between items-center px-1 py-0.5 bg-rubber-50 rounded">
-                                            <span style={{ fontSize: `${config.fontSizeBonusMemberLabel || config.fontSizeSubData || 8}px` }} className="font-black text-rubber-700">{memberTypes.find(mt => mt.id === (viewingEslip.memberTypeId || viewingEslip.member_type_id))?.name || labels.bonusMember}</span>
+                                            <span style={{ fontSize: `${config.fontSizeBonusMemberLabel || config.fontSizeSubData || 8}px` }} className="font-black text-rubber-700">{memberTypes.find(mt => String(mt.id) === String(viewingEslip.memberTypeId || viewingEslip.member_type_id))?.name || labels.bonusMember}</span>
                                             <span style={{ fontSize: `${config.fontSizeBonusMemberValue || config.fontSizeSubData || 8}px` }} className="font-black text-rubber-700 mono">
                                                 +฿{Number(viewingEslip.bonus_member_type ?? viewingEslip.bonusMemberType ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-xs font-black italic">/กก.</span>
                                             </span>

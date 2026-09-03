@@ -36,7 +36,9 @@ export const GeneralSettings = () => {
             format_employee_id: '{STATION}-E-{SEQ3}',
             printESlip: true,
             printPaperSlip: true,
-            showPrizeDraw: true
+            showPrizeDraw: true,
+            enableBuyMap: true,
+            enableSellAI: true
         }
     });
 
@@ -135,7 +137,9 @@ export const GeneralSettings = () => {
                     format_employee_id: res.data.format_employee_id || '{STATION}-E-{SEQ3}',
                     printESlip: res.data.printESlip === undefined ? true : (res.data.printESlip === 'true' || res.data.printESlip === true),
                     printPaperSlip: res.data.printPaperSlip === undefined ? true : (res.data.printPaperSlip === 'true' || res.data.printPaperSlip === true),
-                    showPrizeDraw: res.data.showPrizeDraw === undefined ? true : (res.data.showPrizeDraw === 'true' || res.data.showPrizeDraw === true)
+                    showPrizeDraw: res.data.showPrizeDraw === undefined ? true : (res.data.showPrizeDraw === 'true' || res.data.showPrizeDraw === true),
+                    enableBuyMap: res.data.enableBuyMap === undefined ? true : (res.data.enableBuyMap === 'true' || res.data.enableBuyMap === true),
+                    enableSellAI: res.data.enableSellAI === undefined ? true : (res.data.enableSellAI === 'true' || res.data.enableSellAI === true)
                 });
                 setLogoUrl(res.data.logoUrl || res.data.logo_url || '');
             }
@@ -154,6 +158,7 @@ export const GeneralSettings = () => {
             const res = await updateSettingsAPI(payload);
             if (res.status === 'success') {
                 toast.success('บันทึกการตั้งค่าสำเร็จ');
+                window.dispatchEvent(new CustomEvent('settings-updated'));
             } else {
                 toast.error(res.message);
             }
@@ -406,6 +411,14 @@ export const GeneralSettings = () => {
                                 <label className="flex items-center justify-between p-2.5 bg-white border border-gray-50 rounded-xl hover:bg-gray-50/50 transition-colors cursor-pointer group">
                                     <span className="text-[11px] font-bold text-gray-600 group-hover:text-gray-900">Lucky Draw</span>
                                     <input type="checkbox" {...register('showPrizeDraw')} className="w-4 h-4 rounded-md border-gray-300 text-rubber-600" />
+                                </label>
+                                <label className="flex items-center justify-between p-2.5 bg-white border border-gray-50 rounded-xl hover:bg-gray-50/50 transition-colors cursor-pointer group">
+                                    <span className="text-[11px] font-bold text-gray-600 group-hover:text-gray-900">รับซื้อน้ำยาง (Map View)</span>
+                                    <input type="checkbox" {...register('enableBuyMap')} className="w-4 h-4 rounded-md border-gray-300 text-rubber-600" />
+                                </label>
+                                <label className="flex items-center justify-between p-2.5 bg-white border border-gray-50 rounded-xl hover:bg-gray-50/50 transition-colors cursor-pointer group">
+                                    <span className="text-[11px] font-bold text-gray-600 group-hover:text-gray-900">ขายน้ำยาง (สแกน AI)</span>
+                                    <input type="checkbox" {...register('enableSellAI')} className="w-4 h-4 rounded-md border-gray-300 text-rubber-600" />
                                 </label>
                             </div>
                         </div>
