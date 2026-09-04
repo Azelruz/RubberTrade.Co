@@ -348,10 +348,30 @@ CREATE INDEX IF NOT EXISTS idx_employees_user ON employees(userId);
 CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(userId, date DESC);
 CREATE INDEX IF NOT EXISTS idx_wages_user_date ON wages(userId, date DESC);
 
--- Foreign Key Optimization Indexes for DELETE FROM farmers
+-- Foreign Key Optimization Indexes for DELETE FROM farmers/staff
 CREATE INDEX IF NOT EXISTS idx_buys_farmer_fk ON buys(farmerId);
 CREATE INDEX IF NOT EXISTS idx_promotions_farmer_fk ON promotions(farmerId);
 CREATE INDEX IF NOT EXISTS idx_land_plots_farmer_fk ON land_plots(farmerId);
+CREATE INDEX IF NOT EXISTS idx_employees_farmer_fk ON employees(farmerId);
+CREATE INDEX IF NOT EXISTS idx_wages_staff_fk ON wages(staffId);
+
+-- Additional Performance & Covering Indexes (v1.7.5 / Migration 0029)
+CREATE INDEX IF NOT EXISTS idx_sells_search_lookup ON sells(userId, buyerName, id);
+CREATE INDEX IF NOT EXISTS idx_promotions_user_date ON promotions(userId, date DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_loans_user_borrower_date ON loans(userId, borrowerId, date DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_loans_deduct_lookup ON loans(userId, borrowerId, remainingAmount, date ASC, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_entity_created ON audit_logs(userId, entityType, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_expenses_user_category_date ON expenses(userId, category, date DESC);
+CREATE INDEX IF NOT EXISTS idx_land_plots_user_created ON land_plots(userId, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_farmers_user_search ON farmers(userId, name, phone);
+
+-- Secondary Audit Indexes (v1.7.6 / Migration 0030)
+CREATE INDEX IF NOT EXISTS idx_buys_user_type_date ON buys(userId, rubberType, date DESC);
+CREATE INDEX IF NOT EXISTS idx_wages_user_staff_date ON wages(userId, staffId, date DESC);
+CREATE INDEX IF NOT EXISTS idx_farmers_user_lineid ON farmers(userId, lineId);
+CREATE INDEX IF NOT EXISTS idx_chemical_usage_user_chem_date ON chemical_usage(userId, chemicalId, date DESC);
+
+
 
 
 

@@ -218,7 +218,7 @@ export const withSuperAdmin = (handler) => {
 };
 
 export const updateFarmerStats = async (db, farmerId, storeId) => {
-    if (!farmerId || !db) return;
+    if (!farmerId || !db || farmerId === 'general' || farmerId === 'null' || farmerId === 'undefined') return;
     try {
         await db.prepare(`
             UPDATE farmers 
@@ -230,10 +230,10 @@ export const updateFarmerStats = async (db, farmerId, storeId) => {
                     MAX(date) as maxDate,
                     COUNT(CASE WHEN date >= date('now', '-60 days') THEN 1 END) as recentCount
                 FROM buys 
-                WHERE farmerId = ? AND userId = ?
+                WHERE userId = ? AND farmerId = ?
             ) s
             WHERE farmers.id = ? AND farmers.userId = ?
-        `).bind(farmerId, storeId, farmerId, storeId).run();
+        `).bind(storeId, farmerId, farmerId, storeId).run();
     } catch (e) {
         console.error('[updateFarmerStats Error]', e);
     }
