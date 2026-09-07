@@ -13,9 +13,22 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    // You can also log the error to an error reporting service
     console.error("Uncaught error:", error, errorInfo);
     this.setState({ error, errorInfo });
+
+    const msg = error?.toString() || '';
+    if (
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes('Failed to load module script') ||
+      msg.includes('Importing a module script failed')
+    ) {
+      const key = 'rt_eb_chunk_reload';
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, 'true');
+        console.warn('Stale dynamic module error caught by ErrorBoundary. Auto reloading...');
+        window.location.reload();
+      }
+    }
   }
 
   handleReset = () => {
