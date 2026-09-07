@@ -15,7 +15,7 @@ const TTL_LONG = 10 * 60 * 1000; // 10 minutes (Farmers, Factories, Employees, S
 const memoryCache = new Map();
 
 const getTTL = (key) => {
-    const longTTLKeys = ['farmers', 'employees', 'staff', 'factories', 'trucks', 'settings', 'farmer_types'];
+    const longTTLKeys = ['farmers', 'employees', 'staff', 'factories', 'trucks', 'settings', 'farmer_types', 'farmer_employees'];
     return longTTLKeys.includes(key) ? TTL_LONG : TTL_SHORT;
 };
 
@@ -431,10 +431,17 @@ export const fetchGlobalSearch = async (query) => {
 };
 
 export const fetchEmployees = async (force = false) => await offlineRead('employees', '/employees', force);
-export const fetchFarmerEmployees = async (params = {}) => {
+export const fetchFarmerEmployees = async (params = {}, force = false) => {
     const query = new URLSearchParams(params).toString();
+    const cacheKey = `farmer_employees_${query || 'all'}`;
+    if (!force) {
+        const cached = getCache(cacheKey);
+        if (cached) return cached;
+    }
     const endpoint = query ? `/farmer_employees?${query}` : '/farmer_employees';
-    return await fetchAPI(endpoint);
+    const data = await fetchAPI(endpoint);
+    setCache(cacheKey, data);
+    return data;
 };
 export const saveFarmerEmployeeLink = async (payload) => {
     const res = await fetchAPI('/farmer_employees', {
@@ -443,6 +450,10 @@ export const saveFarmerEmployeeLink = async (payload) => {
         body: JSON.stringify(payload)
     });
     clearCache('farmer_employees', 'farmers', 'employees');
+    // Clear all parameterized farmer_employees cache keys
+    memoryCache.forEach((_, key) => {
+        if (key.startsWith('farmer_employees_')) memoryCache.delete(key);
+    });
     triggerDataRefresh();
     return res;
 };
@@ -452,6 +463,10 @@ export const deleteFarmerEmployeeLink = async (params = {}) => {
         method: 'DELETE'
     });
     clearCache('farmer_employees', 'farmers', 'employees');
+    // Clear all parameterized farmer_employees cache keys
+    memoryCache.forEach((_, key) => {
+        if (key.startsWith('farmer_employees_')) memoryCache.delete(key);
+    });
     triggerDataRefresh();
     return res;
 };
