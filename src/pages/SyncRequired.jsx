@@ -1,14 +1,56 @@
-import React from 'react';
-import { Wifi, ShieldAlert, RefreshCw, LogOut } from 'lucide-react';
+import React, { useState } from 'react';
+import { Wifi, ShieldAlert, RefreshCw, LogOut, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 const SyncRequired = () => {
     const { logout, user } = useAuth();
     const navigate = useNavigate();
+    const [loading, setLoading] = useState(false);
 
-    const handleRetry = () => {
-        window.location.reload();
+    // If user is not logged in, redirect directly to login page
+    if (!user) {
+        return <Navigate to="/login" replace />;
+    }
+
+    const handleRetry = async () => {
+        if (!navigator.onLine) {
+            toast.error('ยังไม่ได้เชื่อมต่ออินเทอร์เน็ต กรุณาเปิดเน็ตแล้วลองใหม่อีกครั้ง');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            // Update last sync timestamp in localStorage to current time
+            const nowStr = new Date().toISOString();
+            localStorage.setItem('rt_last_sync', nowStr);
+            
+            toast.success('เชื่อมต่ออินเทอร์เน็ตสำเร็จ กำลังเข้าสู่ระบบ...');
+            
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 600);
+        } catch (e) {
+            console.error(e);
+            toast.error('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+            setLoading(false);
+        }
+    };
+
+    const handleLogout = async () => {
+        setLoading(true);
+        try {
+            // Clear all local storage keys related to lock & store
+            localStorage.removeItem('rt_last_sync');
+            localStorage.removeItem('rt_subscription_expiry');
+            localStorage.removeItem('rt_active_store_id');
+            await logout();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            window.location.href = '/login';
+        }
     };
 
     const isExpired = user?.subscriptionExpiry && new Date(user.subscriptionExpiry) < new Date();
@@ -51,10 +93,11 @@ const SyncRequired = () => {
                         {!isExpired ? (
                             <button
                                 onClick={handleRetry}
-                                className="w-full bg-rubber-600 hover:bg-rubber-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-rubber-100 transition-all active:scale-95 flex items-center justify-center space-x-2"
+                                disabled={loading}
+                                className="w-full bg-rubber-600 hover:bg-rubber-700 disabled:opacity-50 text-white font-black py-4 rounded-2xl shadow-lg shadow-rubber-100 transition-all active:scale-95 flex items-center justify-center space-x-2"
                             >
-                                <RefreshCw size={20} />
-                                <span>ลองใหม่อีกครั้ง (เชื่อมต่อเน็ตแล้ว)</span>
+                                {loading ? <Loader2 size={20} className="animate-spin" /> : <RefreshCw size={20} />}
+                                <span>{loading ? 'กำลังตรวจสอบ...' : 'ลองใหม่อีกครั้ง (เชื่อมต่อเน็ตแล้ว)'}</span>
                             </button>
                         ) : (
                             <button
@@ -67,7 +110,8 @@ const SyncRequired = () => {
                         )}
 
                         <button
-                            onClick={logout}
+                            onClick={handleLogout}
+                            disabled={loading}
                             className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-4 rounded-2xl transition-all flex items-center justify-center space-x-2"
                         >
                             <LogOut size={20} />

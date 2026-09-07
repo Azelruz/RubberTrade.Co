@@ -114,14 +114,15 @@ export const AuthProvider = ({ children }) => {
         try {
             clearAllCache();
             localStorage.removeItem('rt_active_store_id');
+            localStorage.removeItem('rt_last_sync');
+            localStorage.removeItem('rt_subscription_expiry');
             await db.delete(); // Delete the entire IndexedDB database safely
             
-            // Reload the page to ensure all memory state is wiped and DB is re-initialized for the next login
-            window.location.reload();
+            // Redirect to login page
+            window.location.href = '/login';
         } catch (err) {
             console.error("Failed to clear local cache on logout:", err);
-            // Fallback reload if wipe errors out
-            window.location.reload();
+            window.location.href = '/login';
         }
     };
 
