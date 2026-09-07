@@ -371,6 +371,9 @@ CREATE INDEX IF NOT EXISTS idx_wages_user_staff_date ON wages(userId, staffId, d
 CREATE INDEX IF NOT EXISTS idx_farmers_user_lineid ON farmers(userId, lineId);
 CREATE INDEX IF NOT EXISTS idx_chemical_usage_user_chem_date ON chemical_usage(userId, chemicalId, date DESC);
 
+-- Covering Index for Farmer Stats Aggregations (Migration 0029)
+CREATE INDEX IF NOT EXISTS idx_buys_user_farmer_date ON buys(userId, farmerId, date DESC);
+
 
 
 
