@@ -290,9 +290,14 @@ const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, membe
                                     {config.showBonusDrc !== false && (
                                         <div className="flex justify-between items-center">
                                             <span style={{ fontSize: `${config.fontSizeBonusDrcLabel || config.fontSizeSubData || 8}px` }} className="font-bold text-gray-400">{labels.bonusDrc}</span>
-                                            <span style={{ fontSize: `${config.fontSizeBonusDrcValue || config.fontSizeSubData || 8}px` }} className="font-bold text-green-600 mono">
-                                                +฿{Number(viewingEslip.bonus_drc ?? viewingEslip.bonusDrc ?? 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-xs text-gray-400 font-bold">/กก.</span>
-                                            </span>
+                                            {(() => {
+                                                const val = Number(viewingEslip.bonus_drc ?? viewingEslip.bonusDrc ?? 0);
+                                                return (
+                                                    <span style={{ fontSize: `${config.fontSizeBonusDrcValue || config.fontSizeSubData || 8}px` }} className={`font-bold mono ${val < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                                        {val >= 0 ? '+฿' : '-฿'}{Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 1 })} <span className="text-xs text-gray-400 font-bold">/กก.</span>
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
                                     )}
 

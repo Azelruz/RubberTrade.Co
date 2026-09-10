@@ -211,7 +211,14 @@ const BuyESlipCapture = ({ eslipRef, settings, watch, watchRubberType, printingR
                                 {config.showBonusDrc !== false && (
                                     <div className="flex justify-between items-center text-[24px]">
                                         <span className="font-bold text-gray-600">{labels.bonusDrc}</span>
-                                        <span className="font-bold text-green-600 font-mono">+฿{(Number(printingReceipt?.bonusDrc ?? watch('bonusDrc')) || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                        {(() => {
+                                            const val = Number(printingReceipt?.bonusDrc ?? watch('bonusDrc')) || 0;
+                                            return (
+                                                <span className={`font-bold font-mono ${val < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                                    {val >= 0 ? '+฿' : '-฿'}{Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.
+                                                </span>
+                                            );
+                                        })()}
                                     </div>
                                 )}
                                 {config.showBonusFsc !== false && finalFscBonus > 0 && (

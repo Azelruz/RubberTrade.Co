@@ -229,7 +229,12 @@ const BuyPaperReceipt = ({ printingReceipt, printRef, setPrintingReceipt, settin
                                     {config.showBonusDrc !== false && (
                                         <div style={{ fontSize: `${(config.fontSizeBonusDrcLabel || config.fontSizeSubData || 8) * 2}px` }} className="flex justify-between items-center font-medium">
                                             <span>{labels.bonusDrc}</span>
-                                            <span style={{ fontSize: `${(config.fontSizeBonusDrcValue || config.fontSizeSubData || 8) * 2}px` }} className="text-right ml-auto">+{Number(printingReceipt.bonusDrc !== undefined ? printingReceipt.bonusDrc : calculateDrcBonus(printingReceipt.drc, drcBonuses)).toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.</span>
+                                            <span style={{ fontSize: `${(config.fontSizeBonusDrcValue || config.fontSizeSubData || 8) * 2}px` }} className="text-right ml-auto">
+                                                {(() => {
+                                                    const val = Number(printingReceipt.bonusDrc !== undefined ? printingReceipt.bonusDrc : calculateDrcBonus(printingReceipt.drc, drcBonuses));
+                                                    return `${val >= 0 ? '+' : ''}${val.toLocaleString(undefined, { minimumFractionDigits: 1 })}/กก.`;
+                                                })()}
+                                            </span>
                                         </div>
                                     )}
                                     {(config.showBonusFsc !== false && finalFscBonus > 0) && (

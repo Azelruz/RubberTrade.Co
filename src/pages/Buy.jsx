@@ -170,11 +170,13 @@ export const Buy = () => {
             setValue('drc', '1');
         }
 
-        const finalPrice = isCupLump ? base : (base + bonusDrc + fscBonus + memberBonus);
+        const effectiveBase = dirtyFields.basePrice ? (Number(watchBasePrice) || 0) : base;
+        const effectiveBonusDrc = dirtyFields.bonusDrc ? (Number(watchBonusDrc) || 0) : bonusDrc;
+        const finalPrice = isCupLump ? effectiveBase : (effectiveBase + effectiveBonusDrc + fscBonus + memberBonus);
         if (String(watchPricePerKg || '') !== String(finalPrice || '')) {
             setValue('pricePerKg', finalPrice.toString());
         }
-    }, [watchDrc, watchFarmerId, watchRubberType, farmers, memberTypes, dailyPriceObj.price, settings.cupLumpPrice, setValue, drcBonuses, dirtyFields.basePrice, dirtyFields.bonusDrc, settings.fscBonus, watchEnableFsc, watchPricePerKg]);
+    }, [watchDrc, watchFarmerId, watchRubberType, farmers, memberTypes, dailyPriceObj.price, settings.cupLumpPrice, setValue, drcBonuses, dirtyFields.basePrice, dirtyFields.bonusDrc, settings.fscBonus, watchEnableFsc, watchPricePerKg, watchBonusDrc, watchBasePrice]);
 
     // Load data
     useEffect(() => {
