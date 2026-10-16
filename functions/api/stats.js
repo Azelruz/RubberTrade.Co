@@ -14,44 +14,69 @@ async function handleGet(context) {
         const dateParam = url.searchParams.get('date') || getTodayDateStr(tz);
         const tzOffset = getTimezoneOffset(tz);
         
-        const todayPattern = `${dateParam}%`;
-        const monthPattern = `${dateParam.substring(0, 7)}%`;
+        const dateOnly = dateParam.split('T')[0];
+        const monthPrefix = dateOnly.substring(0, 7);
+        const monthStart = `${monthPrefix}-01`;
+        const monthEnd = `${monthPrefix}-31`;
         const isStaff = role === 'staff';
 
         const [
-            todayBuysLatex, todayBuysCupLump, todaySellsLatex, todaySellsCupLump, 
-            todayExp, todayWage, 
-            monthBuysLatex, monthBuysCupLump, monthSellsLatex, monthSellsCupLump, 
-            monthExp, monthWage, 
-            unpaid, settings, marketPrices, buyHistory, sellHistory, recentBuys, recentSells
+            todayBuysRow,
+            todaySellsRow,
+            todayExp,
+            todayWage,
+            monthBuysRow,
+            monthSellsRow,
+            monthExp,
+            monthWage,
+            unpaid,
+            settings,
+            marketPrices,
+            buyHistory,
+            sellHistory,
+            recentBuys,
+            recentSells
         ] = await Promise.all([
-            // --- TODAY'S DATA ---
+            // --- TODAY'S DATA (Consolidated latex + cup_lump in 1 query each, exact date = ?) ---
             db.prepare(`
-                SELECT SUM(weight - bucketWeight) as totalWeight, SUM(total) as totalAmount, COUNT(*) as count,
-                       CASE WHEN SUM(weight - bucketWeight) > 0 THEN (SUM((weight - bucketWeight) * drc) / SUM(weight - bucketWeight)) ELSE 0 END as avgDrc
-                FROM buys WHERE userId = ? AND date LIKE ? AND (rubberType = 'latex' OR rubberType IS NULL)
-            `).bind(storeId, todayPattern).first(),
+                SELECT 
+                    SUM(CASE WHEN rubberType = 'latex' OR rubberType IS NULL THEN weight - bucketWeight ELSE 0 END) as latexWeight,
+                    SUM(CASE WHEN rubberType = 'latex' OR rubberType IS NULL THEN total ELSE 0 END) as latexAmount,
+                    SUM(CASE WHEN rubberType = 'latex' OR rubberType IS NULL THEN 1 ELSE 0 END) as latexCount,
+                    SUM(CASE WHEN (rubberType = 'latex' OR rubberType IS NULL) THEN (weight - bucketWeight) * drc ELSE 0 END) as latexDrcWeight,
+                    SUM(CASE WHEN rubberType = 'cup_lump' THEN weight - bucketWeight ELSE 0 END) as cupLumpWeight,
+                    SUM(CASE WHEN rubberType = 'cup_lump' THEN total ELSE 0 END) as cupLumpAmount,
+                    SUM(CASE WHEN rubberType = 'cup_lump' THEN 1 ELSE 0 END) as cupLumpCount
+                FROM buys WHERE userId = ? AND date = ?
+            `).bind(storeId, dateOnly).first(),
             
             db.prepare(`
-                SELECT SUM(weight - bucketWeight) as totalWeight, SUM(total) as totalAmount, COUNT(*) as count
-                FROM buys WHERE userId = ? AND date LIKE ? AND rubberType = 'cup_lump'
-            `).bind(storeId, todayPattern).first(),
+                SELECT 
+                    SUM(CASE WHEN rubberType = 'latex' OR rubberType IS NULL THEN total ELSE 0 END) as latexAmount,
+                    SUM(CASE WHEN rubberType = 'cup_lump' THEN total ELSE 0 END) as cupLumpAmount
+                FROM sells WHERE userId = ? AND date = ?
+            `).bind(storeId, dateOnly).first(),
             
-            db.prepare(`SELECT SUM(total) as totalAmount FROM sells WHERE userId = ? AND date LIKE ? AND (rubberType = 'latex' OR rubberType IS NULL)`).bind(storeId, todayPattern).first(),
-            db.prepare(`SELECT SUM(total) as totalAmount FROM sells WHERE userId = ? AND date LIKE ? AND rubberType = 'cup_lump'`).bind(storeId, todayPattern).first(),
+            db.prepare(`SELECT SUM(amount) as total FROM expenses WHERE userId = ? AND date = ?`).bind(storeId, dateOnly).first(),
+            db.prepare(`SELECT SUM(total) as total FROM wages WHERE userId = ? AND date = ?`).bind(storeId, dateOnly).first(),
             
-            db.prepare(`SELECT SUM(amount) as total FROM expenses WHERE userId = ? AND date LIKE ?`).bind(storeId, todayPattern).first(),
-            db.prepare(`SELECT SUM(total) as total FROM wages WHERE userId = ? AND date LIKE ?`).bind(storeId, todayPattern).first(),
+            // --- MONTHLY DATA (Consolidated latex + cup_lump in 1 query each, indexed range scan) ---
+            db.prepare(`
+                SELECT 
+                    SUM(CASE WHEN rubberType = 'latex' OR rubberType IS NULL THEN total ELSE 0 END) as latexAmount,
+                    SUM(CASE WHEN rubberType = 'cup_lump' THEN total ELSE 0 END) as cupLumpAmount
+                FROM buys WHERE userId = ? AND date >= ? AND date <= ?
+            `).bind(storeId, monthStart, monthEnd).first(),
             
-            // --- MONTHLY DATA ---
-            db.prepare(`SELECT SUM(total) as totalAmount FROM buys WHERE userId = ? AND date LIKE ? AND (rubberType = 'latex' OR rubberType IS NULL)`).bind(storeId, monthPattern).first(),
-            db.prepare(`SELECT SUM(total) as totalAmount FROM buys WHERE userId = ? AND date LIKE ? AND rubberType = 'cup_lump'`).bind(storeId, monthPattern).first(),
+            db.prepare(`
+                SELECT 
+                    SUM(CASE WHEN rubberType = 'latex' OR rubberType IS NULL THEN total ELSE 0 END) as latexAmount,
+                    SUM(CASE WHEN rubberType = 'cup_lump' THEN total ELSE 0 END) as cupLumpAmount
+                FROM sells WHERE userId = ? AND date >= ? AND date <= ?
+            `).bind(storeId, monthStart, monthEnd).first(),
             
-            db.prepare(`SELECT SUM(total) as totalAmount FROM sells WHERE userId = ? AND date LIKE ? AND (rubberType = 'latex' OR rubberType IS NULL)`).bind(storeId, monthPattern).first(),
-            db.prepare(`SELECT SUM(total) as totalAmount FROM sells WHERE userId = ? AND date LIKE ? AND rubberType = 'cup_lump'`).bind(storeId, monthPattern).first(),
-            
-            db.prepare(`SELECT SUM(amount) as total FROM expenses WHERE userId = ? AND date LIKE ?`).bind(storeId, monthPattern).first(),
-            db.prepare(`SELECT SUM(total) as total FROM wages WHERE userId = ? AND date LIKE ?`).bind(storeId, monthPattern).first(),
+            db.prepare(`SELECT SUM(amount) as total FROM expenses WHERE userId = ? AND date >= ? AND date <= ?`).bind(storeId, monthStart, monthEnd).first(),
+            db.prepare(`SELECT SUM(total) as total FROM wages WHERE userId = ? AND date >= ? AND date <= ?`).bind(storeId, monthStart, monthEnd).first(),
             
             // --- OTHERS ---
             db.prepare(`SELECT COUNT(*) as count FROM buys WHERE userId = ? AND (farmerStatus != 'Paid' OR employeeStatus != 'Paid')`).bind(storeId).first(),
@@ -62,6 +87,28 @@ async function handleGet(context) {
             db.prepare("SELECT 'buy' as type, id, date, total, farmerName as name, farmerId as partyId, created_at FROM buys WHERE userId = ? ORDER BY date DESC, created_at DESC LIMIT 10").bind(storeId).all(),
             db.prepare("SELECT 'sell' as type, id, date, total, buyerName as name, factoryId as partyId, created_at FROM sells WHERE userId = ? ORDER BY date DESC, created_at DESC LIMIT 10").bind(storeId).all()
         ]);
+
+        const todayBuysLatex = {
+            totalWeight: todayBuysRow?.latexWeight || 0,
+            totalAmount: todayBuysRow?.latexAmount || 0,
+            count: todayBuysRow?.latexCount || 0,
+            avgDrc: (todayBuysRow?.latexWeight > 0) ? (todayBuysRow.latexDrcWeight / todayBuysRow.latexWeight) : 0
+        };
+
+        const todayBuysCupLump = {
+            totalWeight: todayBuysRow?.cupLumpWeight || 0,
+            totalAmount: todayBuysRow?.cupLumpAmount || 0,
+            count: todayBuysRow?.cupLumpCount || 0
+        };
+
+        const todaySellsLatex = { totalAmount: todaySellsRow?.latexAmount || 0 };
+        const todaySellsCupLump = { totalAmount: todaySellsRow?.cupLumpAmount || 0 };
+
+        const monthBuysLatex = { totalAmount: monthBuysRow?.latexAmount || 0 };
+        const monthBuysCupLump = { totalAmount: monthBuysRow?.cupLumpAmount || 0 };
+
+        const monthSellsLatex = { totalAmount: monthSellsRow?.latexAmount || 0 };
+        const monthSellsCupLump = { totalAmount: monthSellsRow?.cupLumpAmount || 0 };
 
         const combinedRecent = [
             ...(recentBuys?.results || []),

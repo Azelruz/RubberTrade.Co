@@ -2,6 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
+import { initSentry } from './utils/sentry'
+
+// Initialize Sentry Error Monitoring
+initSentry();
 
 // Auto-recover from Stale Dynamic Module/Chunk Load Errors (Deploy Version Mismatch)
 window.addEventListener('error', (e) => {
@@ -9,7 +13,9 @@ window.addEventListener('error', (e) => {
   if (
     msg.includes('Failed to fetch dynamically imported module') ||
     msg.includes('Failed to load module script') ||
-    msg.includes('Importing a module script failed')
+    msg.includes('Importing a module script failed') ||
+    msg.includes('is not a valid JavaScript MIME type') ||
+    msg.includes('MIME type')
   ) {
     const key = 'rt_chunk_reload_' + (e.filename || 'general');
     if (!sessionStorage.getItem(key)) {
@@ -25,7 +31,9 @@ window.addEventListener('unhandledrejection', (e) => {
   if (
     msg.includes('Failed to fetch dynamically imported module') ||
     msg.includes('Failed to load module script') ||
-    msg.includes('Importing a module script failed')
+    msg.includes('Importing a module script failed') ||
+    msg.includes('is not a valid JavaScript MIME type') ||
+    msg.includes('MIME type')
   ) {
     const key = 'rt_chunk_reload_rejection';
     if (!sessionStorage.getItem(key)) {

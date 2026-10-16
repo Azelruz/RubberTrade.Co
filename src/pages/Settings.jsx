@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { 
     Settings as SettingsIcon, Building2, UserCircle, Leaf, 
     Users, DollarSign, Truck, Shield, MessageSquare, ClipboardList, Beaker,
-    ChevronRight, Layout, Database, Radio, Receipt, Wrench, MapPin
+    ChevronRight, Layout, Database, Radio, Receipt, Wrench, MapPin, Bell, FileCode
 } from 'lucide-react';
 
 // Sub-components (Self-contained)
@@ -18,7 +18,10 @@ import { TruckManagement } from './settings/TruckManagement';
 import { ChemicalManagement } from './settings/ChemicalManagement';
 import { PaperSlipSettings } from './settings/PaperSlipSettings';
 import { ServiceManagement } from './settings/ServiceManagement';
+import { NotificationSettings } from './settings/NotificationSettings';
+import { ApiDocsTab } from './settings/ApiDocsTab';
 import { LandPlots } from './LandPlots';
+import { ErrorButton } from '../components/ErrorButton';
 
 const Settings = () => {
     const location = useLocation();
@@ -56,6 +59,8 @@ const Settings = () => {
                 { id: 'factories', icon: <Building2 size={20} />, label: 'โรงงานส่งขาย', desc: 'จัดการโรงงานปลายทาง' },
                 { id: 'trucks', icon: <Truck size={20} />, label: 'รถส่งน้ำยาง', desc: 'ข้อมูลทะเบียนรถขนส่ง' },
                 { id: 'chemicals', icon: <Beaker size={20} />, label: 'สารเคมี', desc: 'จัดการหน่วยและราคา' },
+                { id: 'notifications', icon: <Bell size={20} />, label: 'การแจ้งเตือน', desc: 'เลือกเปิด/ปิดการแจ้งเตือนกระดิ่ง' },
+                { id: 'api_docs', icon: <FileCode size={20} />, label: 'API Docs', desc: 'คู่มือเชื่อมต่อ OpenAPI & Swagger' },
             ]
         }
     ], []);
@@ -132,6 +137,7 @@ const Settings = () => {
                             </div>
                         </div>
                         <div className="flex items-center space-x-2">
+                            <ErrorButton />
                              <div className="px-3 py-1.5 bg-rubber-50 text-rubber-600 rounded-lg text-[10px] font-black uppercase tracking-wider border border-rubber-100">
                                 Active Module
                              </div>
@@ -140,7 +146,7 @@ const Settings = () => {
 
                     {/* Content Section */}
                     <div className="flex-1 p-6 md:p-10 print:p-0">
-                        <div className={activeTab === 'land_plots' ? 'max-w-7xl mx-auto print:max-w-none print:w-full' : 'max-w-4xl mx-auto print:max-w-none print:w-full'}>
+                        <div className={(activeTab === 'land_plots' || activeTab === 'api_docs') ? 'max-w-7xl mx-auto print:max-w-none print:w-full' : 'max-w-4xl mx-auto print:max-w-none print:w-full'}>
                             {/* Content Area */}
                             {activeTab === 'general' && <GeneralSettings />}
                             {activeTab === 'paper_slip' && <PaperSlipSettings />}
@@ -154,6 +160,8 @@ const Settings = () => {
                             {activeTab === 'trucks' && <TruckManagement />}
                             {activeTab === 'chemicals' && <ChemicalManagement />}
                             {activeTab === 'line_integration' && <LineIntegration />}
+                            {activeTab === 'notifications' && <NotificationSettings />}
+                            {activeTab === 'api_docs' && <ApiDocsTab />}
                         </div>
                     </div>
 

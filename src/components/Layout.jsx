@@ -29,14 +29,114 @@ import {
     Maximize2,
     Minimize2,
     MapPin,
-    Sparkles
+    Sparkles,
+    PieChart,
+    Globe,
+    HandCoins,
+    Receipt,
+    CloudOff
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { fetchNotificationStats, adminFetchAllMembers, clearAllCache, fetchTeamMembers, getSettings } from '../services/apiService';
+import { fetchNotificationStats, adminFetchAllMembers, clearAllCache, fetchTeamMembers, getSettings, adminFetchBranches } from '../services/apiService';
+import { supabase } from '../utils/supabase';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import GlobalSearch from './GlobalSearch';
+import NotificationSettingsModal from './NotificationSettingsModal';
+import { getNotificationPreferences, computeActiveNotificationCount } from '../utils/notificationPreferences';
+
+// --- NEW: Multi-Branch & Database Switcher Component for Super Admin ---
+const BranchSwitcher = () => {
+    const { user } = useAuth();
+    const [branches, setBranches] = useState([]);
+    
+    const isSuperAdmin = user?.role?.toLowerCase() === 'super_admin' || 
+                        user?.email === 'narapong.an@gmail.com' || 
+                        user?.username === 'narapong.an';
+
+    useEffect(() => {
+        if (!isSuperAdmin) return;
+        const loadBranches = async () => {
+            try {
+                const data = await adminFetchBranches();
+                const list = Array.isArray(data) ? data : data?.data || [];
+                setBranches(list.filter(b => b.status === 'active' || !b.status));
+            } catch (err) {
+                console.error('Failed to load branches for switcher:', err);
+            }
+        };
+        loadBranches();
+    }, [isSuperAdmin]);
+
+    if (!isSuperAdmin || branches.length <= 1) return null;
+
+    // Detect current branch from origin / hostname
+    const currentHost = window.location.hostname.toLowerCase();
+    let currentBranchSlug = 'main';
+    if (currentHost.includes('padang')) currentBranchSlug = 'padang';
+    else if (currentHost.includes('ache2')) currentBranchSlug = 'ache2';
+    else {
+        const matched = branches.find(b => {
+            try {
+                return currentHost === new URL(b.url).hostname.toLowerCase();
+            } catch {
+                return false;
+            }
+        });
+        if (matched) currentBranchSlug = matched.slug;
+    }
+
+    const currentBranch = branches.find(b => b.slug === currentBranchSlug) || branches[0];
+
+    const handleSwitchBranch = async (e) => {
+        const targetSlug = e.target.value;
+        if (targetSlug === currentBranchSlug) return;
+        const target = branches.find(b => b.slug === targetSlug);
+        if (!target) return;
+
+        toast.loading(`กำลังสลับฐานข้อมูลไปยัง ${target.name}...`, { id: 'branch-switch' });
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            let targetUrl = target.url;
+            if (session?.access_token && session?.refresh_token) {
+                targetUrl += `#access_token=${session.access_token}&refresh_token=${session.refresh_token}&token_type=bearer&type=recovery`;
+            }
+            window.location.href = targetUrl;
+        } catch (err) {
+            window.location.href = target.url;
+        }
+    };
+
+    return (
+        <div className="flex items-center space-x-1.5 mr-2">
+            <div className="relative group">
+                <select
+                    value={currentBranchSlug}
+                    onChange={handleSwitchBranch}
+                    className="pl-8 pr-7 py-1.5 bg-blue-50/80 hover:bg-blue-100/70 border border-blue-200 text-blue-900 rounded-xl text-xs font-bold shadow-xs focus:ring-2 focus:ring-blue-500 transition-all appearance-none cursor-pointer"
+                    title="สลับฐานข้อมูลสาขา (Super Admin)"
+                >
+                    {branches.map(b => (
+                        <option key={b.slug} value={b.slug}>
+                            [{b.code}] {b.name}
+                        </option>
+                    ))}
+                </select>
+                <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-blue-600 pointer-events-none">
+                    <Globe size={14} />
+                </div>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-blue-500">
+                    <ChevronDown size={13} />
+                </div>
+            </div>
+            <div className="hidden xl:flex items-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded-md text-[10px] font-bold font-mono">
+                {currentBranch?.database || 'D1'}
+            </div>
+        </div>
+    );
+};
 
 // --- NEW: Store Switcher Component ---
 const StoreSwitcher = () => {
@@ -136,12 +236,34 @@ export const Layout = () => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
 
+    const isSuperAdmin = user?.role?.toLowerCase() === 'super_admin' || 
+                         user?.email === 'narapong.an@gmail.com' || 
+                         user?.username === 'narapong.an';
+
     // Notification State
     const [notifications, setNotifications] = useState({
         subscription: { expiryDays: null, isExpired: false },
-        admin: { pendingApprovalsCount: 0 }
+        admin: { pendingApprovalsCount: 0 },
+        loans: { count: 0, totalAmount: 0 },
+        unpaidBuys: { count: 0, totalAmount: 0 }
     });
+    const [notifPrefs, setNotifPrefs] = useState(() => getNotificationPreferences());
     const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+    const [isNotifSettingsOpen, setIsNotifSettingsOpen] = useState(false);
+
+    const activeNotifCount = computeActiveNotificationCount(notifications, syncQueueCount, notifPrefs, isSuperAdmin);
+
+    // a11y: Escape key listener to close dropdowns and sidebar
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                if (showNotifDropdown) setShowNotifDropdown(false);
+                if (sidebarOpen) setSidebarOpen(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [showNotifDropdown, sidebarOpen]);
 
     // Feature Toggles State (Enable/Disable Menus)
     const parseBoolSetting = (val, defaultVal = true) => {
@@ -155,23 +277,26 @@ export const Layout = () => {
 
     const [featureToggles, setFeatureToggles] = useState(() => ({
         enableBuyMap: parseBoolSetting(localStorage.getItem('rt_enable_buy_map'), true),
-        enableSellAI: parseBoolSetting(localStorage.getItem('rt_enable_sell_ai'), true)
+        enableSellAI: parseBoolSetting(localStorage.getItem('rt_enable_sell_ai'), true),
+        enableCooperatives: parseBoolSetting(localStorage.getItem('rt_enable_cooperatives'), true)
     }));
 
     useEffect(() => {
-        const updateTogglesState = (buyMapVal, sellAIVal) => {
+        const updateTogglesState = (buyMapVal, sellAIVal, coopVal) => {
             const mapVal = parseBoolSetting(buyMapVal, true);
             const aiVal = parseBoolSetting(sellAIVal, true);
+            const coopValParsed = parseBoolSetting(coopVal, true);
             localStorage.setItem('rt_enable_buy_map', String(mapVal));
             localStorage.setItem('rt_enable_sell_ai', String(aiVal));
-            setFeatureToggles({ enableBuyMap: mapVal, enableSellAI: aiVal });
+            localStorage.setItem('rt_enable_cooperatives', String(coopValParsed));
+            setFeatureToggles({ enableBuyMap: mapVal, enableSellAI: aiVal, enableCooperatives: coopValParsed });
         };
 
         const loadFeatureSettings = async () => {
             try {
                 const res = await getSettings();
                 if (res.status === 'success' && res.data) {
-                    updateTogglesState(res.data.enableBuyMap, res.data.enableSellAI);
+                    updateTogglesState(res.data.enableBuyMap, res.data.enableSellAI, res.data.enableCooperatives);
                 }
             } catch (e) {
                 console.error('Error loading feature toggles in Layout:', e);
@@ -183,10 +308,11 @@ export const Layout = () => {
         const handleSettingsUpdated = (e) => {
             if (e?.detail?.payload) {
                 const p = e.detail.payload;
-                if (p.enableBuyMap !== undefined || p.enableSellAI !== undefined) {
+                if (p.enableBuyMap !== undefined || p.enableSellAI !== undefined || p.enableCooperatives !== undefined) {
                     updateTogglesState(
                         p.enableBuyMap !== undefined ? p.enableBuyMap : localStorage.getItem('rt_enable_buy_map'),
-                        p.enableSellAI !== undefined ? p.enableSellAI : localStorage.getItem('rt_enable_sell_ai')
+                        p.enableSellAI !== undefined ? p.enableSellAI : localStorage.getItem('rt_enable_sell_ai'),
+                        p.enableCooperatives !== undefined ? p.enableCooperatives : localStorage.getItem('rt_enable_cooperatives')
                     );
                 }
             }
@@ -211,8 +337,16 @@ export const Layout = () => {
         };
         const handleOffline = () => setIsOnline(false);
         const handleSyncComplete = (e) => {
-            if (e.detail && e.detail.count > 0) {
-                toast.success(`อัปโหลดล่วงล้ำเข้าระบบสำเร็จ ${e.detail.count} รายการ 🚀`, { duration: 4000 });
+            const count = e.detail?.count || 0;
+            const failedCount = e.detail?.failedCount || 0;
+
+            if (count > 0 && failedCount === 0) {
+                toast.success(`อัปโหลดข้อมูลเข้าคลาวด์สำเร็จ ${count} รายการ 🚀`, { duration: 4000 });
+            } else if (count > 0 && failedCount > 0) {
+                toast.success(`อัปโหลดสำเร็จ ${count} รายการ`, { duration: 3000 });
+                toast.error(`⚠️ มีข้อมูลซิงค์ไม่สำเร็จ ${failedCount} รายการ กรุณาตรวจสอบที่เมนู "คิวซิงค์ข้อมูลออฟไลน์"`, { duration: 7000 });
+            } else if (failedCount > 0) {
+                toast.error(`⚠️ พบข้อมูลซิงค์ไม่สำเร็จ ${failedCount} รายการ กรุณาตรวจสอบที่เมนู "คิวซิงค์ข้อมูลออฟไลน์"`, { duration: 7000 });
             }
             updateQueueCount();
         };
@@ -245,8 +379,19 @@ export const Layout = () => {
             if (navigator.onLine) updateNotifications();
         }, 5 * 60 * 1000); // Poll every 5 minutes
 
+        const handleNotifPrefsUpdated = (e) => {
+            if (e?.detail) {
+                setNotifPrefs(e.detail);
+            } else {
+                setNotifPrefs(getNotificationPreferences());
+            }
+        };
+
+        window.addEventListener('notification-prefs-updated', handleNotifPrefsUpdated);
+
         return () => {
             window.removeEventListener('settings-updated', handleSettingsUpdated);
+            window.removeEventListener('notification-prefs-updated', handleNotifPrefsUpdated);
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
             window.removeEventListener('sync-complete', handleSyncComplete);
@@ -276,6 +421,12 @@ export const Layout = () => {
             ]
         },
         { name: 'ค่าใช้จ่าย', path: '/expenses', icon: <Wallet size={20} />, roles: ['owner', 'admin', 'staff'] },
+        { 
+            name: 'กลุ่มสมาชิก & ปันผล', 
+            path: '/cooperatives', 
+            icon: <PieChart size={20} className="text-emerald-500" />, 
+            roles: ['owner', 'admin', 'staff'] 
+        },
         { name: 'โปรโมชั่น', path: '/promotions', icon: <Gift size={20} />, roles: ['owner', 'staff'] },
         { 
             name: 'ระบบจัดการคิว', 
@@ -298,6 +449,7 @@ export const Layout = () => {
                 { name: 'รายงานคาดการณ์ประจำวัน', path: '/report/daily-forecast' },
                 { name: 'รายงานปรับปรุงสต็อก', path: '/report/stock-adjustments' },
                 { name: 'รายงานยอดขายประจำเดือน', path: '/report/monthly' },
+                { name: 'รายงาน กยท. (ค.ย. ๖/๗/๘)', path: '/report/raot' },
                 { name: 'รายงานประวัติการซื้อ-ขาย', path: '/report/transaction-history' },
                 { name: 'ระบบบัญชี & ภาษีสรรพากร', path: '/tax-report' }
             ]
@@ -310,6 +462,7 @@ export const Layout = () => {
             subItems: [
                 { name: 'ภาพรวมระบบสมาชิก', path: '/admin/subscription-dashboard' },
                 { name: 'จัดการสมาชิก & อนุมัติ', path: '/admin/subscriptions' },
+                { name: 'จัดการระบบสาขา (Branches)', path: '/admin/branches' },
                 { name: 'รายงานแอดมิน', path: '/admin/reports' },
                 { name: 'สำรองข้อมูล (Backup)', path: '/admin/backups' },
                 { name: 'บันทึกกิจกรรม (Logs)', path: '/activity-log' }
@@ -335,6 +488,7 @@ export const Layout = () => {
         // Feature Toggles Check (Enable/Disable Menus)
         if (item.path === '/buy-map' && !featureToggles.enableBuyMap) return false;
         if (item.path === '/sell-ai' && !featureToggles.enableSellAI) return false;
+        if (item.path === '/cooperatives' && !featureToggles.enableCooperatives) return false;
 
         if (!item.roles) return true;
         const isSuperAdmin = user?.role?.toLowerCase() === 'super_admin' || 
@@ -477,6 +631,8 @@ export const Layout = () => {
                     </div>
                     <button 
                         disabled={isSyncing}
+                        aria-label="ซิงค์ข้อมูลล่าสุดกับเซิร์ฟเวอร์"
+                        title="ซิงค์ข้อมูลล่าสุดกับเซิร์ฟเวอร์"
                         onClick={async () => {
                             if (isSyncing) return;
                             setIsSyncing(true);
@@ -496,7 +652,7 @@ export const Layout = () => {
                             setIsSyncing(false);
                             window.dispatchEvent(new Event('dashboard-refresh'));
                         }}
-                        className={`flex items-center justify-between w-full px-4 py-3 text-sm font-bold text-white rounded-xl transition-all mb-2 shadow-md relative overflow-hidden group
+                        className={`flex items-center justify-between w-full px-4 py-3 text-sm font-bold text-white rounded-xl transition-all mb-2 shadow-md relative overflow-hidden group focus:outline-none focus:ring-2 focus:ring-rubber-500
                             ${isSyncing ? 'bg-rubber-400 cursor-not-allowed' : 'bg-rubber-600 hover:bg-rubber-700 active:scale-95'}`}
                     >
                         <div className="flex items-center">
@@ -512,7 +668,9 @@ export const Layout = () => {
                     </button>
                     <button
                         onClick={handleLogout}
-                        className="flex items-center w-full px-4 py-2 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                        aria-label="ออกจากระบบ"
+                        title="ออกจากระบบ"
+                        className="flex items-center w-full px-4 py-2 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
                     >
                         <LogOut size={20} className="mr-3" />
                         ออกจากระบบ
@@ -587,7 +745,9 @@ export const Layout = () => {
                 <header className="flex items-center justify-between h-16 px-4 bg-white border-b border-gray-200 lg:px-8 print:hidden">
                     <button
                         onClick={() => setSidebarOpen(true)}
-                        className="p-1 text-gray-400 lg:hidden hover:text-gray-500 focus:outline-none focus:ring focus:ring-rubber-500 focus:ring-opacity-50"
+                        aria-label="เปิดเมนูหลัก"
+                        title="เปิดเมนูหลัก"
+                        className="p-1.5 text-gray-400 lg:hidden hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-rubber-500 rounded-lg transition-colors"
                     >
                         <Menu size={24} />
                     </button>
@@ -595,14 +755,15 @@ export const Layout = () => {
                     <div className="flex items-center space-x-2">
                         <span className="text-lg font-bold text-rubber-600 lg:hidden">RubberTrade</span>
                         <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-rubber-50 text-rubber-700 rounded-full border border-rubber-200 lg:hidden">
-                            v1.7.7
+                            v1.8.3
                         </span>
                     </div>
 
                     <div className="flex items-center ml-auto space-x-3">
                         <span className="px-2.5 py-1 text-xs font-mono font-bold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200 shadow-xs hidden md:inline-flex items-center">
-                            v1.7.7
+                            v1.8.3
                         </span>
+                        <BranchSwitcher />
                         <StoreSwitcher />
                         <GlobalSearch />
                         <button 
@@ -618,19 +779,21 @@ export const Layout = () => {
                                 }
                                 window.dispatchEvent(new Event('dashboard-refresh'));
                             }}
-                            className="flex items-center text-gray-500 hover:text-rubber-600 bg-gray-50 hover:bg-rubber-50 px-3 py-1 rounded-full text-xs font-medium border border-gray-200 transition-colors"
+                            aria-label="รีเฟรชข้อมูลล่าสุด"
+                            title="รีเฟรชข้อมูลล่าสุด"
+                            className="flex items-center text-gray-500 hover:text-rubber-600 bg-gray-50 hover:bg-rubber-50 px-3 py-1 rounded-full text-xs font-medium border border-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-rubber-500"
                         >
                             <RefreshCw size={14} className="mr-1.5" />
                             <span>รีเฟรชข้อมูล</span>
                         </button>
                     
                         {isOnline ? (
-                            <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full text-xs font-medium border border-green-200">
+                            <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full text-xs font-medium border border-green-200" title="สถานะ: ออนไลน์ เชื่อมต่อเซิร์ฟเวอร์เรียบร้อย">
                                 <Wifi size={14} className="mr-1.5" />
                                 <span>ออนไลน์</span>
                             </div>
                         ) : (
-                            <div className="flex items-center text-amber-600 bg-amber-50 px-3 py-1 rounded-full text-xs font-medium border border-amber-200 animate-pulse">
+                            <div className="flex items-center text-amber-600 bg-amber-50 px-3 py-1 rounded-full text-xs font-medium border border-amber-200 animate-pulse" title="สถานะ: ออฟไลน์ (ระบบจะบันทึกในเครื่องอัตโนมัติ)">
                                 <WifiOff size={14} className="mr-1.5" />
                                 <span>ออฟไลน์</span>
                             </div>
@@ -639,71 +802,187 @@ export const Layout = () => {
                         <div className="relative">
                             <button 
                                 onClick={() => setShowNotifDropdown(!showNotifDropdown)}
-                                className={`p-2 rounded-full transition-all relative ${showNotifDropdown ? 'bg-rubber-50 text-rubber-600 shadow-inner' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
+                                aria-label={activeNotifCount > 0 ? `การแจ้งเตือน (${activeNotifCount} รายการใหม่)` : 'การแจ้งเตือน'}
+                                aria-expanded={showNotifDropdown}
+                                className={`p-2 rounded-full transition-all relative focus:outline-none focus:ring-2 focus:ring-rubber-500 ${showNotifDropdown ? 'bg-rubber-50 text-rubber-600 shadow-inner' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
+                                title={activeNotifCount > 0 ? `มีการแจ้งเตือน ${activeNotifCount} รายการ` : 'การแจ้งเตือน'}
                             >
                                 <Bell size={20} />
-                                {(notifications.admin.pendingApprovalsCount > 0 || (notifications.subscription.expiryDays !== null && notifications.subscription.expiryDays <= 7)) && (
-                                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>
+                                {activeNotifCount > 0 && (
+                                    <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-red-500 text-[10px] font-black text-white border-2 border-white rounded-full animate-pulse shadow-xs">
+                                        {activeNotifCount > 9 ? '9+' : activeNotifCount}
+                                    </span>
                                 )}
                             </button>
 
                             {showNotifDropdown && (
                                 <>
                                     <div className="fixed inset-0 z-40" onClick={() => setShowNotifDropdown(false)}></div>
-                                    <div className="absolute right-0 mt-3 w-80 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
-                                        <div className="p-4 border-b border-gray-50">
-                                            <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">การแจ้งเตือน</h3>
+                                    <div 
+                                        role="dialog"
+                                        aria-modal="true"
+                                        aria-label="กล่องรายการแจ้งเตือน"
+                                        className="absolute right-0 mt-3 w-80 md:w-96 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300"
+                                    >
+                                        {/* Dropdown Header */}
+                                        <div className="p-3.5 bg-gray-50/70 border-b border-gray-100 flex items-center justify-between">
+                                            <div className="flex items-center space-x-2">
+                                                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">การแจ้งเตือน</h3>
+                                                {activeNotifCount > 0 && (
+                                                    <span className="px-1.5 py-0.5 text-[10px] font-black bg-red-100 text-red-600 rounded-full">
+                                                        {activeNotifCount} รายการ
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    setShowNotifDropdown(false);
+                                                    setIsNotifSettingsOpen(true);
+                                                }}
+                                                className="flex items-center space-x-1 px-2.5 py-1 text-xs font-bold text-gray-500 hover:text-rubber-600 hover:bg-rubber-50 rounded-lg transition-all"
+                                                title="เลือกเปิด/ปิดการแจ้งเตือน"
+                                            >
+                                                <Settings size={13} />
+                                                <span>ตั้งค่า</span>
+                                            </button>
                                         </div>
-                                        <div className="max-h-96 overflow-y-auto">
-                                            {/* Admin Alerts */}
-                                            {notifications.admin.pendingApprovalsCount > 0 && (
+
+                                        <div className="max-h-96 overflow-y-auto divide-y divide-gray-50">
+                                            {/* 1. Admin Alerts */}
+                                            {isSuperAdmin && notifPrefs.adminApprovals && (notifications.admin?.pendingApprovalsCount || 0) > 0 && (
                                                 <div 
                                                     onClick={() => { navigate('/admin/subscriptions'); setShowNotifDropdown(false); }}
-                                                    className="p-4 bg-blue-50/50 hover:bg-blue-50 border-b border-gray-50 transition-colors cursor-pointer group"
+                                                    className="p-3.5 bg-blue-50/40 hover:bg-blue-50 transition-colors cursor-pointer group flex items-center justify-between"
+                                                    title="คลิกเพื่อตรวจสอบสลิปการสมัครสมาชิก"
                                                 >
-                                                    <div className="flex items-center space-x-3">
-                                                        <div className="p-2 bg-blue-100 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                                    <div className="flex items-center space-x-3 min-w-0">
+                                                        <div className="p-2 bg-blue-100 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all shrink-0">
                                                             <CreditCard size={18} />
                                                         </div>
-                                                        <div>
-                                                            <p className="text-sm font-black text-gray-900">มีสลิปรอการอนุมัติ</p>
-                                                            <p className="text-[10px] text-blue-600 font-bold">รอคุณยืนยัน {notifications.admin.pendingApprovalsCount} รายการ</p>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-black text-gray-900 truncate">มีสลิปรอการอนุมัติ</p>
+                                                            <p className="text-xs text-blue-600 font-bold truncate">รอคุณยืนยัน {notifications.admin.pendingApprovalsCount} รายการ</p>
                                                         </div>
                                                     </div>
+                                                    <ChevronRight size={16} className="text-gray-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
                                                 </div>
                                             )}
 
-                                            {/* Expiry Alerts */}
-                                            {notifications.subscription.expiryDays !== null && notifications.subscription.expiryDays <= 7 && (
+                                            {/* 2. Expiry Alerts */}
+                                            {notifPrefs.subscription && notifications.subscription?.expiryDays !== null && notifications.subscription?.expiryDays <= 7 && (
                                                 <div 
                                                     onClick={() => { navigate('/subscription'); setShowNotifDropdown(false); }}
-                                                    className={`p-4 hover:bg-gray-50 border-b border-gray-50 transition-colors cursor-pointer group ${notifications.subscription.isExpired ? 'bg-red-50/50' : 'bg-amber-50/50'}`}
+                                                    className={`p-3.5 hover:bg-gray-50 transition-colors cursor-pointer group flex items-center justify-between ${notifications.subscription.isExpired ? 'bg-red-50/40' : 'bg-amber-50/40'}`}
+                                                    title="คลิกเพื่อจัดการต่ออายุสมาชิก"
                                                 >
-                                                    <div className="flex items-center space-x-3">
-                                                        <div className={`p-2 rounded-xl transition-all ${notifications.subscription.isExpired ? 'bg-red-100 text-red-600 group-hover:bg-red-600' : 'bg-amber-100 text-amber-600 group-hover:bg-amber-600'} group-hover:text-white`}>
+                                                    <div className="flex items-center space-x-3 min-w-0">
+                                                        <div className={`p-2 rounded-xl transition-all shrink-0 ${notifications.subscription.isExpired ? 'bg-red-100 text-red-600 group-hover:bg-red-600' : 'bg-amber-100 text-amber-600 group-hover:bg-amber-600'} group-hover:text-white`}>
                                                             {notifications.subscription.isExpired ? <ShieldAlert size={18} /> : <Clock size={18} />}
                                                         </div>
-                                                        <div>
-                                                            <p className="text-sm font-black text-gray-900">
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-black text-gray-900 truncate">
                                                                 {notifications.subscription.isExpired ? 'สมาชิกหมดอายุแล้ว' : 'สมาชิกใกล้หมดอายุ'}
                                                             </p>
-                                                            <p className={`text-[10px] font-bold ${notifications.subscription.isExpired ? 'text-red-600' : 'text-amber-600'}`}>
+                                                            <p className={`text-xs font-bold truncate ${notifications.subscription.isExpired ? 'text-red-600' : 'text-amber-600'}`}>
                                                                 {notifications.subscription.isExpired 
                                                                     ? 'กรุณาต่ออายุสมาชิกเพื่อใช้งานต่อ' 
                                                                     : `จะหมดอายุในอีก ${notifications.subscription.expiryDays} วัน`}
                                                             </p>
                                                         </div>
                                                     </div>
+                                                    <ChevronRight size={16} className="text-gray-400 group-hover:text-amber-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                                                </div>
+                                            )}
+
+                                            {/* 3. Loans Alerts */}
+                                            {notifPrefs.loans && (notifications.loans?.count || 0) > 0 && (
+                                                <div 
+                                                    onClick={() => { navigate('/loans'); setShowNotifDropdown(false); }}
+                                                    className="p-3.5 bg-rose-50/40 hover:bg-rose-50 transition-colors cursor-pointer group flex items-center justify-between"
+                                                    title="คลิกเพื่อไปที่หน้าจัดการเงินกู้และเงินเบิกล่วงหน้า"
+                                                >
+                                                    <div className="flex items-center space-x-3 min-w-0">
+                                                        <div className="p-2 bg-rose-100 text-rose-600 rounded-xl group-hover:bg-rose-600 group-hover:text-white transition-all shrink-0">
+                                                            <HandCoins size={18} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-black text-gray-900 truncate">มียอดเงินเบิก/เงินกู้ค้างชำระ</p>
+                                                            <p className="text-xs text-rose-600 font-bold truncate">
+                                                                {notifications.loans.count} สัญญา (รวม ฿{Number(notifications.loans.totalAmount || 0).toLocaleString()})
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <ChevronRight size={16} className="text-gray-400 group-hover:text-rose-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                                                </div>
+                                            )}
+
+                                            {/* 4. Unpaid Buys Alerts */}
+                                            {notifPrefs.unpaidBuys && (notifications.unpaidBuys?.count || 0) > 0 && (
+                                                <div 
+                                                    onClick={() => { navigate('/payments'); setShowNotifDropdown(false); }}
+                                                    className="p-3.5 bg-emerald-50/40 hover:bg-emerald-50 transition-colors cursor-pointer group flex items-center justify-between"
+                                                    title="คลิกเพื่อไปที่หน้าชำระเงินบิลรับซื้อยาง"
+                                                >
+                                                    <div className="flex items-center space-x-3 min-w-0">
+                                                        <div className="p-2 bg-emerald-100 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-all shrink-0">
+                                                            <Receipt size={18} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-black text-gray-900 truncate">มีบิลรับซื้อยางที่ค้างจ่าย</p>
+                                                            <p className="text-xs text-emerald-600 font-bold truncate">
+                                                                {notifications.unpaidBuys.count} บิล (รวม ฿{Number(notifications.unpaidBuys.totalAmount || 0).toLocaleString()})
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <ChevronRight size={16} className="text-gray-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                                                </div>
+                                            )}
+
+                                            {/* 5. Offline Sync Queue Alert */}
+                                            {notifPrefs.offlineQueue && syncQueueCount > 0 && (
+                                                <div 
+                                                    onClick={() => { navigate('/offline-sync'); setShowNotifDropdown(false); }}
+                                                    className="p-3.5 bg-sky-50/40 hover:bg-sky-50 transition-colors cursor-pointer group flex items-center justify-between"
+                                                    title="คลิกเพื่อดูและจัดการคิวซิงก์ออฟไลน์"
+                                                >
+                                                    <div className="flex items-center space-x-3 min-w-0">
+                                                        <div className="p-2 bg-sky-100 text-sky-600 rounded-xl group-hover:bg-sky-600 group-hover:text-white transition-all shrink-0">
+                                                            <CloudOff size={18} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-black text-gray-900 truncate">มีรายการออฟไลน์รอซิงก์</p>
+                                                            <p className="text-xs text-sky-600 font-bold truncate">
+                                                                {syncQueueCount} รายการ (ระบบจะอัปโหลดอัตโนมัติ)
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <ChevronRight size={16} className="text-gray-400 group-hover:text-sky-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
                                                 </div>
                                             )}
 
                                             {/* Empty State */}
-                                            {notifications.admin.pendingApprovalsCount === 0 && (notifications.subscription.expiryDays === null || notifications.subscription.expiryDays > 7) && (
+                                            {activeNotifCount === 0 && (
                                                 <div className="p-8 text-center text-gray-400">
-                                                    <Bell size={24} className="mx-auto mb-2 opacity-20" />
-                                                    <p className="text-xs font-bold">ไม่มีการแจ้งเตือนใหม่</p>
+                                                    <Bell size={28} className="mx-auto mb-2 opacity-20" />
+                                                    <p className="text-xs font-bold text-gray-600">ไม่มีการแจ้งเตือนใหม่</p>
+                                                    <p className="text-[11px] text-gray-400 mt-1">
+                                                        (กดปุ่ม "ตั้งค่า" ด้านบนเพื่อเลือกประเภทที่ต้องการรับ)
+                                                    </p>
                                                 </div>
                                             )}
+                                        </div>
+
+                                        {/* Dropdown Footer */}
+                                        <div className="p-2.5 bg-gray-50 border-t border-gray-100 text-center">
+                                            <button
+                                                onClick={() => {
+                                                    setShowNotifDropdown(false);
+                                                    setIsNotifSettingsOpen(true);
+                                                }}
+                                                className="text-[11px] font-bold text-gray-500 hover:text-rubber-600 transition-colors"
+                                            >
+                                                ⚙️ ปรับแต่งประเภทการแจ้งเตือน
+                                            </button>
                                         </div>
                                     </div>
                                 </>
@@ -729,6 +1008,13 @@ export const Layout = () => {
                 >
                     {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
                 </button>
+
+                {/* Notification Settings Modal */}
+                <NotificationSettingsModal 
+                    isOpen={isNotifSettingsOpen} 
+                    onClose={() => setIsNotifSettingsOpen(false)} 
+                    isSuperAdmin={isSuperAdmin} 
+                />
             </div>
         </div>
     );

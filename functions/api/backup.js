@@ -31,6 +31,28 @@ async function handlePost(context) {
             return errorResponse('R2 Bucket not configured', 500);
         }
 
+        let body = {};
+        try {
+            body = await context.request.json();
+        } catch (e) {}
+
+        const isAuto = body.type !== 'manual';
+        // Prevent duplicate auto-backups within 20 hours for the same tenant
+        if (isAuto && !body.force) {
+            const recentBackup = await db.prepare(
+                "SELECT id, createdAt FROM backups WHERE userId = ? AND type = 'auto' AND createdAt >= datetime('now', '-20 hours') ORDER BY createdAt DESC LIMIT 1"
+            ).bind(userId).first();
+
+            if (recentBackup) {
+                return jsonResponse({
+                    status: 'success',
+                    message: 'Backup already completed recently',
+                    skipped: true,
+                    lastBackupAt: recentBackup.createdAt
+                });
+            }
+        }
+
         // 1. Snapshot all data for the user
         const tables = [
             'farmers', 'staff', 'employees', 'buys', 'sells', 

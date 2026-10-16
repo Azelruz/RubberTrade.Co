@@ -223,17 +223,10 @@ export const updateFarmerStats = async (db, farmerId, storeId) => {
         await db.prepare(`
             UPDATE farmers 
             SET 
-                lastBuyDate = s.maxDate,
-                buyCount = s.recentCount
-            FROM (
-                SELECT 
-                    MAX(date) as maxDate,
-                    COUNT(CASE WHEN date >= date('now', '-60 days') THEN 1 END) as recentCount
-                FROM buys 
-                WHERE userId = ? AND farmerId = ?
-            ) s
-            WHERE farmers.id = ? AND farmers.userId = ?
-        `).bind(storeId, farmerId, farmerId, storeId).run();
+                lastBuyDate = (SELECT date FROM buys WHERE userId = ? AND farmerId = ? ORDER BY date DESC, created_at DESC LIMIT 1),
+                buyCount = (SELECT COUNT(*) FROM buys WHERE userId = ? AND farmerId = ? AND date >= date('now', '-60 days'))
+            WHERE id = ? AND userId = ?
+        `).bind(storeId, farmerId, storeId, farmerId, farmerId, storeId).run();
     } catch (e) {
         console.error('[updateFarmerStats Error]', e);
     }
@@ -344,34 +337,61 @@ export const syncStoreStockSummary = async (db, storeId, delta = null) => {
 /**
  * Usage Tracking Utility
  */
+// In-Memory Usage Buffer to prevent constant D1 write flood
+const usageBufferMap = new Map();
+let lastUsageFlush = Date.now();
+
 export const trackUsage = async (context, metrics = {}) => {
     try {
-        const db = context.env.DB;
         const userId = context.user?.id || metrics.userId;
         if (!userId) return;
 
-        const queryCount = metrics.queryCount || 0;
-        const rowsRead = metrics.rowsRead || 0;
-        const rowsWritten = metrics.rowsWritten || 0;
-        const rowsDeleted = metrics.rowsDeleted || 0;
         const date = metrics.date || getTodayDateStr(context.user?.timezone || 'Asia/Bangkok');
+        const key = `${userId}_${date}`;
+        
+        let existing = usageBufferMap.get(key) || {
+            userId, date, queryCount: 0, rowsRead: 0, rowsWritten: 0, rowsDeleted: 0
+        };
+        existing.queryCount += (metrics.queryCount || 0);
+        existing.rowsRead += (metrics.rowsRead || 0);
+        existing.rowsWritten += (metrics.rowsWritten || 0);
+        existing.rowsDeleted += (metrics.rowsDeleted || 0);
+        usageBufferMap.set(key, existing);
 
-        await db.prepare(`
-            INSERT INTO user_usage_stats (userId, date, queryCount, rowsRead, rowsWritten, rowsDeleted)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(userId, date) DO UPDATE SET
-                queryCount = queryCount + excluded.queryCount,
-                rowsRead = rowsRead + excluded.rowsRead,
-                rowsWritten = rowsWritten + excluded.rowsWritten,
-                rowsDeleted = rowsDeleted + excluded.rowsDeleted
-        `).bind(
-            userId ?? 'unknown', 
-            date ?? getTodayDateStr('Asia/Bangkok'), 
-            queryCount ?? 0, 
-            rowsRead ?? 0, 
-            rowsWritten ?? 0, 
-            rowsDeleted ?? 0
-        ).run();
+        const now = Date.now();
+        // Flush when accumulated queries >= 10, or 30 seconds elapsed, or sample
+        const shouldFlush = existing.queryCount >= 10 || (now - lastUsageFlush > 30000) || Math.random() < 0.05;
+        if (shouldFlush) {
+            lastUsageFlush = now;
+            const toFlush = Array.from(usageBufferMap.values());
+            usageBufferMap.clear();
+
+            const db = context.env.DB;
+            if (db && toFlush.length > 0) {
+                const flushPromise = (async () => {
+                    for (const item of toFlush) {
+                        try {
+                            await db.prepare(`
+                                INSERT INTO user_usage_stats (userId, date, queryCount, rowsRead, rowsWritten, rowsDeleted)
+                                VALUES (?, ?, ?, ?, ?, ?)
+                                ON CONFLICT(userId, date) DO UPDATE SET
+                                    queryCount = queryCount + excluded.queryCount,
+                                    rowsRead = rowsRead + excluded.rowsRead,
+                                    rowsWritten = rowsWritten + excluded.rowsWritten,
+                                    rowsDeleted = rowsDeleted + excluded.rowsDeleted
+                            `).bind(
+                                item.userId, item.date, item.queryCount,
+                                item.rowsRead, item.rowsWritten, item.rowsDeleted
+                            ).run();
+                        } catch (e) {
+                            console.error('[trackUsage flush item error]', e.message);
+                        }
+                    }
+                })();
+                if (context.waitUntil) context.waitUntil(flushPromise);
+                else await flushPromise;
+            }
+        }
     } catch (e) {
         console.error('Usage Tracking Error:', e.message);
     }
@@ -432,16 +452,13 @@ export const withRateLimit = (handler, limit = 60) => {
         const minute = Math.floor(Date.now() / 60000);
 
         try {
-            // Increment count for the current minute
-            await db.prepare(`
+            // Single-statement upsert + return count (eliminates 1 DB read round-trip)
+            const record = await db.prepare(`
                 INSERT INTO api_rate_limits (key, minute, count)
                 VALUES (?, ?, 1)
                 ON CONFLICT(key, minute) DO UPDATE SET count = count + 1
-            `).bind(key, minute).run();
-
-            // Check new count
-            const record = await db.prepare("SELECT count FROM api_rate_limits WHERE key = ? AND minute = ?")
-                .bind(key, minute).first();
+                RETURNING count
+            `).bind(key, minute).first();
 
             if (record && record.count > limit) {
                 return jsonResponse({ 
@@ -511,6 +528,35 @@ export const getTimezoneOffset = (tz = 'Asia/Bangkok') => {
         return hours >= 0 ? `+${hours} hours` : `${hours} hours`;
     } catch (e) {
         return '+7 hours';
+    }
+};
+
+/**
+ * Gets UTC datetime boundaries for the current local day in timezone.
+ * Used for fast indexed range scans on UTC created_at columns in SQLite.
+ */
+export const getDayUtcBounds = (tz = 'Asia/Bangkok') => {
+    try {
+        const todayDateStr = getTodayDateStr(tz);
+        const [year, month, day] = todayDateStr.split('-').map(Number);
+        const offsetHours = tz === 'Asia/Bangkok' ? 7 : 7;
+        
+        const startUtcDate = new Date(Date.UTC(year, month - 1, day, -offsetHours, 0, 0));
+        const endUtcDate = new Date(startUtcDate.getTime() + 24 * 60 * 60 * 1000);
+        
+        const formatSqliteUtc = (d) => d.toISOString().replace('T', ' ').substring(0, 19);
+        return {
+            startUtc: formatSqliteUtc(startUtcDate),
+            endUtc: formatSqliteUtc(endUtcDate),
+            todayDateStr
+        };
+    } catch (e) {
+        const todayDateStr = new Date().toISOString().split('T')[0];
+        return {
+            startUtc: `${todayDateStr} 00:00:00`,
+            endUtc: `${todayDateStr} 23:59:59`,
+            todayDateStr
+        };
     }
 };
 

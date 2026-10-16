@@ -1,5 +1,6 @@
 import React from 'react';
 import { ShieldAlert, RefreshCw, Home } from 'lucide-react';
+import { logErrorToSentry } from '../utils/sentry';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -13,14 +14,17 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error("Uncaught error:", error, errorInfo);
+    logErrorToSentry(error, errorInfo);
     this.setState({ error, errorInfo });
+
 
     const msg = error?.toString() || '';
     if (
       msg.includes('Failed to fetch dynamically imported module') ||
       msg.includes('Failed to load module script') ||
-      msg.includes('Importing a module script failed')
+      msg.includes('Importing a module script failed') ||
+      msg.includes('is not a valid JavaScript MIME type') ||
+      msg.includes('MIME type')
     ) {
       const key = 'rt_eb_chunk_reload';
       if (!sessionStorage.getItem(key)) {

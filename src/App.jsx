@@ -55,8 +55,14 @@ const AdminReports = lazy(() => import('./pages/admin/AdminReports'));
 const SyncRequired = lazy(() => import('./pages/SyncRequired'));
 const Home = lazy(() => import('./pages/Home'));
 const BackupManagement = lazy(() => import('./pages/admin/BackupManagement'));
+const BranchManagement = lazy(() => import('./pages/admin/BranchManagement'));
 const StockAdjustmentReport = lazy(() => import('./pages/StockAdjustmentReport'));
 const Loans = lazy(() => import('./pages/Loans').then(m => ({ default: m.Loans })));
+const RaotReport = lazy(() => import('./pages/RaotReport').then(m => ({ default: m.RaotReport })));
+const Cooperatives = lazy(() => import('./pages/Cooperatives').then(m => ({ default: m.Cooperatives })));
+const FarmerPlotPortal = lazy(() => import('./pages/FarmerPlotPortal').then(m => ({ default: m.FarmerPlotPortal })));
+const MemberPortal = lazy(() => import('./pages/MemberPortal').then(m => ({ default: m.MemberPortal })));
+
 
 // Queue Management Pages
 const QueueStation1 = lazy(() => import('./pages/QueueStation1').then(m => ({ default: m.QueueStation1 })));
@@ -68,7 +74,9 @@ const QueueMonitor = lazy(() => import('./pages/QueueMonitor').then(m => ({ defa
 const RootIndex = () => {
   const { user, isLoading } = useAuth();
   if (isLoading) return <PageLoader />;
-  if (!user) return <Home />;
+  if (!user) {
+    return <Home />;
+  }
   
   return (
     <ProtectedRoute>
@@ -110,6 +118,9 @@ function App() {
             {/* Public Routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/queue-monitor" element={<QueueMonitor />} />
+            <Route path="/farmer-plot" element={<ErrorBoundary><FarmerPlotPortal /></ErrorBoundary>} />
+            <Route path="/member-portal" element={<ErrorBoundary><MemberPortal /></ErrorBoundary>} />
+
 
             {/* Root Route: Dashboard if logged in, Home if guest */}
             <Route path="/" element={<RootIndex />}>
@@ -124,6 +135,11 @@ function App() {
               <Route path="loans" element={
                 <RoleRoute allowedRoles={['owner', 'staff']}>
                   <Loans />
+                </RoleRoute>
+              } />
+              <Route path="cooperatives" element={
+                <RoleRoute allowedRoles={['owner', 'staff']}>
+                  <Cooperatives />
                 </RoleRoute>
               } />
               <Route path="promotions" element={
@@ -161,6 +177,11 @@ function App() {
                 <Route path="monthly" element={
                   <RoleRoute allowedRoles={['owner', 'staff']}>
                     <MonthlyReport />
+                  </RoleRoute>
+                } />
+                <Route path="raot" element={
+                  <RoleRoute allowedRoles={['owner', 'staff']}>
+                    <RaotReport />
                   </RoleRoute>
                 } />
                 <Route path="transaction-history" element={
@@ -215,6 +236,11 @@ function App() {
               <Route path="admin/backups" element={
                 <RoleRoute allowedRoles={['super_admin']}>
                   <BackupManagement />
+                </RoleRoute>
+              } />
+              <Route path="admin/branches" element={
+                <RoleRoute allowedRoles={['super_admin']}>
+                  <BranchManagement />
                 </RoleRoute>
               } />
               <Route path="import" element={

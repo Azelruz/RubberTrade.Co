@@ -37,4 +37,19 @@ db.version(6).stores({
     sync_queue: '++uuid, type, action, payload, status, retryCount, createdAt'
 });
 
+db.version(7).stores({
+    // Inherits version 6 and adds Cooperative & Dividend Stores
+    coop_members: 'id, memberNo, farmerId, name, orgPosition, status, userId',
+    share_transactions: 'id, memberId, date, type, userId',
+    dividend_periods: 'id, year, status, userId',
+    dividend_distributions: 'id, periodId, memberId, farmerId, payoutStatus, userId'
+});
+
+db.version(8).stores({
+    // Inherits version 7 and adds Savings Accounts & Transactions Stores
+    savings_accounts: 'id, memberId, accountNo, status, userId, created_at',
+    savings_transactions: 'id, accountId, memberId, date, type, userId, created_at'
+});
+
 export default db;
+

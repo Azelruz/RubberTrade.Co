@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
-    Receipt, Save, Image as ImageIcon, Store, MapPin, Phone, 
+    Receipt, Store, MapPin, Phone, 
     Hash, Calendar, User, Scale, Percent, Calculator, 
     DollarSign, Sparkles, CreditCard, Users, MessageSquare, 
-    ChevronRight, Eye, RefreshCw, AlertCircle, Leaf, Plus, Trash2, CheckCircle, Edit3, Type, Printer, Smartphone
+    Type, Image as ImageIcon, Leaf, Plus, Trash2, Edit3
 } from 'lucide-react';
-import { format, addYears } from 'date-fns';
-import { th } from 'date-fns/locale';
 import { getSettings, updateSettingsAPI } from '../../services/apiService';
 import toast from 'react-hot-toast';
+
+import PaperSlipControls from './paper-slip/PaperSlipControls';
+import PaperSlipPreview from './paper-slip/PaperSlipPreview';
 
 export const PaperSlipSettings = () => {
     const [saving, setSaving] = useState(false);
@@ -69,7 +70,7 @@ export const PaperSlipSettings = () => {
                 recordingTime: 'เวลาบันทึก',
                 fscCode: 'รหัส FSC'
             },
-            // [NEW] Granular Font Sizes (Thermal Paper default)
+            // Granular Font Sizes (Thermal Paper default)
             fontSizeStoreName: 12,
             fontSizeAddress: 7,
             fontSizePhone: 8,
@@ -124,7 +125,6 @@ export const PaperSlipSettings = () => {
             eslip: { 
                 ...baseFields, 
                 headerTitle: isLatex ? 'E-Slip น้ำยาง' : 'E-Slip ขี้ยาง',
-                // [NEW] Granular Font Sizes (Digital E-Slip default - slightly larger)
                 fontSizeStoreName: 14,
                 fontSizeAddress: 8,
                 fontSizePhone: 9,
@@ -215,9 +215,7 @@ export const PaperSlipSettings = () => {
                     try {
                         const savedData = JSON.parse(res.data.paperSlipConfig);
                         
-                        // NEW MIGRATION ENGINE (v3: Multi-Template + Multi-Platform)
                         const migrateTemplates = (data) => {
-                            // Helper: merge old common fields into paper/eslip sub-objects
                             const spreadCommonIntoSubs = (template) => {
                                 const c = template.common || {};
                                 const commonShowFields = {};
@@ -227,7 +225,6 @@ export const PaperSlipSettings = () => {
                                 
                                 const migratePlatform = (p, source) => {
                                     if (!source) return p;
-                                    // Map legacy generic keys to new granular keys if they exist in source
                                     const m = { ...p, ...source };
                                     m.labels = {
                                         selectedDate: 'วันที่ทำรายการ',
@@ -269,22 +266,19 @@ export const PaperSlipSettings = () => {
 
                                 return {
                                     ...template,
-                                    common: {}, // Clear common — everything is now platform-specific
+                                    common: {}, 
                                     paper: migratePlatform(createNewTemplate('','').paper, { ...commonShowFields, ...commonTextFields, ...(template.paper || {}) }),
                                     eslip: migratePlatform(createNewTemplate('','').eslip, { ...commonShowFields, ...commonTextFields, ...(template.eslip || {}) })
                                 };
                             };
 
-                            // Case 1: Already v3 (Flat templates with paper/eslip keys)
                             if (data.templates && data.templates.every(t => t.paper && t.eslip)) {
-                                // Migrate common fields into subs if they still exist
                                 return {
                                     ...data,
                                     templates: data.templates.map(spreadCommonIntoSubs)
                                 };
                             }
 
-                            // Case 2: v2 (Dual profile - latex/cupLump keys inside one template)
                             if (data.templates && data.templates.some(t => t.latex || t.cupLump)) {
                                 let newTemplates = [];
                                 let defaultLatexId = data.defaultLatexId || '';
@@ -322,7 +316,6 @@ export const PaperSlipSettings = () => {
                                 };
                             }
 
-                            // Case 3: Legacy (Plain config at root)
                             const baseLat = createNewTemplate('default_latex', 'มาตรฐานน้ำยาง', 'latex');
                             const baseCup = createNewTemplate('default_cuplump', 'มาตรฐานขี้ยาง', 'cup_lump');
                             
@@ -370,7 +363,6 @@ export const PaperSlipSettings = () => {
     };
 
     const handleToggle = (key) => {
-        // All toggles are now platform-specific (Paper vs E-Slip independent)
         handleUpdateActiveTemplate({
             [activePlatform]: { ...activeSub, [key]: !activeSub[key] }
         });
@@ -577,7 +569,6 @@ export const PaperSlipSettings = () => {
                             <button
                                 onClick={() => {
                                     setConfig(prev => ({ ...prev, activeTemplateId: temp.id }));
-                                    // Auto-sync preview type based on default assignments
                                     if (config.defaultLatexId === temp.id) setPreviewType('latex');
                                     if (config.defaultCupLumpId === temp.id) setPreviewType('cup_lump');
                                 }}
@@ -603,543 +594,32 @@ export const PaperSlipSettings = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Left: Controls */}
-                <div className="lg:col-span-7 space-y-6">
-                    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                        {/* Editor Header */}
-                        <div className="px-6 py-4 bg-gray-900 flex items-center justify-between">
-                            <div className="flex items-center space-x-3 text-white">
-                                <Edit3 className="text-rubber-400" size={18} />
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">Editing Template</span>
-                                    <h3 className="text-xs font-black uppercase tracking-widest">{activeTemplate.name}</h3>
-                                </div>
-                            </div>
-                            
-                            {/* Platform Switcher */}
-                            <div className="flex items-center space-x-1 p-1 bg-white/10 rounded-xl">
-                                <button 
-                                    onClick={() => setActivePlatform('paper')}
-                                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activePlatform === 'paper' ? 'bg-white text-gray-900 shadow-sm' : 'text-white/60 hover:text-white'}`}
-                                >
-                                    <Printer size={14} /> Paper
-                                </button>
-                                <button 
-                                    onClick={() => setActivePlatform('eslip')}
-                                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activePlatform === 'eslip' ? 'bg-white text-gray-900 shadow-sm' : 'text-white/60 hover:text-white'}`}
-                                >
-                                    <Smartphone size={14} /> E-Slip
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="p-6">
-                            {/* Text Inputs (Platform-Specific) */}
-                            <div className="bg-gray-50/50 p-4 rounded-2xl mb-8 border border-gray-100">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Store className="text-gray-400" size={14} />
-                                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">ข้อความสำหรับ {activePlatform === 'paper' ? 'Paper-Slip' : 'E-Slip'}</h4>
-                                </div>
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">ข้อความโปรยหัวบิล (Top Note)</label>
-                                        <input 
-                                            type="text" 
-                                            value={activeSub.topNote || ''}
-                                            onChange={(e) => handleUpdateActiveTemplate({ [activePlatform]: { ...activeSub, topNote: e.target.value } })}
-                                            className="w-full px-4 py-2 bg-white border border-gray-100 rounded-xl focus:ring-2 focus:ring-rubber-500 font-bold text-gray-700 text-[12px]"
-                                            placeholder="ยินดีต้อนรับสู่ร้าน..."
-                                        />
-                                    </div>
-                                    <div className="flex flex-col md:flex-row gap-4">
-                                        <div className="flex-1 space-y-2">
-                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">ชื่อบิล ({activePlatform === 'paper' ? 'Paper' : 'E-Slip'})</label>
-                                            <input 
-                                                type="text" 
-                                                value={activeSub.headerTitle}
-                                                onChange={(e) => handleUpdateActiveTemplate({ [activePlatform]: { ...activeSub, headerTitle: e.target.value } })}
-                                                className="w-full px-4 py-2 bg-white border border-gray-100 rounded-xl focus:ring-2 focus:ring-rubber-500 font-bold text-gray-700 text-[12px]"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Font Size Controls (Categorized) */}
-                            <div className="bg-rubber-50/30 p-5 rounded-2xl mb-8 border border-rubber-100">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-2">
-                                        <Type className="text-rubber-600" size={16} />
-                                        <h4 className="text-[10px] font-black text-rubber-800 uppercase tracking-widest">ปรับแต่งขนาดตัวอักษร อย่างละเอียด</h4>
-                                    </div>
-                                </div>
-
-                                {/* Category Tabs */}
-                                <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-2 no-scrollbar scroll-smooth">
-                                    {fontSizeCategories.map(cat => (
-                                        <button
-                                            key={cat.id}
-                                            onClick={() => setActiveFontCategory(cat.id)}
-                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 transition-all whitespace-nowrap ${activeFontCategory === cat.id ? 'bg-rubber-600 border-rubber-600 text-white shadow-md' : 'bg-white border-gray-100 text-gray-400 hover:border-rubber-200'}`}
-                                        >
-                                            {cat.icon}
-                                            <span className="text-[10px] font-black uppercase tracking-wider">{cat.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                    {fontSizeControls[activeFontCategory].map(ctrl => (
-                                        <div key={ctrl.key} className="space-y-1">
-                                            <div className="flex justify-between items-center">
-                                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider">{ctrl.label}</label>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[9px] font-bold text-rubber-600 bg-white px-2 py-0.5 rounded-full border border-rubber-100">
-                                                        {activeSub[ctrl.key] || ctrl.rec}px
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <input 
-                                                type="range"
-                                                min={ctrl.min}
-                                                max={ctrl.max}
-                                                step="0.5"
-                                                value={activeSub[ctrl.key] || ctrl.rec}
-                                                onChange={(e) => handleUpdateActiveTemplate({ [activePlatform]: { ...activeSub, [ctrl.key]: parseFloat(e.target.value) } })}
-                                                className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-rubber-600"
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Toggles — All platform-specific */}
-                            <div className="space-y-2">
-                                {toggleItems.map((item) => {
-                                    const isActive = activeSub[item.key];
-                                    
-                                    return (
-                                        <div 
-                                            key={item.key}
-                                            onClick={() => handleToggle(item.key)}
-                                            className={`flex items-center justify-between p-3 rounded-2xl cursor-pointer transition-all border-2 ${
-                                                isActive 
-                                                ? 'bg-rubber-50 border-rubber-200 text-rubber-700 shadow-sm' 
-                                                : 'bg-white border-gray-50 text-gray-300 hover:border-gray-100'
-                                            }`}
-                                        >
-                                            <div className="flex items-center space-x-3">
-                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActive ? 'bg-rubber-600 text-white' : 'bg-gray-50 text-gray-300'}`}>
-                                                    {item.icon}
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-[11px] font-black uppercase tracking-wider">{item.label}</span>
-                                                    {item.labelKey && isActive && (
-                                                        <div className="mt-1 flex items-center space-x-1" onClick={e => e.stopPropagation()}>
-                                                            <Type size={10} className="text-rubber-400" />
-                                                            <input 
-                                                                type="text"
-                                                                value={activeSub.labels[item.labelKey]}
-                                                                onChange={(e) => handleUpdateLabel(item.labelKey, e.target.value)}
-                                                                className="bg-white border border-rubber-100 px-2 py-0.5 rounded-md focus:ring-1 focus:ring-rubber-500 text-[11px] font-bold text-rubber-600 w-full"
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className={`w-10 h-6 rounded-full relative transition-colors ${isActive ? 'bg-rubber-600' : 'bg-gray-200'}`}>
-                                                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${isActive ? 'left-5' : 'left-1'}`}></div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Footer Text (Platform-Specific) */}
-                            <div className="space-y-4 mt-8 pt-6 border-t border-gray-100">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">ข้อความท้ายบิล ({activePlatform === 'paper' ? 'Paper' : 'E-Slip'})</label>
-                                    <input 
-                                        type="text" 
-                                        value={activeSub.footerText || ''}
-                                        onChange={(e) => handleUpdateActiveTemplate({ [activePlatform]: { ...activeSub, footerText: e.target.value } })}
-                                        className="w-full px-4 py-3 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-rubber-500 font-bold text-gray-700 text-xs"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">ข้อความเพิ่มเติมใต้บิล ({activePlatform === 'paper' ? 'Paper' : 'E-Slip'})</label>
-                                    <textarea 
-                                        rows={2}
-                                        value={activeSub.extraMessage || ''}
-                                        onChange={(e) => handleUpdateActiveTemplate({ [activePlatform]: { ...activeSub, extraMessage: e.target.value } })}
-                                        className="w-full px-4 py-3 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-rubber-500 font-bold text-gray-700 text-xs resize-none"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <button 
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="w-full py-4 bg-rubber-600 text-white rounded-[2rem] font-black uppercase tracking-[0.2em] shadow-xl shadow-rubber-200 hover:bg-rubber-700 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
-                    >
-                        {saving ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
-                        Save All Templates
-                    </button>
-                </div>
+                <PaperSlipControls 
+                    activeTemplate={activeTemplate}
+                    activePlatform={activePlatform}
+                    setActivePlatform={setActivePlatform}
+                    activeSub={activeSub}
+                    handleUpdateActiveTemplate={handleUpdateActiveTemplate}
+                    activeFontCategory={activeFontCategory}
+                    setActiveFontCategory={setActiveFontCategory}
+                    fontSizeCategories={fontSizeCategories}
+                    fontSizeControls={fontSizeControls}
+                    toggleItems={toggleItems}
+                    handleToggle={handleToggle}
+                    handleUpdateLabel={handleUpdateLabel}
+                    handleSave={handleSave}
+                    saving={saving}
+                />
 
                 {/* Right: Preview (Live Digital Twin) */}
-                <div className="lg:col-span-5 lg:sticky lg:top-8 bg-white/40 backdrop-blur-xl border border-white rounded-[2.5rem] p-8 shadow-sm">
-                    {/* Preview Toggle (Latex/Cup Lump) - Only for dummy data selection */}
-                    <div className="mb-6 flex justify-center">
-                        <div className="flex items-center space-x-1 p-1 bg-gray-100 rounded-xl">
-                            {['latex', 'cup_lump'].map(type => (
-                                <button
-                                    key={type}
-                                    onClick={() => setPreviewType(type)}
-                                    className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${previewType === type ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-                                >
-                                    {type === 'latex' ? 'Preview: Latex' : 'Preview: Cup Lump'}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {activePlatform === 'paper' ? (
-                        <div className="mx-auto w-[240px] bg-white shadow-2xl rounded-sm border border-gray-100 p-4 font-sans text-black leading-tight overflow-hidden animate-in slide-in-from-right-4 duration-500" style={{ transform: 'rotate(1deg)' }}>
-                            {/* === PAPER PREVIEW: Header === */}
-                            {activeSub.topNote && (
-                                <div style={{ fontSize: `${activeSub.fontSizeTopNote || 7}px` }} className="text-center italic border-b border-black mb-1 pb-1">{activeSub.topNote}</div>
-                            )}
-                            <div className="text-center mb-3">
-                                <div className="h-8 flex items-center justify-center mb-1">
-                                    {(activeSub.showLogo && settings.logoUrl) && (
-                                        <img src={settings.logoUrl} alt="Logo" className="h-full object-contain filter grayscale contrast-200" />
-                                    )}
-                                </div>
-                                {activeSub.showStoreName && <h1 style={{ fontSize: `${activeSub.fontSizeStoreName || 12}px` }} className="font-bold">{settings.factoryName}</h1>}
-                                {activeSub.showAddress && <p style={{ fontSize: `${activeSub.fontSizeAddress || 7}px` }} className="leading-tight">{settings.address}</p>}
-                                {activeSub.showPhone && <p style={{ fontSize: `${activeSub.fontSizePhone || 8}px` }} className="font-bold">โทร: {settings.phone}</p>}
-                                {activeSub.showBillType && (
-                                    <div style={{ fontSize: `${activeSub.fontSizeHeaderTitle || 10}px` }} className="mt-2 font-bold border border-black inline-block px-3 py-0.5">
-                                        {activeSub.headerTitle}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* === PAPER PREVIEW: Invoice Info === */}
-                            <div className="mb-2 font-mono border-b border-black pb-1">
-                                {activeSub.showBillId && (
-                                    <div className="flex justify-between" style={{ fontSize: `${activeSub.fontSizeBillIdValue || 8}px` }}>
-                                        <span style={{ fontSize: `${activeSub.fontSizeBillIdLabel || 7}px` }}>เลขที่:</span>
-                                        <span className="font-bold">{mockData.id}</span>
-                                    </div>
-                                )}
-                                {activeSub.showSelectedDate && (
-                                    <div className="flex justify-between" style={{ fontSize: `${activeSub.fontSizeDateTimeValue || 8}px` }}>
-                                        <span style={{ fontSize: `${activeSub.fontSizeDateTimeLabel || 7}px` }}>{(activeSub.labels?.selectedDate || 'วันที่ทำรายการ')}:</span>
-                                        <span className="font-bold">{format(addYears(mockData.date, 543), 'dd/MM/yyyy')}</span>
-                                    </div>
-                                )}
-                                {activeSub.showRecordingTime && (
-                                    <div className="flex justify-between" style={{ fontSize: `${activeSub.fontSizeDateTimeValue || 8}px` }}>
-                                        <span style={{ fontSize: `${activeSub.fontSizeDateTimeLabel || 7}px` }}>{(activeSub.labels?.recordingTime || 'เวลาบันทึก')}:</span>
-                                        <span className="font-bold">{format(addYears(mockData.date, 543), 'dd/MM/yyyy HH:mm')}</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* === PAPER PREVIEW: Farmer === */}
-                            {activeSub.showFarmerName && (
-                                <div className="mb-2">
-                                    <div>
-                                        <span style={{ fontSize: `${activeSub.fontSizeFarmerNameLabel || 9}px` }}>ชื่อลูกค้า: </span>
-                                        <span style={{ fontSize: `${activeSub.fontSizeFarmerNameValue || 10}px` }} className="font-bold">{mockData.farmerName}</span>
-                                    </div>
-                                    {(activeSub.showFscCode && mockData.fscId) && (
-                                        <div className="text-gray-600 font-mono mt-0.5" style={{ fontSize: `${(activeSub.fontSizeFarmerNameValue || 10) - 2}px` }}>
-                                            <span>{(activeSub.labels?.fscCode || 'รหัส FSC')}: </span>
-                                            <span className="font-bold">{mockData.fscId}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* === PAPER PREVIEW: Details === */}
-                            <div className="border-t border-black border-dashed pt-2 space-y-1">
-                                {activeSub.showPurchaseDetailsHeader !== false && (
-                                    <div className="text-center text-[10px] font-bold border-y border-black py-0.5 mb-2 uppercase">=== รายละเอียดรับซื้อ ===</div>
-                                )}
-                                {activeSub.showRawWeight && (
-                                    <div className="flex justify-between items-center">
-                                        <span style={{ fontSize: `${activeSub.fontSizeRawWeightLabel || 9}px` }}>{activeSub.labels.rawWeight}</span>
-                                        <span style={{ fontSize: `${activeSub.fontSizeRawWeightValue || 10}px` }} className="font-bold">{mockData.weight.toFixed(1)} กก.</span>
-                                    </div>
-                                )}
-                                {activeSub.showBucketWeight && (
-                                    <div className="flex justify-between items-center italic opacity-70">
-                                        <span style={{ fontSize: `${activeSub.fontSizeBucketWeightLabel || 8}px` }}>{activeSub.labels.bucketWeight}</span>
-                                        <span style={{ fontSize: `${activeSub.fontSizeBucketWeightValue || 8}px` }}>-{mockData.bucketWeight.toFixed(1)} กก.</span>
-                                    </div>
-                                )}
-                                {activeSub.showNetWeight && (
-                                    <div className="flex justify-between items-center border-b border-black/10 pb-0.5">
-                                        <span style={{ fontSize: `${activeSub.fontSizeNetWeightLabel || 9}px` }}>{activeSub.labels.netWeight}</span>
-                                        <span style={{ fontSize: `${activeSub.fontSizeNetWeightValue || 11}px` }} className="font-bold">{mockData.netWeight.toFixed(1)} กก.</span>
-                                    </div>
-                                )}
-                                {activeSub.showDrc && (
-                                    <div className="flex justify-between items-center">
-                                        <span style={{ fontSize: `${activeSub.fontSizeDrcLabel || 9}px` }}>{activeSub.labels.drc}</span>
-                                        <span style={{ fontSize: `${activeSub.fontSizeDrcValue || 10}px` }}>{mockData.drc.toFixed(1)}%</span>
-                                    </div>
-                                )}
-                                {activeSub.showDryWeight && (
-                                    <div className="flex justify-between items-center border-b border-black pb-1">
-                                        <span style={{ fontSize: `${activeSub.fontSizeDryWeightLabel || 9}px` }}>{activeSub.labels.dryWeight}</span>
-                                        <span style={{ fontSize: `${activeSub.fontSizeDryWeightValue || 11}px` }} className="font-bold">{mockData.dryWeight.toFixed(1)} กก.</span>
-                                    </div>
-                                )}
-
-                                {/* === PAPER PREVIEW: Pricing === */}
-                                <div className="my-1 border-t border-black border-dotted"></div>
-                                {activeSub.showBasePrice && (
-                                    <div className="flex justify-between items-center">
-                                        <span style={{ fontSize: `${activeSub.fontSizeBasePriceLabel || 8}px` }}>{activeSub.labels.basePrice}</span>
-                                        <span style={{ fontSize: `${activeSub.fontSizeBasePriceValue || 10}px` }}>{mockData.basePrice.toFixed(1)}/กก.</span>
-                                    </div>
-                                )}
-                                {activeSub.showBonusDrc && (
-                                    <div className="flex justify-between items-center text-black italic">
-                                        <span style={{ fontSize: `${activeSub.fontSizeBonusDrcLabel || 8}px` }}>{activeSub.labels.bonusDrc}</span>
-                                        <span style={{ fontSize: `${activeSub.fontSizeBonusDrcValue || 8}px` }}>+{mockData.bonusDrc.toFixed(1)}</span>
-                                    </div>
-                                )}
-                                {activeSub.showActualPrice && (
-                                    <div className="flex justify-between items-center mt-1 border-t border-black pt-1">
-                                        <span style={{ fontSize: `${activeSub.fontSizeActualPriceLabel || 10}px` }} className="font-bold">{activeSub.labels.actualPrice}</span>
-                                        <span style={{ fontSize: `${activeSub.fontSizeActualPriceValue || 12}px` }} className="font-bold">{mockData.actualPrice.toFixed(1)}/กก.</span>
-                                    </div>
-                                )}
-
-                                {/* === PAPER PREVIEW: Splits === */}
-                                {activeSub.showSplits && (
-                                    <div className="pt-2 mt-2 border-t-2 border-black space-y-0.5">
-                                        <div className="flex justify-between items-center">
-                                            <span style={{ fontSize: `${activeSub.fontSizeFarmerSplitLabel || 9}px` }} className="font-bold">{activeSub.labels.farmerSplit} ({100 - mockData.empPct}%)</span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeFarmerSplitValue || 11}px` }} className="font-bold">฿{Math.floor(mockData.farmerTotal).toLocaleString()}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center opacity-70">
-                                            <span style={{ fontSize: `${activeSub.fontSizeEmployeeSplitLabel || 8}px` }}>{activeSub.labels.employeeSplit} ({mockData.empPct}%)</span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeEmployeeSplitValue || 9}px` }}>฿{Math.floor(mockData.employeeTotal).toLocaleString()}</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* === PAPER PREVIEW: Extra & Footer === */}
-                            {activeSub.extraMessage && (
-                                <div style={{ fontSize: `${activeSub.fontSizeExtraMessage || 7}px` }} className="mt-4 text-center border border-black p-1 italic line-clamp-2">
-                                    {activeSub.extraMessage}
-                                </div>
-                            )}
-                            <div className="border-t-4 border-double border-black py-1 mt-3">
-                                <div className="flex justify-between items-center">
-                                    <span style={{ fontSize: `${activeSub.fontSizeTotalLabel || 9}px` }} className="font-bold uppercase">ยอดรวมสุทธิ</span>
-                                    <span style={{ fontSize: `${activeSub.fontSizeTotalValue || 16}px` }} className="font-bold">฿{Math.floor(mockData.total).toLocaleString()}</span>
-                                </div>
-                            </div>
-                            <div className="text-center mt-2 border-t border-black pt-1">
-                                <p style={{ fontSize: `${activeSub.fontSizeFooterText || 8}px` }} className="font-bold">{activeSub.footerText}</p>
-                            </div>
-                        </div>
-                    ) : (
-                        /* ======= E-SLIP PREVIEW ======= */
-                        <div className="mx-auto w-[240px] bg-white rounded-3xl shadow-2xl relative overflow-hidden animate-in zoom-in duration-500">
-                            {/* === ESLIP PREVIEW: Header === */}
-                            <div className="bg-[#2d5a3f] py-4 px-3 text-center text-white relative overflow-hidden">
-                                <div className="absolute right-0 top-0 w-20 h-20 bg-white/5 rounded-full -mr-10 -mt-10"></div>
-                                <div className="h-10 flex items-center justify-center mb-1">
-                                    {(activeSub.showLogo && settings.logoUrl) && (
-                                        <img src={settings.logoUrl} alt="Logo" className="h-full object-contain" />
-                                    )}
-                                </div>
-                                {activeSub.showStoreName && <h1 style={{ fontSize: `${activeSub.fontSizeStoreName || 14}px` }} className="font-black">{settings.factoryName}</h1>}
-                                {(activeSub.showAddress || activeSub.showPhone) && (
-                                    <p className="opacity-70 font-medium mb-2">
-                                        {activeSub.showAddress && <span style={{ fontSize: `${activeSub.fontSizeAddress || 8}px` }}>{settings.address}</span>}
-                                        {activeSub.showPhone && <span style={{ fontSize: `${activeSub.fontSizePhone || 9}px` }} className="ml-1">โทร: {settings.phone}</span>}
-                                    </p>
-                                )}
-                                {activeSub.showBillType && (
-                                    <div style={{ fontSize: `${activeSub.fontSizeHeaderTitle || 8}px` }} className="mt-1 font-black bg-white/20 px-4 py-1 rounded-full border border-white/10 uppercase tracking-widest inline-block">
-                                        {activeSub.headerTitle}
-                                    </div>
-                                )}
-                                {activeSub.topNote && (
-                                    <div style={{ fontSize: `${activeSub.fontSizeTopNote || 7}px` }} className="mt-1 font-black bg-yellow-400 text-black px-2 py-0.5 rounded-full inline-block">{activeSub.topNote}</div>
-                                )}
-                            </div>
-
-                            <div className="px-3 pt-3 pb-3">
-                                {/* === ESLIP PREVIEW: Invoice Info === */}
-                                {(activeSub.showBillId || activeSub.showSelectedDate || activeSub.showRecordingTime) && (
-                                    <div className="flex flex-col mb-2 font-black text-gray-400 bg-gray-50 px-2 py-1 rounded-lg gap-0.5">
-                                        {activeSub.showBillId && (
-                                            <div className="flex justify-between items-center border-b border-gray-100 pb-0.5 mb-0.5">
-                                                <span style={{ fontSize: `${activeSub.fontSizeBillIdLabel || 7}px` }}>ID:</span>
-                                                <span style={{ fontSize: `${activeSub.fontSizeBillIdValue || 7}px` }} className="text-gray-700">{mockData.id}</span>
-                                            </div>
-                                        )}
-                                        {activeSub.showSelectedDate && (
-                                            <div className="flex justify-between items-center">
-                                                <span style={{ fontSize: `${activeSub.fontSizeDateTimeLabel || 7}px` }}>{(activeSub.labels?.selectedDate || 'วันที่ทำรายการ')}:</span>
-                                                <span style={{ fontSize: `${activeSub.fontSizeDateTimeValue || 7}px` }} className="text-gray-700">{format(addYears(mockData.date, 543), 'dd MMM yy')}</span>
-                                            </div>
-                                        )}
-                                        {activeSub.showRecordingTime && (
-                                            <div className="flex justify-between items-center">
-                                                <span style={{ fontSize: `${activeSub.fontSizeDateTimeLabel || 7}px` }}>{(activeSub.labels?.recordingTime || 'เวลาบันทึก')}:</span>
-                                                <span style={{ fontSize: `${activeSub.fontSizeDateTimeValue || 7}px` }} className="text-gray-700">{format(addYears(mockData.date, 543), 'dd MMM yy HH:mm')}</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* === ESLIP PREVIEW: Farmer === */}
-                                {activeSub.showFarmerName && (
-                                    <div className="mb-2 pb-2 border-b border-dotted border-gray-100">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p style={{ fontSize: `${activeSub.fontSizeFarmerNameLabel || 6}px` }} className="font-bold text-gray-400 uppercase">ข้อมูลลูกค้า</p>
-                                                <h2 style={{ fontSize: `${activeSub.fontSizeFarmerNameValue || 16}px` }} className="font-black text-gray-800 leading-tight">{mockData.farmerName}</h2>
-                                            </div>
-                                            {(activeSub.showFscCode && mockData.fscId) && (
-                                                <div className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md font-mono text-[9px] font-black flex items-center gap-1 shrink-0 mt-1">
-                                                    <Leaf size={10} className="text-amber-600" />
-                                                    <span>{mockData.fscId}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* === ESLIP PREVIEW: Details Grid === */}
-                                <div className="space-y-1.5 mb-2">
-                                    {activeSub.showPurchaseDetailsHeader !== false && (
-                                        <p style={{ fontSize: `${(activeSub.fontSizeLabel || 9) - 3}px` }} className="font-black text-gray-400 mb-1 uppercase tracking-widest text-center">=== รายละเอียดรับซื้อ ===</p>
-                                    )}
-                                    <div className="grid grid-cols-2 gap-1.5">
-                                        {activeSub.showRawWeight && (
-                                            <div className="p-1.5 bg-gray-50 rounded-lg">
-                                                <p style={{ fontSize: `${activeSub.fontSizeRawWeightLabel || 6}px` }} className="font-bold text-gray-400 uppercase">{activeSub.labels.rawWeight}</p>
-                                                <p style={{ fontSize: `${activeSub.fontSizeRawWeightValue || 11}px` }} className="font-black text-gray-800">{mockData.weight.toFixed(1)} <span className="text-[6px]">กก.</span></p>
-                                            </div>
-                                        )}
-                                        {activeSub.showDrc && (
-                                            <div className="p-1.5 bg-rubber-50 rounded-lg">
-                                                <p style={{ fontSize: `${activeSub.fontSizeDrcLabel || 6}px` }} className="font-bold text-rubber-400 uppercase">{activeSub.labels.drc}</p>
-                                                <p style={{ fontSize: `${activeSub.fontSizeDrcValue || 11}px` }} className="font-black text-rubber-700">{mockData.drc.toFixed(1)}%</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                    {activeSub.showBucketWeight && (
-                                        <div className="flex justify-between items-center px-1">
-                                            <span style={{ fontSize: `${activeSub.fontSizeBucketWeightLabel || 8}px` }} className="font-bold text-red-400">{activeSub.labels.bucketWeight}</span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeBucketWeightValue || 8}px` }} className="font-bold text-red-500">-{mockData.bucketWeight.toFixed(1)} กก.</span>
-                                        </div>
-                                    )}
-                                    {activeSub.showNetWeight && (
-                                        <div className="flex justify-between items-center px-1 font-bold">
-                                            <span style={{ fontSize: `${activeSub.fontSizeNetWeightLabel || 9}px` }} className="text-gray-600">{activeSub.labels.netWeight}</span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeNetWeightValue || 10}px` }} className="text-gray-900">{mockData.netWeight.toFixed(1)} กก.</span>
-                                        </div>
-                                    )}
-                                    {activeSub.showDryWeight && (
-                                        <div className="flex justify-between items-center bg-gray-800 p-1.5 rounded-lg text-white">
-                                            <span style={{ fontSize: `${activeSub.fontSizeDryWeightLabel || 8}px` }} className="font-bold uppercase tracking-wider">{activeSub.labels.dryWeight}</span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeDryWeightValue || 13}px` }} className="font-black tracking-tighter">{mockData.dryWeight.toFixed(1)} <span className="text-[7px] opacity-60">KG.</span></span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* === ESLIP PREVIEW: Pricing === */}
-                                <div className="space-y-0.5 mb-2">
-                                    {activeSub.showBasePrice && (
-                                        <div className="flex justify-between items-center px-1">
-                                            <span style={{ fontSize: `${activeSub.fontSizeBasePriceLabel || 8}px` }} className="font-bold text-gray-400">{activeSub.labels.basePrice}</span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeBasePriceValue || 9}px` }} className="font-bold text-gray-800">฿{mockData.basePrice.toFixed(1)}/กก.</span>
-                                        </div>
-                                    )}
-                                    {activeSub.showBonusDrc && (
-                                        <div className="flex justify-between items-center px-1">
-                                            <span style={{ fontSize: `${activeSub.fontSizeBonusDrcLabel || 8}px` }} className="font-bold text-gray-400">{activeSub.labels.bonusDrc}</span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeBonusDrcValue || 8}px` }} className="font-bold text-green-600">+฿{mockData.bonusDrc.toFixed(1)}/กก.</span>
-                                        </div>
-                                    )}
-                                    {activeSub.showBonusFsc && (
-                                        <div className="flex justify-between items-center px-1">
-                                            <span style={{ fontSize: `${activeSub.fontSizeBonusFscLabel || 8}px` }} className="font-bold text-gray-400">{activeSub.labels.bonusFsc}</span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeBonusFscValue || 8}px` }} className="font-bold text-amber-600">+฿{mockData.bonusFsc.toFixed(1)}/กก.</span>
-                                        </div>
-                                    )}
-                                    {activeSub.showBonusMember && (
-                                        <div className="flex justify-between items-center px-1 py-0.5 bg-rubber-50 rounded">
-                                            <span style={{ fontSize: `${activeSub.fontSizeBonusMemberLabel || 8}px` }} className="font-black text-rubber-700">{activeSub.labels.bonusMember}</span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeBonusMemberValue || 8}px` }} className="font-black text-rubber-700">+฿{mockData.bonusMember.toFixed(1)}/กก.</span>
-                                        </div>
-                                    )}
-                                    {activeSub.showActualPrice && (
-                                        <div className="flex justify-between items-center px-1 pt-1 border-t border-dotted border-gray-200">
-                                            <span style={{ fontSize: `${activeSub.fontSizeActualPriceLabel || 9}px` }} className="font-black text-gray-800">{activeSub.labels.actualPrice}</span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeActualPriceValue || 10}px` }} className="font-black text-gray-900">฿{mockData.actualPrice.toFixed(1)}/กก.</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* === ESLIP PREVIEW: Splits === */}
-                                {activeSub.showSplits && (
-                                    <div className="bg-gray-50 rounded-xl p-2 border border-gray-100 space-y-1 mb-2">
-                                        <p style={{ fontSize: `${activeSub.fontSizeFarmerSplitLabel - 3 || 6}px` }} className="font-black text-rubber-600 uppercase tracking-widest">การจัดสรรเงิน</p>
-                                        <div className="flex justify-between items-center">
-                                            <span style={{ fontSize: `${activeSub.fontSizeFarmerSplitLabel || 9}px` }} className="font-bold text-orange-400">{activeSub.labels.farmerSplit} ({100 - mockData.empPct}%)</span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeFarmerSplitValue || 9}px` }} className="font-black text-[#5ba2d7]">฿{Math.floor(mockData.farmerTotal).toLocaleString()}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                            <span style={{ fontSize: `${activeSub.fontSizeEmployeeSplitLabel || 9}px` }} className="font-bold text-purple-400">{activeSub.labels.employeeSplit} ({mockData.empPct}%)</span>
-                                            <span style={{ fontSize: `${activeSub.fontSizeEmployeeSplitValue || 9}px` }} className="font-black text-purple-500">฿{Math.floor(mockData.employeeTotal).toLocaleString()}</span>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* === ESLIP PREVIEW: Extra === */}
-                                {activeSub.extraMessage && (
-                                    <div style={{ fontSize: `${activeSub.fontSizeExtraMessage || 7}px` }} className="p-2 bg-gray-50 rounded-xl text-gray-500 italic border border-gray-100 leading-relaxed mb-2">
-                                        {activeSub.extraMessage}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* === ESLIP PREVIEW: Total Footer === */}
-                            <div className="bg-[#2d5a3f] p-3 flex justify-between items-center text-white">
-                                <span style={{ fontSize: `${activeSub.fontSizeTotalLabel || 10}px` }} className="font-black uppercase tracking-widest">ยอดรวมจ่าย</span>
-                                <div className="text-right">
-                                    <span style={{ fontSize: `${activeSub.fontSizeTotalValue || 24}px` }} className="font-black leading-none tabular-nums tracking-tighter block">
-                                        ฿{Math.floor(mockData.total).toLocaleString()}
-                                    </span>
-                                    <span style={{ fontSize: `${activeSub.fontSizeFooterText || 7}px` }} className="opacity-60 font-medium">{activeSub.footerText}</span>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    
-                    <div className="mt-8 text-center px-12">
-                        <div className="inline-flex items-center space-x-2 px-4 py-2 bg-rubber-50 rounded-full border border-rubber-100 shadow-sm shadow-rubber-100/30">
-                            <Sparkles size={14} className="text-rubber-500 animate-pulse" />
-                            <span className="text-[8px] font-bold text-rubber-600 uppercase tracking-[0.2em]">Real-time Digital Twin</span>
-                        </div>
-                    </div>
-                </div>
+                <PaperSlipPreview 
+                    activePlatform={activePlatform}
+                    previewType={previewType}
+                    setPreviewType={setPreviewType}
+                    activeSub={activeSub}
+                    settings={settings}
+                    mockData={mockData}
+                />
             </div>
         </div>
     );

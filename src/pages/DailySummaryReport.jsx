@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { format, parseISO } from 'date-fns';
-import { th } from 'date-fns/locale';
+import { format } from 'date-fns';
 import { 
-    Calendar, Droplets, Truck, Wallet, Filter, 
-    Download, ChevronRight, Calculator, PieChart, 
-    Target, User, Users, FileText, ChevronLeft, Printer
+    Calendar, Droplets, Truck, Wallet, 
+    Download, PieChart, Users, Printer,
+    FileDown, Loader2
 } from 'lucide-react';
-import ReportPrintHeader from '../components/ReportPrintHeader';
+import toast from 'react-hot-toast';
 import { 
     fetchBuyRecords, 
     fetchSellRecords, 
@@ -16,17 +15,27 @@ import {
     getSettings 
 } from '../services/apiService';
 import { truncateOneDecimal } from '../utils/calculations';
+import { exportElementToPDF } from '../utils/pdfExport';
+
+import LatexBuysTab from './reports/daily-summary/LatexBuysTab';
+import CupLumpBuysTab from './reports/daily-summary/CupLumpBuysTab';
+import SellsReportTab from './reports/daily-summary/SellsReportTab';
+import ExpensesReportTab from './reports/daily-summary/ExpensesReportTab';
+import TeamSummaryReportTab from './reports/daily-summary/TeamSummaryReportTab';
+import DailyReportFooter from './reports/daily-summary/DailyReportFooter';
+import DailyReportPrintView from './reports/daily-summary/DailyReportPrintView';
 
 const DailySummaryReport = () => {
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-    const [activeTab, setActiveTab] = useState('buys_latex'); // buys_latex, buys_cup_lump, sells, expenses
+    const [activeTab, setActiveTab] = useState('buys_latex'); // buys_latex, buys_cup_lump, sells, expenses, buys_team
     const [expandedCreator, setExpandedCreator] = useState(null);
     
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
+    const [isExportingPDF, setIsExportingPDF] = useState(false);
     const ITEMS_PER_PAGE = 15;
 
     // Reset page on tab/date change
@@ -69,6 +78,8 @@ const DailySummaryReport = () => {
             setLoading(false);
         }
     };
+
+    const recNetWeight = (b) => b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0));
 
     const dailyData = useMemo(() => {
         const filterFn = item => {
@@ -124,11 +135,6 @@ const DailySummaryReport = () => {
         
         return Object.values(groups).sort((a, b) => b.totalAmount - a.totalAmount);
     }, [dailyData.buys]);
-
-    // Helper helper to calculate net weight safely
-    function recNetWeight(b) {
-        return b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0));
-    }
 
     const handleExportCSV = () => {
         let data = [];
@@ -256,40 +262,22 @@ const DailySummaryReport = () => {
         document.body.removeChild(link);
     };
 
-    const PaginationFooter = ({ totalCount, currentPage, setCurrentPage }) => {
-        const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
-        if (totalPages <= 1) return null;
-
-        return (
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap">
-                    แสดง {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} จาก {totalCount} รายการ
-                </div>
-                <div className="flex items-center space-x-2">
-                    <button
-                        onClick={() => setCurrentPage(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className="p-1.5 rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                    >
-                        <ChevronLeft size={16} />
-                    </button>
-                    
-                    <div className="bg-white border border-gray-200 rounded-xl px-3 py-1.5 flex items-center space-x-2">
-                        <span className="text-xs font-black text-gray-900">{currentPage}</span>
-                        <span className="text-[10px] font-bold text-gray-300">/</span>
-                        <span className="text-xs font-black text-gray-400">{totalPages}</span>
-                    </div>
-
-                    <button
-                        onClick={() => setCurrentPage(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        className="p-1.5 rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                    >
-                        <ChevronRight size={16} />
-                    </button>
-                </div>
-            </div>
-        );
+    const handleExportPDF = async () => {
+        const printViewEl = document.getElementById('daily-report-print-view');
+        if (!printViewEl) {
+            return toast.error('ไม่พบส่วนแสดงผลสำหรับออกรายงาน PDF');
+        }
+        setIsExportingPDF(true);
+        const toastId = toast.loading('กำลังสร้างไฟล์ PDF รายงาน...');
+        try {
+            const filename = `Report_${startDate}_to_${endDate}.pdf`;
+            await exportElementToPDF(printViewEl, filename);
+            toast.success('ดาวน์โหลดไฟล์ PDF เรียบร้อยแล้ว', { id: toastId });
+        } catch (err) {
+            toast.error('สร้างไฟล์ PDF ไม่สำเร็จ: ' + err.message, { id: toastId });
+        } finally {
+            setIsExportingPDF(false);
+        }
     };
 
     const tabs = [
@@ -320,719 +308,142 @@ const DailySummaryReport = () => {
                     tfoot { display: table-footer-group; }
                 }
             ` }} />
+            
             <div className="no-print space-y-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="flex items-center space-x-3">
-                    <div className="p-3 bg-rubber-600 rounded-2xl shadow-lg shadow-rubber-200">
-                        <PieChart className="text-white" size={28} />
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="flex items-center space-x-3">
+                        <div className="p-3 bg-rubber-600 rounded-2xl shadow-lg shadow-rubber-200">
+                            <PieChart className="text-white" size={28} />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-black text-gray-900 tracking-tight">รายงานสรุปข้อมูล</h1>
+                            <p className="text-sm font-medium text-gray-400">สรุปรายละเอียดการซื้อขายและรายจ่ายตามช่วงเวลา</p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-black text-gray-900 tracking-tight">รายงานสรุปข้อมูล</h1>
-                        <p className="text-sm font-medium text-gray-400">สรุปรายละเอียดการซื้อขายและรายจ่ายตามช่วงเวลา</p>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-3">
+                        <div className="flex items-center space-x-2 bg-white p-2.5 rounded-2xl border border-gray-200 shadow-sm focus-within:ring-2 focus-within:ring-rubber-500/20 transition-all">
+                            <Calendar className="text-rubber-600" size={18} />
+                            <span className="text-[10px] font-black text-gray-400 uppercase">เริ่ม</span>
+                            <input 
+                                type="date" 
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="border-none focus:ring-0 text-sm font-black text-gray-700 p-0 cursor-pointer"
+                            />
+                        </div>
+                        <div className="flex items-center space-x-2 bg-white p-2.5 rounded-2xl border border-gray-200 shadow-sm focus-within:ring-2 focus-within:ring-rubber-500/20 transition-all">
+                            <Calendar className="text-rubber-600" size={18} />
+                            <span className="text-[10px] font-black text-gray-400 uppercase">สิ้นสุด</span>
+                            <input 
+                                type="date" 
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="border-none focus:ring-0 text-sm font-black text-gray-700 p-0 cursor-pointer"
+                            />
+                        </div>
+                        <button 
+                            onClick={handleExportCSV}
+                            className="flex items-center space-x-2 bg-gray-900 text-white px-4 py-2.5 rounded-2xl font-bold text-sm hover:bg-gray-800 transition-all shadow-lg shadow-gray-200 active:scale-95 w-full sm:w-auto justify-center"
+                        >
+                            <Download size={18} />
+                            <span className="hidden lg:inline">ออกรายงาน (CSV)</span>
+                        </button>
+                        <button 
+                            onClick={handleExportPDF}
+                            disabled={isExportingPDF}
+                            className="flex items-center space-x-2 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-400 text-white px-4 py-2.5 rounded-2xl font-bold text-sm transition-all shadow-lg shadow-rose-200 active:scale-95 w-full sm:w-auto justify-center border border-rose-700"
+                            title="ดาวน์โหลดรายงานสรุปเป็นไฟล์ PDF"
+                        >
+                            {isExportingPDF ? <Loader2 size={18} className="animate-spin" /> : <FileDown size={18} />}
+                            <span className="hidden lg:inline">{isExportingPDF ? 'กำลังสร้าง PDF...' : 'ดาวน์โหลด PDF'}</span>
+                        </button>
+                        <button 
+                            onClick={() => window.print()}
+                            className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-2xl font-bold text-sm transition-all shadow-lg shadow-emerald-200 active:scale-95 w-full sm:w-auto justify-center border border-emerald-700"
+                            title="พิมพ์รายงานสรุป"
+                        >
+                            <Printer size={18} />
+                            <span className="hidden lg:inline">พิมพ์รายงาน</span>
+                        </button>
                     </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-3">
-                    <div className="flex items-center space-x-2 bg-white p-2.5 rounded-2xl border border-gray-200 shadow-sm focus-within:ring-2 focus-within:ring-rubber-500/20 transition-all">
-                        <Calendar className="text-rubber-600" size={18} />
-                        <span className="text-[10px] font-black text-gray-400 uppercase">เริ่ม</span>
-                        <input 
-                            type="date" 
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                            className="border-none focus:ring-0 text-sm font-black text-gray-700 p-0 cursor-pointer"
-                        />
-                    </div>
-                    <div className="flex items-center space-x-2 bg-white p-2.5 rounded-2xl border border-gray-200 shadow-sm focus-within:ring-2 focus-within:ring-rubber-500/20 transition-all">
-                        <Calendar className="text-rubber-600" size={18} />
-                        <span className="text-[10px] font-black text-gray-400 uppercase">สิ้นสุด</span>
-                        <input 
-                            type="date" 
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                            className="border-none focus:ring-0 text-sm font-black text-gray-700 p-0 cursor-pointer"
-                        />
-                    </div>
-                    <button 
-                        onClick={handleExportCSV}
-                        className="flex items-center space-x-2 bg-gray-900 text-white px-5 py-2.5 rounded-2xl font-bold text-sm hover:bg-gray-800 transition-all shadow-lg shadow-gray-200 active:scale-95 w-full sm:w-auto justify-center"
-                    >
-                        <Download size={18} />
-                        <span className="hidden lg:inline">ออกรายงาน (CSV)</span>
-                    </button>
-                    <button 
-                        onClick={() => window.print()}
-                        className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-2xl font-bold text-sm transition-all shadow-lg shadow-emerald-200 active:scale-95 w-full sm:w-auto justify-center border border-emerald-700"
-                        title="พิมพ์รายงานสรุป"
-                    >
-                        <Printer size={18} />
-                        <span className="hidden lg:inline">พิมพ์รายงาน</span>
-                    </button>
+                {/* Tabs Navigation */}
+                <div className="flex p-1.5 bg-gray-200/50 backdrop-blur-md rounded-2xl w-fit border border-gray-200/50">
+                    {tabs.map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center space-x-2 px-6 py-3 rounded-xl text-sm font-black transition-all duration-300
+                                ${activeTab === tab.id 
+                                    ? 'bg-white text-rubber-700 shadow-md transform scale-105' 
+                                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'}`}
+                        >
+                            {tab.icon}
+                            <span>{tab.name}</span>
+                        </button>
+                    ))}
                 </div>
+
+                {/* Tab Content */}
+                <div className="bg-white rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 overflow-hidden transition-all">
+                    {activeTab === 'buys_latex' && (
+                        <LatexBuysTab
+                            dailyData={dailyData}
+                            currentPage={currentPage}
+                            setCurrentPage={setCurrentPage}
+                            itemsPerPage={ITEMS_PER_PAGE}
+                        />
+                    )}
+
+                    {activeTab === 'buys_cup_lump' && (
+                        <CupLumpBuysTab
+                            dailyData={dailyData}
+                            currentPage={currentPage}
+                            setCurrentPage={setCurrentPage}
+                            itemsPerPage={ITEMS_PER_PAGE}
+                        />
+                    )}
+
+                    {activeTab === 'sells' && (
+                        <SellsReportTab
+                            dailyData={dailyData}
+                            currentPage={currentPage}
+                            setCurrentPage={setCurrentPage}
+                            itemsPerPage={ITEMS_PER_PAGE}
+                        />
+                    )}
+
+                    {activeTab === 'expenses' && (
+                        <ExpensesReportTab
+                            dailyData={dailyData}
+                            currentPage={currentPage}
+                            setCurrentPage={setCurrentPage}
+                            itemsPerPage={ITEMS_PER_PAGE}
+                        />
+                    )}
+
+                    {activeTab === 'buys_team' && (
+                        <TeamSummaryReportTab
+                            teamSummary={teamSummary}
+                            expandedCreator={expandedCreator}
+                            setExpandedCreator={setExpandedCreator}
+                        />
+                    )}
+                </div>
+
+                {/* Daily Overall Summary Footer */}
+                <DailyReportFooter dailyData={dailyData} user={user} />
             </div>
-
-            {/* Tabs Navigation */}
-            <div className="flex p-1.5 bg-gray-200/50 backdrop-blur-md rounded-2xl w-fit border border-gray-200/50">
-                {tabs.map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center space-x-2 px-6 py-3 rounded-xl text-sm font-black transition-all duration-300
-                            ${activeTab === tab.id 
-                                ? 'bg-white text-rubber-700 shadow-md transform scale-105' 
-                                : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'}`}
-                    >
-                        {tab.icon}
-                        <span>{tab.name}</span>
-                    </button>
-                ))}
-            </div>
-
-            {/* Tab Content */}
-            <div className="bg-white rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 overflow-hidden transition-all">
-                {activeTab === 'buys_latex' && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left border-collapse">
-                            <thead className="bg-[#1e293b] text-white font-bold">
-                                <tr>
-                                    <th className="px-5 py-5 border-r border-white/10">เกษตรกร</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10">น้ำยางดิบ</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10">ถัง</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10 bg-[#334155]">สุทธิ</th>
-                                    <th className="px-5 py-5 text-center border-r border-white/10">%DRC</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10 bg-blue-600">ยางแห้ง</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10">ราคาซื้อ</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10 bg-rubber-600">ยอดเงินรวม</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10">แบ่ง%</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10 bg-emerald-600">ยอดเกษตรกร</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10">แบ่ง%</th>
-                                    <th className="px-5 py-5 text-right bg-orange-600">ยอดลูกจ้าง</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {(() => {
-                                    const filtered = dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex');
-                                    const paginated = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-                                    if (filtered.length === 0) {
-                                        return (
-                                            <tr>
-                                                <td colSpan="12" className="px-5 py-20 text-center text-gray-400 font-medium">ไม่พบข้อมูลการรับซื้อน้ำยางสดในวันที่เลือก</td>
-                                            </tr>
-                                        );
-                                    }
-                                    return paginated.map((b, idx) => {
-                                        const netWeight = Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0)));
-                                        const farmerPct = 100 - (Number(b.empPct) || 0);
-                                        return (
-                                            <tr key={b.id || idx} className="hover:bg-gray-50/80 transition-colors group">
-                                                <td className="px-5 py-4 border-r border-gray-50">
-                                                    <div className="font-black text-gray-900">{b.farmerName}</div>
-                                                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">ID: {b.farmerId || '-'}</div>
-                                                </td>
-                                                <td className="px-5 py-4 text-right font-mono font-bold text-gray-600">{Number(b.weight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-right font-mono text-red-500 font-medium">-{Number(b.bucketWeight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-right font-black text-gray-900 font-mono bg-gray-50/50">{netWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-center">
-                                                    <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-lg font-black text-xs border border-blue-100 italic">
-                                                        {Number(b.drc || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}%
-                                                    </span>
-                                                </td>
-                                                <td className="px-5 py-4 text-right font-black text-blue-700 font-mono bg-blue-50/30">{(Number(b.dryRubber || b.dryWeight || 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-right text-gray-500 font-mono font-bold">฿{Number(b.pricePerKg || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-right font-black text-gray-900 font-mono bg-rubber-50/30">฿{Number(b.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-right text-[10px] text-gray-400 font-black">{farmerPct}%</td>
-                                                <td className="px-5 py-4 text-right font-black text-emerald-700 font-mono bg-emerald-50/30">฿{Number(b.farmerTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-right text-[10px] text-gray-400 font-black">{Number(b.empPct || 0)}%</td>
-                                                <td className="px-5 py-4 text-right font-black text-orange-700 font-mono bg-orange-50/30">฿{Number(b.employeeTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            </tr>
-                                        );
-                                    });
-                                })()}
-                            </tbody>
-                            <tfoot className="bg-gray-900 text-white font-black border-t-4 border-rubber-600">
-                                {(() => {
-                                    const filtered = dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex');
-                                    if (filtered.length === 0) return null;
-                                    
-                                    const totalWeight = filtered.reduce((sum, b) => sum + Number(b.weight || 0), 0);
-                                    const totalBucket = filtered.reduce((sum, b) => sum + Number(b.bucketWeight || 0), 0);
-                                    const totalNet = filtered.reduce((sum, b) => sum + Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0))), 0);
-                                    const totalDry = filtered.reduce((sum, b) => sum + Number(b.dryRubber || b.dryWeight || 0), 0);
-                                    const totalValue = filtered.reduce((sum, b) => sum + Number(b.total || 0), 0);
-                                    const totalFarmer = filtered.reduce((sum, b) => sum + Number(b.farmerTotal || 0), 0);
-                                    const totalEmp = filtered.reduce((sum, b) => sum + Number(b.employeeTotal || 0), 0);
-                                    
-                                    const avgDrc = totalNet > 0 ? truncateOneDecimal((totalDry / totalNet) * 100) : 0;
-                                    const avgPrice = totalDry > 0 ? (totalValue / totalDry) : 0;
-
-                                    return (
-                                        <tr className="divide-x divide-white/10 uppercase text-sm tracking-tight">
-                                            <td className="px-5 py-5 text-rubber-400">ยอดรวม {filtered.length} บิล</td>
-                                            <td className="px-5 py-5 text-right font-mono text-gray-400">{totalWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-5 py-5 text-right font-mono text-red-400">-{totalBucket.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-5 py-5 text-right font-mono text-white bg-gray-800">{totalNet.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-5 py-5 text-center">
-                                                <div className="text-[10px] text-gray-400 leading-none mb-1">เฉลี่ย</div>
-                                                <span className="text-blue-300">{avgDrc.toLocaleString(undefined, { minimumFractionDigits: 1 })}%</span>
-                                            </td>
-                                            <td className="px-5 py-5 text-right font-mono text-blue-400 bg-blue-900/50">{totalDry.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-5 py-5 text-right">
-                                                <div className="text-[10px] text-gray-400 leading-none mb-1">เฉลี่ย</div>
-                                                <span className="text-gray-300">฿{avgPrice.toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
-                                            </td>
-                                            <td className="px-5 py-5 text-right font-mono text-rubber-400">฿{totalValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-5 py-5"></td>
-                                            <td className="px-5 py-5 text-right font-mono text-emerald-400 bg-emerald-900/50">฿{totalFarmer.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-5 py-5"></td>
-                                            <td className="px-5 py-5 text-right font-mono text-orange-400 bg-orange-900/50">฿{totalEmp.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                        </tr>
-                                    );
-                                })()}
-                            </tfoot>
-                        </table>
-                        <PaginationFooter totalCount={dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex').length} currentPage={currentPage} setCurrentPage={setCurrentPage} />
-                    </div>
-                )}
-
-                {activeTab === 'buys_cup_lump' && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left border-collapse">
-                            <thead className="bg-[#1e293b] text-white font-bold">
-                                <tr>
-                                    <th className="px-5 py-5 border-r border-white/10">เกษตรกร</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10">น้ำหนักขี้ยาง</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10">ถัง</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10 bg-[#334155]">สุทธิ</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10">ราคาคซื้อ</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10 bg-rubber-600">ยอดเงินรวม</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10">แบ่ง%</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10 bg-emerald-600">ยอดเกษตรกร</th>
-                                    <th className="px-5 py-5 text-right border-r border-white/10">แบ่ง%</th>
-                                    <th className="px-5 py-5 text-right bg-orange-600">ยอดลูกจ้าง</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {(() => {
-                                    const filtered = dailyData.buys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง');
-                                    const paginated = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-                                    if (filtered.length === 0) {
-                                        return (
-                                            <tr>
-                                                <td colSpan="10" className="px-5 py-20 text-center text-gray-400 font-medium">ไม่พบข้อมูลการรับซื้อขี้ยางในวันที่เลือก</td>
-                                            </tr>
-                                        );
-                                    }
-                                    return paginated.map((b, idx) => {
-                                        const netWeight = Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0)));
-                                        const farmerPct = 100 - (Number(b.empPct) || 0);
-                                        return (
-                                            <tr key={b.id || idx} className="hover:bg-gray-50/80 transition-colors group">
-                                                <td className="px-5 py-4 border-r border-gray-50">
-                                                    <div className="font-black text-gray-900">{b.farmerName}</div>
-                                                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">ID: {b.farmerId || '-'}</div>
-                                                </td>
-                                                <td className="px-5 py-4 text-right font-mono font-bold text-gray-600">{Number(b.weight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-right font-mono text-red-500 font-medium">-{Number(b.bucketWeight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-right font-black text-gray-900 font-mono bg-gray-50/50">{netWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-right text-gray-500 font-mono font-bold">฿{Number(b.pricePerKg || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-right font-black text-gray-900 font-mono bg-rubber-50/30">฿{Number(b.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-right text-[10px] text-gray-400 font-black">{farmerPct}%</td>
-                                                <td className="px-5 py-4 text-right font-black text-emerald-700 font-mono bg-emerald-50/30">฿{Number(b.farmerTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                <td className="px-5 py-4 text-right text-[10px] text-gray-400 font-black">{Number(b.empPct || 0)}%</td>
-                                                <td className="px-5 py-4 text-right font-black text-orange-700 font-mono bg-orange-50/30">฿{Number(b.employeeTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            </tr>
-                                        );
-                                    });
-                                })()}
-                            </tbody>
-                            <tfoot className="bg-gray-900 text-white font-black border-t-4 border-rubber-600">
-                                {(() => {
-                                    const filtered = dailyData.buys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง');
-                                    if (filtered.length === 0) return null;
-                                    
-                                    const totalWeight = filtered.reduce((sum, b) => sum + Number(b.weight || 0), 0);
-                                    const totalBucket = filtered.reduce((sum, b) => sum + Number(b.bucketWeight || 0), 0);
-                                    const totalNet = filtered.reduce((sum, b) => sum + Number(b.netWeight || (Number(b.weight || 0) - Number(b.bucketWeight || 0))), 0);
-                                    const totalValue = filtered.reduce((sum, b) => sum + Number(b.total || 0), 0);
-                                    const totalFarmer = filtered.reduce((sum, b) => sum + Number(b.farmerTotal || 0), 0);
-                                    const totalEmp = filtered.reduce((sum, b) => sum + Number(b.employeeTotal || 0), 0);
-
-                                    return (
-                                        <tr className="divide-x divide-white/10 uppercase text-sm tracking-tight">
-                                            <td className="px-5 py-5 text-rubber-400">ยอดรวม {filtered.length} บิล</td>
-                                            <td className="px-5 py-5 text-right font-mono text-gray-400">{totalWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-5 py-5 text-right font-mono text-red-400">-{totalBucket.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-5 py-5 text-right font-mono text-white bg-gray-800">{totalNet.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-5 py-5 text-right font-mono text-rubber-400" colSpan="2">฿{totalValue.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-5 py-5"></td>
-                                            <td className="px-5 py-5 text-right font-mono text-emerald-400 bg-emerald-900/50">฿{totalFarmer.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-5 py-5"></td>
-                                            <td className="px-5 py-5 text-right font-mono text-orange-400 bg-orange-900/50">฿{totalEmp.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                        </tr>
-                                    );
-                                })()}
-                            </tfoot>
-                        </table>
-                        <PaginationFooter totalCount={dailyData.buys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง').length} currentPage={currentPage} setCurrentPage={setCurrentPage} />
-                    </div>
-                )}
-
-                {activeTab === 'sells' && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left border-collapse">
-                            <thead className="bg-[#1e293b] text-white font-bold">
-                                <tr>
-                                    <th className="px-8 py-5">ผู้ซื้อ / พิกัด</th>
-                                    <th className="px-8 py-5">รถขนส่ง</th>
-                                    <th className="px-8 py-5 text-right">น้ำหนักรวม (กก.)</th>
-                                    <th className="px-8 py-5 text-center">DRC (%)</th>
-                                    <th className="px-8 py-5 text-right">น้ำยางแห้ง (กก.)</th>
-                                    <th className="px-8 py-5 text-right">ราคาขาย (บ)</th>
-                                    <th className="px-8 py-5 text-right bg-rubber-600">ยอดขายสุทธิ</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {(() => {
-                                    const paginated = dailyData.sells.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-                                    if (dailyData.sells.length === 0) {
-                                        return (
-                                            <tr>
-                                                <td colSpan="7" className="px-8 py-20 text-center text-gray-400 font-medium">ไม่พบข้อมูลการขายในวันที่เลือก</td>
-                                            </tr>
-                                        );
-                                    }
-                                    return paginated.map((s, idx) => (
-                                        <tr key={s.id || idx} className="hover:bg-gray-50 transition-colors">
-                                            <td className="px-8 py-5">
-                                                <div className="font-black text-gray-900">{s.buyerName}</div>
-                                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">REF: {s.id?.substring(0,8)}</div>
-                                            </td>
-                                            <td className="px-8 py-5 text-gray-600 font-medium">{s.truckInfo || '-'}</td>
-                                            <td className="px-8 py-5 text-right font-mono font-bold text-gray-700">{Number(s.weight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-8 py-5 text-center">
-                                                <span className="bg-orange-50 text-orange-700 px-3 py-1 rounded-lg font-black text-xs border border-orange-100">
-                                                    {Number(s.drc || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}%
-                                                </span>
-                                            </td>
-                                            <td className="px-8 py-5 text-right font-mono font-black text-orange-600">{(Number(s.weight || 0) * Number(s.drc || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-8 py-5 text-right text-gray-500 font-mono font-bold">฿{Number(s.pricePerKg || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-8 py-5 text-right font-black text-gray-900 font-mono bg-rubber-50/30">฿{Number(s.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                        </tr>
-                                    ));
-                                })()}
-                            </tbody>
-                            {dailyData.sells.length > 0 && (
-                                <tfoot className="bg-gray-900 text-white font-black border-t-4 border-rubber-600">
-                                    <tr className="divide-x divide-white/10 uppercase text-sm tracking-tight">
-                                        <td colSpan="2" className="px-8 py-5 text-rubber-400 text-left">ยอดรวม {dailyData.sells.length} รายการ</td>
-                                        <td className="px-8 py-5 text-right font-mono text-gray-400">{dailyData.sells.reduce((sum, s) => sum + Number(s.weight || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                        <td className="px-8 py-5"></td>
-                                        <td className="px-8 py-5 text-right font-mono text-orange-400">
-                                            {dailyData.sells.reduce((sum, s) => sum + (Number(s.weight || 0) * Number(s.drc || 0) / 100), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}
-                                        </td>
-                                        <td className="px-8 py-5"></td>
-                                        <td className="px-8 py-5 text-right font-mono text-white bg-rubber-900/50">
-                                            ฿{dailyData.sells.reduce((sum, s) => sum + Number(s.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}
-                                        </td>
-                                    </tr>
-                                </tfoot>
-                            )}
-                        </table>
-                        <PaginationFooter totalCount={dailyData.sells.length} currentPage={currentPage} setCurrentPage={setCurrentPage} />
-                    </div>
-                )}
-
-                {activeTab === 'expenses' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-gray-100">
-                        {/* General Expenses */}
-                        <div className="p-0 flex flex-col h-full border-r border-gray-100">
-                            <div className="bg-[#1e293b] px-8 py-5 flex justify-between items-center text-white">
-                                <h3 className="font-black flex items-center tracking-tight">
-                                    <Wallet size={20} className="mr-3 text-red-400" />
-                                    ค่าใช้จ่ายทั่วไป
-                                </h3>
-                                <span className="bg-red-500/20 text-red-400 px-5 py-2 rounded-2xl text-base font-black shadow-inner border border-red-500/20">
-                                    ฿{dailyData.expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}
-                                </span>
-                            </div>
-                            <div className="overflow-x-auto flex-1">
-                                <table className="w-full text-sm text-left">
-                                    <tbody className="divide-y divide-gray-100">
-                                        {(() => {
-                                            const paginated = dailyData.expenses.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-                                            if (dailyData.expenses.length === 0) {
-                                                return (
-                                                    <tr>
-                                                        <td className="px-8 py-20 text-center text-gray-400 font-medium italic">ไม่มีข้อมูลค่าใช้จ่ายทั่วไป</td>
-                                                    </tr>
-                                                );
-                                            }
-                                            return paginated.map((e, idx) => (
-                                                <tr key={e.id || idx} className="hover:bg-red-50/30 transition-colors group text-sm">
-                                                    <td className="px-8 py-5">
-                                                        <div className="font-black text-gray-900 group-hover:text-red-700 transition-colors">{e.title}</div>
-                                                        <div className="text-xs text-gray-400 font-bold uppercase tracking-tighter">{e.category || 'ทั่วไป'}</div>
-                                                    </td>
-                                                    <td className="px-8 py-5 text-right font-black text-red-600 font-mono text-base whitespace-nowrap">฿{Number(e.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                </tr>
-                                            ));
-                                        })()}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <PaginationFooter totalCount={dailyData.expenses.length} currentPage={currentPage} setCurrentPage={setCurrentPage} />
-                        </div>
-
-                        {/* Wages */}
-                        <div className="p-0 flex flex-col h-full">
-                            <div className="bg-[#1e293b] px-8 py-5 flex justify-between items-center text-white border-l border-white/10">
-                                <h3 className="font-black flex items-center tracking-tight">
-                                    <Users size={20} className="mr-3 text-orange-400" />
-                                    ค่าจ้างพนักงาน
-                                </h3>
-                                <span className="bg-orange-500/20 text-orange-400 px-5 py-2 rounded-2xl text-base font-black shadow-inner border border-orange-500/20">
-                                    ฿{dailyData.wages.reduce((sum, w) => sum + Number(w.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}
-                                </span>
-                            </div>
-                            <div className="overflow-x-auto flex-1">
-                                <table className="w-full text-sm text-left">
-                                    <tbody className="divide-y divide-gray-100">
-                                        {(() => {
-                                            const paginated = dailyData.wages.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-                                            if (dailyData.wages.length === 0) {
-                                                return (
-                                                    <tr>
-                                                        <td className="px-8 py-20 text-center text-gray-400 font-medium italic">ไม่มีข้อมูลค่าจ้างพนักงาน</td>
-                                                    </tr>
-                                                );
-                                            }
-                                            return paginated.map((w, idx) => (
-                                                <tr key={w.id || idx} className="hover:bg-orange-50/30 transition-colors group text-sm">
-                                                    <td className="px-8 py-5">
-                                                        <div className="font-black text-gray-900 group-hover:text-orange-700 transition-colors">{w.staffName || 'พนักงาน'}</div>
-                                                        <div className="text-xs text-gray-400 font-bold uppercase tracking-tighter">{w.role || 'ลูกจ้าง'}</div>
-                                                    </td>
-                                                    <td className="px-8 py-5 text-right font-black text-orange-600 font-mono text-base whitespace-nowrap">฿{Number(w.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                </tr>
-                                            ));
-                                        })()}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <PaginationFooter totalCount={dailyData.wages.length} currentPage={currentPage} setCurrentPage={setCurrentPage} />
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'buys_team' && (
-                    <div className="overflow-x-auto p-6">
-                        <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center space-x-3">
-                            <Users className="text-blue-600" size={24} />
-                            <div>
-                                <h3 className="text-sm font-black text-gray-900">สรุปยอดซื้อทีมน้ำยาง</h3>
-                                <p className="text-xs font-medium text-gray-500">แสดงผลงานยอดรวมสะสมของพนักงานแต่ละคนที่รับซื้อน้ำยางและขี้ยางสดในระบบ</p>
-                            </div>
-                        </div>
-
-                        <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-                            <table className="w-full text-sm text-left border-collapse">
-                                <thead className="bg-[#1e293b] text-white font-bold">
-                                    <tr>
-                                        <th className="px-6 py-4">ผู้บันทึกรายการ</th>
-                                        <th className="px-6 py-4 text-center">จำนวนบิล</th>
-                                        <th className="px-6 py-4 text-right">น้ำหนักสุทธิรวม (กก.)</th>
-                                        <th className="px-6 py-4 text-right">เนื้อยางแห้งรวม (กก.)</th>
-                                        <th className="px-6 py-4 text-right bg-rubber-600">ยอดเงินรวม</th>
-                                        <th className="px-6 py-4 text-center">จัดการ</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 bg-white">
-                                    {teamSummary.length === 0 ? (
-                                        <tr>
-                                            <td colSpan="6" className="px-6 py-12 text-center text-gray-400 font-medium">ไม่พบข้อมูลการบันทึกของทีมงานในช่วงเวลานี้</td>
-                                        </tr>
-                                    ) : (
-                                        teamSummary.map((group, idx) => {
-                                            const isExpanded = expandedCreator === group.creator;
-                                            return (
-                                                <React.Fragment key={group.creator || idx}>
-                                                    <tr 
-                                                        onClick={() => setExpandedCreator(isExpanded ? null : group.creator)}
-                                                        className="hover:bg-gray-50/80 transition-colors cursor-pointer group"
-                                                    >
-                                                        <td className="px-6 py-4 border-r border-gray-50">
-                                                            <div className="flex items-center space-x-3">
-                                                                <div className="p-2 bg-gray-100 rounded-xl text-gray-600 group-hover:bg-rubber-50 group-hover:text-rubber-600 transition-all">
-                                                                    <User size={16} />
-                                                                </div>
-                                                                <span className="font-black text-gray-900">{group.creator}</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-center font-mono font-bold text-gray-600">{group.billsCount}</td>
-                                                        <td className="px-6 py-4 text-right font-mono font-bold text-gray-600">{group.totalNetWeight.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                        <td className="px-6 py-4 text-right font-mono text-blue-600 font-bold">{group.totalDryRubber.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                        <td className="px-6 py-4 text-right font-black text-gray-900 font-mono bg-rubber-50/30">฿{group.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                        <td className="px-6 py-4 text-center">
-                                                            <button className="text-rubber-600 hover:text-rubber-800 font-bold text-xs flex items-center justify-center space-x-1 mx-auto bg-rubber-50 group-hover:bg-rubber-100 px-3 py-1.5 rounded-lg transition-all">
-                                                                <span>{isExpanded ? 'ซ่อนรายละเอียด' : 'ดูบิลแยกตามบุคคล'}</span>
-                                                                <ChevronRight size={14} className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-
-                                                    {/* Expanded Row */}
-                                                    {isExpanded && (
-                                                        <tr>
-                                                            <td colSpan="6" className="p-0 bg-gray-50/50">
-                                                                <div className="p-6 border-t border-b border-gray-100">
-                                                                    <div className="bg-white rounded-xl border border-gray-100 shadow-inner overflow-hidden">
-                                                                        <table className="w-full text-xs text-left border-collapse">
-                                                                            <thead className="bg-gray-100 text-gray-700 font-bold border-b border-gray-200">
-                                                                                <tr>
-                                                                                    <th className="px-4 py-3">เลขที่บิล</th>
-                                                                                    <th className="px-4 py-3">วันที่</th>
-                                                                                    <th className="px-4 py-3">เกษตรกร</th>
-                                                                                    <th className="px-4 py-3 text-center">ประเภท</th>
-                                                                                    <th className="px-4 py-3 text-right">น้ำหนักสุทธิ (กก.)</th>
-                                                                                    <th className="px-4 py-3 text-center">%DRC</th>
-                                                                                    <th className="px-4 py-3 text-right">ยอดเงินรวม</th>
-                                                                                </tr>
-                                                                            </thead>
-                                                                            <tbody className="divide-y divide-gray-100">
-                                                                                {group.records.map((rec, rIdx) => {
-                                                                                    const recNet = Number(rec.netWeight || (Number(rec.weight || 0) - Number(rec.bucketWeight || 0)));
-                                                                                    const typeLabel = (rec.rubberType === 'cup_lump' || rec.rubberType === 'ขี้ยาง') ? 'ขี้ยาง' : 'น้ำยางสด';
-                                                                                    return (
-                                                                                        <tr key={rec.id || rIdx} className="hover:bg-gray-50 transition-colors">
-                                                                                            <td className="px-4 py-3 font-bold text-gray-800">{rec.id}</td>
-                                                                                            <td className="px-4 py-3 text-gray-500">{rec.date}</td>
-                                                                                            <td className="px-4 py-3 font-bold text-gray-900">{rec.farmerName}</td>
-                                                                                            <td className="px-4 py-3 text-center">
-                                                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${typeLabel === 'ขี้ยาง' ? 'bg-orange-50 text-orange-700 border border-orange-100' : 'bg-blue-50 text-blue-700 border border-blue-100'}`}>
-                                                                                                    {typeLabel}
-                                                                                                </span>
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3 text-right font-mono font-bold text-gray-600">{recNet.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                                                            <td className="px-4 py-3 text-center font-mono font-bold text-blue-600">{typeLabel === 'น้ำยางสด' ? `${Number(rec.drc || 0).toFixed(1)}%` : '-'}</td>
-                                                                                            <td className="px-4 py-3 text-right font-mono font-bold text-emerald-700">฿{Number(rec.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                                                                        </tr>
-                                                                                    );
-                                                                                })}
-                                                                            </tbody>
-                                                                        </table>
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    )}
-                                                </React.Fragment>
-                                            );
-                                        })
-                                    )}
-                                </tbody>
-                                {teamSummary.length > 0 && (
-                                    <tfoot className="bg-gray-900 text-white font-black border-t-2 border-rubber-600">
-                                        <tr className="divide-x divide-white/10 uppercase text-sm tracking-tight">
-                                            <td className="px-6 py-4 text-rubber-400">รวมทั้งหมด ({teamSummary.length} คน)</td>
-                                            <td className="px-6 py-4 text-center font-mono">{teamSummary.reduce((sum, t) => sum + t.billsCount, 0)}</td>
-                                            <td className="px-6 py-4 text-right font-mono">{teamSummary.reduce((sum, t) => sum + t.totalNetWeight, 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-6 py-4 text-right font-mono text-blue-400">{teamSummary.reduce((sum, t) => sum + t.totalDryRubber, 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-6 py-4 text-right font-mono text-white bg-rubber-900/50">฿{teamSummary.reduce((sum, t) => sum + t.totalAmount, 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                            <td className="px-6 py-4"></td>
-                                        </tr>
-                                    </tfoot>
-                                )}
-                            </table>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Daily Overall Summary Footer */}
-            {(() => {
-                const latexBuyTotal = dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex').reduce((sum, b) => sum + Number(b.total || 0), 0);
-                const cupLumpBuyTotal = dailyData.buys.filter(b => b.rubberType === 'cup_lump' || b.rubberType === 'ขี้ยาง').reduce((sum, b) => sum + Number(b.total || 0), 0);
-                const totalBuy = latexBuyTotal + cupLumpBuyTotal;
-
-                const latexSellTotal = dailyData.sells.filter(s => (s.rubberType || 'latex') === 'latex').reduce((sum, s) => sum + Number(s.total || 0), 0);
-                const cupLumpSellTotal = dailyData.sells.filter(s => s.rubberType === 'cup_lump' || s.rubberType === 'ขี้ยาง').reduce((sum, s) => sum + Number(s.total || 0), 0);
-                const totalSell = latexSellTotal + cupLumpSellTotal;
-
-                const totalExpense = dailyData.expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-                const totalWage = dailyData.wages.reduce((sum, w) => sum + Number(w.total || 0), 0);
-                const netProfit = totalSell - totalBuy - totalExpense - totalWage;
-                const isStaff = user?.role === 'staff';
-                const displayProfit = isStaff ? '***' : `฿${netProfit.toLocaleString(undefined, { minimumFractionDigits: 1 })}`;
-
-                return (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8 pb-10">
-                        {/* Total Buys Card */}
-                        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-lg shadow-gray-200/50 flex flex-col group hover:border-blue-500 transition-all">
-                            <div className="flex items-center space-x-4 mb-3">
-                                <div className="p-3 bg-blue-50 rounded-xl group-hover:bg-blue-600 transition-colors duration-500 shadow-inner">
-                                    <Droplets className="text-blue-600 group-hover:text-white transition-colors duration-500" size={24} />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">ยอดรับซื้อรวม</p>
-                                    <p className="text-2xl font-black text-gray-900 leading-none">฿{totalBuy.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
-                                </div>
-                            </div>
-                            <div className="flex border-t border-gray-50 pt-3 mt-auto">
-                                <div className="flex-1 text-center border-r border-gray-50">
-                                    <p className="text-[9px] font-bold text-gray-400 uppercase">น้ำยาง</p>
-                                    <p className="text-xs font-black text-blue-700">+฿{latexBuyTotal.toLocaleString()}</p>
-                                </div>
-                                <div className="flex-1 text-center">
-                                    <p className="text-[9px] font-bold text-gray-400 uppercase">ขี้ยาง</p>
-                                    <p className="text-xs font-black text-orange-700">+฿{cupLumpBuyTotal.toLocaleString()}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Total Sells Card */}
-                        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-lg shadow-gray-200/50 flex flex-col group hover:border-orange-500 transition-all">
-                            <div className="flex items-center space-x-4 mb-3">
-                                <div className="p-3 bg-orange-50 rounded-xl group-hover:bg-orange-600 transition-colors duration-500 shadow-inner">
-                                    <Truck className="text-orange-600 group-hover:text-white transition-colors duration-500" size={24} />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">ยอดขายรวม</p>
-                                    <p className="text-2xl font-black text-gray-900 leading-none">฿{totalSell.toLocaleString(undefined, { minimumFractionDigits: 1 })}</p>
-                                </div>
-                            </div>
-                            <div className="flex border-t border-gray-50 pt-3 mt-auto">
-                                <div className="flex-1 text-center border-r border-gray-50">
-                                    <p className="text-[9px] font-bold text-gray-400 uppercase">น้ำยาง</p>
-                                    <p className="text-xs font-black text-blue-700">฿{latexSellTotal.toLocaleString()}</p>
-                                </div>
-                                <div className="flex-1 text-center">
-                                    <p className="text-[9px] font-bold text-gray-400 uppercase">ขี้ยาง</p>
-                                    <p className="text-xs font-black text-orange-700">฿{cupLumpSellTotal.toLocaleString()}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Net Profit Card */}
-                        <div className={`p-5 rounded-2xl border shadow-xl transition-all duration-500 flex flex-col
-                            ${isStaff || netProfit >= 0
-                                ? 'bg-gradient-to-br from-[#10b981] via-[#059669] to-[#047857] border-emerald-400 shadow-emerald-200/50' 
-                                : 'bg-gradient-to-br from-red-600 via-red-700 to-red-800 border-red-500 shadow-red-200/50'}`}>
-                            <div className="flex items-center space-x-4 mb-3">
-                                <div className="p-3 bg-white/20 rounded-xl shadow-lg backdrop-blur-md">
-                                    <PieChart className="text-white" size={24} />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-black text-white/70 uppercase tracking-widest leading-none mb-1">กำไรสุทธิ</p>
-                                    <p className="text-2xl font-black text-white leading-none">{displayProfit}</p>
-                                </div>
-                            </div>
-                            <div className="flex border-t border-white/10 pt-3 mt-auto">
-                                <div className="flex-1 text-center border-r border-white/10">
-                                    <p className="text-[9px] font-bold text-white/50 uppercase">จ่ายพนักงาน</p>
-                                    <p className="text-xs font-black text-white">-฿{totalWage.toLocaleString()}</p>
-                                </div>
-                                <div className="flex-1 text-center">
-                                    <p className="text-[9px] font-bold text-white/50 uppercase">จ่ายทั่วไป</p>
-                                    <p className="text-xs font-black text-white">-฿{totalExpense.toLocaleString()}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                );
-            })()}
-            </div>
-            {/* Close no-print section */}
 
             {/* A4 Printable View */}
-            <div className="hidden print:block text-black p-4 font-sans bg-white">
-                <ReportPrintHeader 
-                    settings={settings}
-                    title="รายงานสรุปประวัติการรับซื้อ-ขายและรายจ่ายประจำวัน"
-                    subtitle={`ประจำวันที่: ${startDate} ถึง ${endDate}`}
-                />
-
-                {/* Summary Table in A4 Print View */}
-                <div className="mb-4">
-                    <h3 className="text-sm font-bold border-b border-black pb-1 mb-2">สรุปภาพรวม</h3>
-                    <table className="w-full border-collapse border border-black text-xs text-center">
-                        <thead>
-                            <tr className="bg-gray-100 border-b border-black">
-                                <th className="border border-black p-1">รายการ</th>
-                                <th className="border border-black p-1">จำนวนบิล</th>
-                                <th className="border border-black p-1">ปริมาณสุทธิ (กก.)</th>
-                                <th className="border border-black p-1">ยางแห้งรวม (กก.)</th>
-                                <th className="border border-black p-1">ยอดรวม (฿)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td className="border border-black p-1 text-left font-bold">รับซื้อน้ำยางสด</td>
-                                <td className="border border-black p-1">{dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex').length}</td>
-                                <td className="border border-black p-1">{dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex').reduce((sum, b) => sum + Number(recNetWeight(b)), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                <td className="border border-black p-1">{dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex').reduce((sum, b) => sum + Number(b.dryRubber || b.dryWeight || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                <td className="border border-black p-1 font-bold">฿{dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex').reduce((sum, b) => sum + Number(b.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                            </tr>
-                            <tr>
-                                <td className="border border-black p-1 text-left font-bold">รับซื้อขี้ยาง</td>
-                                <td className="border border-black p-1">{dailyData.buys.filter(b => (b.rubberType || 'latex') === 'cup_lump').length}</td>
-                                <td className="border border-black p-1">{dailyData.buys.filter(b => (b.rubberType || 'latex') === 'cup_lump').reduce((sum, b) => sum + Number(recNetWeight(b)), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                <td className="border border-black p-1">-</td>
-                                <td className="border border-black p-1 font-bold">฿{dailyData.buys.filter(b => (b.rubberType || 'latex') === 'cup_lump').reduce((sum, b) => sum + Number(b.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                            </tr>
-                            <tr>
-                                <td className="border border-black p-1 text-left font-bold">ยอดส่งขายโรงงาน</td>
-                                <td className="border border-black p-1">{dailyData.sells.length}</td>
-                                <td className="border border-black p-1">{dailyData.sells.reduce((sum, s) => sum + Number(s.weight || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                <td className="border border-black p-1">-</td>
-                                <td className="border border-black p-1 font-bold">฿{dailyData.sells.reduce((sum, s) => sum + Number(s.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                            </tr>
-                            <tr>
-                                <td className="border border-black p-1 text-left font-bold">รายจ่ายรวม (ค่าใช้จ่าย+ค่าจ้าง)</td>
-                                <td className="border border-black p-1">{dailyData.expenses.length + dailyData.wages.length}</td>
-                                <td className="border border-black p-1">-</td>
-                                <td className="border border-black p-1">-</td>
-                                <td className="border border-black p-1 font-bold text-red-600">฿{(dailyData.expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0) + dailyData.wages.reduce((sum, w) => sum + Number(w.total || 0), 0)).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Detail Table */}
-                <div>
-                    <h3 className="text-sm font-bold border-b border-black pb-1 mb-2">ตารางรายละเอียดบิลรับซื้อน้ำยางสด</h3>
-                    <table className="w-full border-collapse border border-black text-[11px]">
-                        <thead>
-                            <tr className="bg-gray-100 border-b border-black">
-                                <th className="border border-black p-1 text-center">ลำดับ</th>
-                                <th className="border border-black p-1 text-left">วันที่</th>
-                                <th className="border border-black p-1 text-left">เกษตรกร</th>
-                                <th className="border border-black p-1 text-right">สุทธิ (กก.)</th>
-                                <th className="border border-black p-1 text-center">% DRC</th>
-                                <th className="border border-black p-1 text-right">ยางแห้ง (กก.)</th>
-                                <th className="border border-black p-1 text-right">ราคา/กก. (฿)</th>
-                                <th className="border border-black p-1 text-right">ยอดรวม (฿)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {dailyData.buys.filter(b => (b.rubberType || 'latex') === 'latex').map((item, index) => (
-                                <tr key={item.id || index} className="border-b border-gray-300">
-                                    <td className="border border-black p-1 text-center">{index + 1}</td>
-                                    <td className="border border-black p-1">{item.date}</td>
-                                    <td className="border border-black p-1 font-bold">{item.farmerName}</td>
-                                    <td className="border border-black p-1 text-right">{Number(recNetWeight(item)).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                    <td className="border border-black p-1 text-center">{Number(item.drc || 0).toFixed(1)}%</td>
-                                    <td className="border border-black p-1 text-right">{Number(item.dryRubber || item.dryWeight || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                    <td className="border border-black p-1 text-right">฿{Number(item.pricePerKg || 0).toFixed(2)}</td>
-                                    <td className="border border-black p-1 text-right font-bold">฿{Number(item.total || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            <DailyReportPrintView 
+                settings={settings}
+                startDate={startDate}
+                endDate={endDate}
+                dailyData={dailyData}
+            />
         </div>
     );
 };

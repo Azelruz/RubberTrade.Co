@@ -44,12 +44,14 @@ async function handlePost(context) {
                 if (!id || isUUID(id)) {
                     id = await generateNextId(context.env.DB, 'farmers', format, stationCode, storeId, '', i);
                 }
-                const { name, phone, bankAccount, bankName, address, note, fscId, memberTypeId } = p;
+                const { name, realName, idCard, phone, bankAccount, bankName, address, note, fscId, memberTypeId } = p;
                 stmts.push(context.env.DB.prepare(`
-                    INSERT INTO farmers (id, name, phone, bankAccount, bankName, address, note, fscId, memberTypeId, userId) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO farmers (id, name, realName, idCard, phone, bankAccount, bankName, address, note, fscId, memberTypeId, userId) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         name = excluded.name,
+                        realName = excluded.realName,
+                        idCard = excluded.idCard,
                         phone = excluded.phone,
                         bankAccount = excluded.bankAccount,
                         bankName = excluded.bankName,
@@ -60,6 +62,8 @@ async function handlePost(context) {
                 `).bind(
                     id, 
                     name ?? null, 
+                    realName ?? null,
+                    idCard ?? null,
                     phone ?? null, 
                     bankAccount ?? null, 
                     bankName ?? null, 
@@ -83,13 +87,15 @@ async function handlePost(context) {
             id = await generateNextId(context.env.DB, 'farmers', format, stationCode, storeId, '', 0);
         }
 
-        const { name, phone, bankAccount, bankName, address, note, fscId, memberTypeId } = payload;
+        const { name, realName, idCard, phone, bankAccount, bankName, address, note, fscId, memberTypeId } = payload;
         
         await context.env.DB.prepare(`
-            INSERT INTO farmers (id, name, phone, bankAccount, bankName, address, note, fscId, memberTypeId, userId) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO farmers (id, name, realName, idCard, phone, bankAccount, bankName, address, note, fscId, memberTypeId, userId) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
+                realName = excluded.realName,
+                idCard = excluded.idCard,
                 phone = excluded.phone,
                 bankAccount = excluded.bankAccount,
                 bankName = excluded.bankName,
@@ -100,6 +106,8 @@ async function handlePost(context) {
         `).bind(
             id, 
             name ?? null, 
+            realName ?? null,
+            idCard ?? null,
             phone ?? null, 
             bankAccount ?? null, 
             bankName ?? null, 

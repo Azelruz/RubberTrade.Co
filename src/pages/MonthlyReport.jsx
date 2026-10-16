@@ -5,16 +5,20 @@ import { th } from 'date-fns/locale';
 import { 
     Calendar, Download, TrendingUp, TrendingDown, 
     Droplets, ShoppingCart, BarChart3, ChevronLeft, 
-    ChevronRight, Filter, FileSpreadsheet, Printer
+    ChevronRight, Filter, FileSpreadsheet, Printer,
+    FileDown, Loader2
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { fetchBuyRecords, fetchSellRecords, fetchExpenses, fetchWages, getSettings, isCached } from '../services/apiService';
 import { truncateOneDecimal } from '../utils/calculations';
+import { exportElementToPDF } from '../utils/pdfExport';
 import ReportPrintHeader from '../components/ReportPrintHeader';
 
 export const MonthlyReport = () => {
     const { user } = useAuth();
     const isStaff = user?.role === 'staff';
     const [loading, setLoading] = useState(true);
+    const [isExportingPDF, setIsExportingPDF] = useState(false);
     const [buys, setBuys] = useState([]);
     const [sells, setSells] = useState([]);
     const [expenses, setExpenses] = useState([]);
@@ -133,6 +137,24 @@ export const MonthlyReport = () => {
         document.body.removeChild(link);
     };
 
+    const handleExportPDF = async () => {
+        const printViewEl = document.getElementById('monthly-report-print-view');
+        if (!printViewEl) {
+            return toast.error('ไม่พบส่วนแสดงผลสำหรับออกรายงาน PDF');
+        }
+        setIsExportingPDF(true);
+        const toastId = toast.loading('กำลังสร้างไฟล์ PDF รายงานประจำเดือน...');
+        try {
+            const filename = `Monthly_Report_${format(selectedMonth, 'yyyy_MM')}.pdf`;
+            await exportElementToPDF(printViewEl, filename);
+            toast.success('ดาวน์โหลดไฟล์ PDF เรียบร้อยแล้ว', { id: toastId });
+        } catch (err) {
+            toast.error('สร้างไฟล์ PDF ไม่สำเร็จ: ' + err.message, { id: toastId });
+        } finally {
+            setIsExportingPDF(false);
+        }
+    };
+
     return (
         <div className="space-y-6 max-w-7xl mx-auto pb-10">
             <style dangerouslySetInnerHTML={{ __html: `
@@ -156,7 +178,7 @@ export const MonthlyReport = () => {
                     <p className="text-gray-500 font-medium">สรุปรายรับ-รายจ่ายรายวัน ประจำเดือน {format(selectedMonth, 'MMMM yyyy', { locale: th })}</p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
                     <div className="flex items-center bg-gray-100 rounded-xl p-1 border border-gray-200">
                         <button onClick={handlePrevMonth} className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-gray-600">
                             <ChevronLeft size={20} />
@@ -170,17 +192,26 @@ export const MonthlyReport = () => {
                     </div>
                     <button 
                         onClick={exportToCSV}
-                        className="flex items-center px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition-all shadow-md shadow-green-100 text-sm whitespace-nowrap"
+                        className="flex items-center px-3.5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition-all shadow-md shadow-green-100 text-sm whitespace-nowrap"
                     >
-                        <FileSpreadsheet size={18} className="mr-2" />
+                        <FileSpreadsheet size={18} className="mr-1.5" />
                         Export CSV
                     </button>
                     <button 
+                        onClick={handleExportPDF}
+                        disabled={isExportingPDF}
+                        className="flex items-center px-3.5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-400 text-white rounded-xl font-bold transition-all shadow-md shadow-rose-100 text-sm whitespace-nowrap border border-rose-700"
+                        title="ดาวน์โหลดรายงานสรุปประจำเดือนเป็นไฟล์ PDF"
+                    >
+                        {isExportingPDF ? <Loader2 size={18} className="mr-1.5 animate-spin" /> : <FileDown size={18} className="mr-1.5" />}
+                        {isExportingPDF ? 'กำลังสร้าง PDF...' : 'ดาวน์โหลด PDF'}
+                    </button>
+                    <button 
                         onClick={() => window.print()}
-                        className="flex items-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-md shadow-emerald-100 text-sm whitespace-nowrap border border-emerald-700"
+                        className="flex items-center px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-md shadow-emerald-100 text-sm whitespace-nowrap border border-emerald-700"
                         title="พิมพ์รายงานสรุป"
                     >
-                        <Printer size={18} className="mr-2" />
+                        <Printer size={18} className="mr-1.5" />
                         พิมพ์รายงาน
                     </button>
                 </div>
@@ -324,7 +355,7 @@ export const MonthlyReport = () => {
             {/* Close no-print wrapper */}
 
             {/* A4 Printable View */}
-            <div className="hidden print:block text-black p-4 font-sans bg-white">
+            <div id="monthly-report-print-view" className="hidden print:block text-black p-4 font-sans bg-white">
                 <ReportPrintHeader 
                     settings={settings}
                     title="รายงานสรุปรายรับ-รายจ่ายประจำเดือน"

@@ -64,7 +64,6 @@ export const deleteLandPlot = async (id) => {
         }
     }
 
-    await db.land_plots.delete(id);
     await db.sync_queue.add({
         type: 'land_plots',
         action: 'DELETE',
@@ -75,3 +74,55 @@ export const deleteLandPlot = async (id) => {
     });
     return true;
 };
+
+// Fetch comprehensive plot & farmer summary (yield, tappers, points, dividends, weather, care)
+export const fetchPlotSummary = async (params = {}) => {
+    try {
+        const query = new URLSearchParams(params).toString();
+        const endpoint = query ? `/plot_summary?${query}` : '/plot_summary';
+        const res = await fetchAPI(endpoint);
+        return res?.data || res;
+    } catch (error) {
+        console.error('Error fetching plot summary:', error);
+        return null;
+    }
+};
+
+// Fetch plot activities (fertilizer, mowing, weed control, service fees)
+export const fetchPlotActivities = async (params = {}) => {
+    try {
+        const query = new URLSearchParams(params).toString();
+        const endpoint = query ? `/plot_activities?${query}` : '/plot_activities';
+        const res = await fetchAPI(endpoint);
+        return Array.isArray(res) ? res : (res?.data || []);
+    } catch (error) {
+        console.error('Error fetching plot activities:', error);
+        return [];
+    }
+};
+
+// Add or update a plot activity
+export const addPlotActivity = async (payload) => {
+    try {
+        return await fetchAPI('/plot_activities', {
+            method: 'POST',
+            body: payload
+        });
+    } catch (error) {
+        console.error('Error adding plot activity:', error);
+        throw error;
+    }
+};
+
+// Delete a plot activity
+export const deletePlotActivity = async (id) => {
+    try {
+        return await fetchAPI(`/plot_activities?id=${id}`, {
+            method: 'DELETE'
+        });
+    } catch (error) {
+        console.error('Error deleting plot activity:', error);
+        throw error;
+    }
+};
+

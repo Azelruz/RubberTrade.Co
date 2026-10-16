@@ -218,7 +218,7 @@ export const LandPlotMap = ({ plots = [], selectedPlotId, onSelectPlot, onQuickB
                                             </div>
 
                                             {/* Status Badge */}
-                                            <div className="mb-2">
+                                            <div className="mb-2 space-y-1">
                                                 {hasSoldToday ? (
                                                     <div className="p-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-800 font-bold flex items-center justify-between">
                                                         <span className="flex items-center space-x-1">
@@ -231,6 +231,16 @@ export const LandPlotMap = ({ plots = [], selectedPlotId, onSelectPlot, onQuickB
                                                     <div className="p-1.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 font-bold flex items-center space-x-1">
                                                         <Clock size={13} className="text-amber-600" />
                                                         <span>ยังไม่ได้ขายน้ำยางวันนี้</span>
+                                                    </div>
+                                                )}
+
+                                                {plot.weather && (
+                                                    <div className={`p-1.5 rounded-xl text-[10px] font-bold flex items-center justify-between ${
+                                                        plot.weather.canTap === 'yes' ? 'bg-emerald-100/70 text-emerald-800' :
+                                                        plot.weather.canTap === 'warning' ? 'bg-amber-100/70 text-amber-800' : 'bg-red-100/70 text-red-800'
+                                                    }`}>
+                                                        <span>🌦️ สภาพอากาศ (01:00-06:00 น.):</span>
+                                                        <span>{plot.weather.canTapText}</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -256,16 +266,32 @@ export const LandPlotMap = ({ plots = [], selectedPlotId, onSelectPlot, onQuickB
                                                 </div>
                                             </div>
 
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onQuickBuy && onQuickBuy(plot);
-                                                }}
-                                                className="w-full mt-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-1.5 px-3 rounded-lg text-xs flex items-center justify-center space-x-1 shadow-sm transition-all"
-                                            >
-                                                <Scale size={14} />
-                                                <span>ทำรายการซื้อน้ำยาง</span>
-                                            </button>
+                                            <div className="pt-1 space-y-1.5">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onSelectPlot && onSelectPlot(plot);
+                                                        const el = document.getElementById('plot-details-section');
+                                                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                                                    }}
+                                                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-sm transition-all"
+                                                >
+                                                    <span>🌿 ดูข้อมูลการดูแลแปลงนี้ (ด้านล่าง)</span>
+                                                </button>
+
+                                                {onQuickBuy && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onQuickBuy(plot);
+                                                        }}
+                                                        className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-1.5 px-3 rounded-xl text-xs flex items-center justify-center space-x-1 transition-all"
+                                                    >
+                                                        <Scale size={13} />
+                                                        <span>ทำรายการซื้อน้ำยาง</span>
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     </Popup>
                                 </Marker>

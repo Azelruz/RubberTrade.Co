@@ -12,11 +12,14 @@ async function handleGet(context) {
             day: '2-digit' 
         }).format(new Date());
 
+        const todayStart = `${dateStr} 00:00:00`;
+        const todayEnd = `${dateStr} 23:59:59.999`;
+
         const { results } = await context.env.DB.prepare(`
             SELECT * FROM queues 
-            WHERE userId = ? AND created_at LIKE ?
+            WHERE userId = ? AND created_at >= ? AND created_at <= ?
             ORDER BY created_at ASC
-        `).bind(storeId, `${dateStr}%`).all();
+        `).bind(storeId, todayStart, todayEnd).all();
 
         return jsonResponse(results);
     } catch (e) {
@@ -44,12 +47,15 @@ async function handlePost(context) {
             day: '2-digit' 
         }).format(new Date());
 
-        // Find the next daily queue number for this store
+        const todayStart = `${dateStr} 00:00:00`;
+        const todayEnd = `${dateStr} 23:59:59.999`;
+
+        // Find the next daily queue number for this store using indexed range scan
         const qRes = await context.env.DB.prepare(`
             SELECT COALESCE(MAX(queue_no), 0) as maxQ 
             FROM queues 
-            WHERE userId = ? AND created_at LIKE ?
-        `).bind(storeId, `${dateStr}%`).first();
+            WHERE userId = ? AND created_at >= ? AND created_at <= ?
+        `).bind(storeId, todayStart, todayEnd).first();
         
         const nextQueueNo = (qRes?.maxQ || 0) + 1;
         const id = payload.id || crypto.randomUUID();

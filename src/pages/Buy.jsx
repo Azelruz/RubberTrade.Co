@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
@@ -6,7 +7,7 @@ import toast from 'react-hot-toast';
 import { addBuyRecord, fetchBuyRecords, deleteRecord, updateRecord, fetchFarmers, fetchDailyPrice, getSettings, fetchEmployees, fetchFarmerEmployees, saveReceiptImageToDrive, deleteReceiptFileToDrive, sendLineReceipt, fetchMemberTypes, isCached, addFarmer, updateQueue, fetchQueues, fetchLoans, fetchLoanDeductions, getPendingDeletes, getPendingUpdates } from '../services/apiService';
 import { db } from '../services/db';
 import { truncateOneDecimal, calculateDrcBonus } from '../utils/calculations';
-import { printRecord } from '../utils/PrintService';
+import { printRecord, whenPrintIdle } from '../utils/PrintService';
 
 // Sub-components
 import DeleteConfirmDialog from './buy/DeleteConfirmDialog';
@@ -178,6 +179,16 @@ export const Buy = () => {
         }
     }, [watchDrc, watchFarmerId, watchRubberType, farmers, memberTypes, dailyPriceObj.price, settings.cupLumpPrice, setValue, drcBonuses, dirtyFields.basePrice, dirtyFields.bonusDrc, settings.fscBonus, watchEnableFsc, watchPricePerKg, watchBonusDrc, watchBasePrice]);
 
+    // Pre-cache the store logo so the print iframe never waits for a network download
+    const receiptLogoUrl = settings?.logoUrl || settings?.logo_url || settings?.logo_Url;
+    useEffect(() => {
+        if (typeof receiptLogoUrl === 'string' && receiptLogoUrl.trim() && receiptLogoUrl !== 'null' && receiptLogoUrl !== 'undefined') {
+            const img = new Image();
+            img.decoding = 'async';
+            img.src = receiptLogoUrl;
+        }
+    }, [receiptLogoUrl]);
+
     // Load data
     useEffect(() => {
         loadData();
@@ -210,6 +221,16 @@ export const Buy = () => {
         };
     }, []);
 
+    // Preload html2canvas in background so receipt generation never waits on CDN
+    useEffect(() => {
+        if (typeof window !== 'undefined' && !window.html2canvas) {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+            script.async = true;
+            document.head.appendChild(script);
+        }
+    }, []);
+
     // Reset pagination and reload data when date filter changes
     useEffect(() => {
         setCurrentPage(1);
@@ -221,6 +242,16 @@ export const Buy = () => {
     useEffect(() => {
         setCurrentPage(1);
     }, [searchTerm]);
+
+    // a11y: Escape key listener for queue modal
+    useEffect(() => {
+        if (!showQueueModal) return;
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') setShowQueueModal(false);
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [showQueueModal]);
 
     const getActiveStoreId = () => {
         return localStorage.getItem('rt_active_store_id') || user?.storeId || user?.id || null;
@@ -356,6 +387,8 @@ export const Buy = () => {
             const storeLocalBuys = (localBuys || []).filter(r => 
                 !currentStoreId || !r.userId || String(r.userId) === String(currentStoreId)
             );
+            // Don't re-render the large table while a receipt print preview is being prepared
+            await whenPrintIdle();
             setRecords(prev => mergeRecords(prev, storeLocalBuys));
             setFarmers(prev => isSameData(prev, localFarmers) ? prev : (localFarmers || []));
             setEmployees(prev => isSameData(prev, localEmployees) ? prev : (localEmployees || []));
@@ -404,6 +437,7 @@ export const Buy = () => {
                 fetchFarmerEmployees()
             ]);
 
+            await whenPrintIdle();
             React.startTransition(() => {
                 if (Array.isArray(buyData)) {
                     setRecords(prev => {
@@ -521,12 +555,13 @@ export const Buy = () => {
                 });
             }
 
-            // --- E-Slip Generation ---
-            let receiptUrl = '';
+            // --- E-Slip Flags ---
             const shouldPrintESlip = settings.printESlip === undefined ? true : (settings.printESlip === 'true' || settings.printESlip === true);
-            
-            if (!isDemo && shouldPrintESlip) {
-                toast.loading('กำลังสร้าง E-Slip...', { id: toastId });
+            const shouldPrintPaper = settings.printPaperSlip === undefined ? true : (settings.printPaperSlip === 'true' || settings.printPaperSlip === true);
+
+            // Asynchronous Background E-Slip capture & upload (Non-blocking: does not freeze paper printing)
+            const captureAndUploadESlipBackground = async (buyId, targetFarmerId) => {
+                if (isDemo || !shouldPrintESlip) return;
                 try {
                     if (!window.html2canvas) {
                         await new Promise((resolve, reject) => {
@@ -539,25 +574,39 @@ export const Buy = () => {
                     const element = eslipRef.current;
                     if (element) {
                         element.style.display = 'block';
-                        await new Promise(r => setTimeout(r, 800));
+                        await new Promise(r => setTimeout(r, 100));
                         const captureEl = element.querySelector('.eslip-capture');
-                        const canvas = await window.html2canvas(captureEl, {
-                            scale: 2, useCORS: true, backgroundColor: '#ffffff',
-                            width: 500, logging: false, windowWidth: 500,
-                            scrollX: 0, scrollY: 0
-                        });
-                        element.style.display = 'none';
-                        const base64 = canvas.toDataURL('image/png');
-                        const filename = `ESlip_Buy_${Date.now()}.png`;
-                        const uploadRes = await saveReceiptImageToDrive(base64, filename);
-                        if (uploadRes.status === 'success') {
-                            receiptUrl = uploadRes.url;
+                        if (captureEl && window.html2canvas) {
+                            const canvas = await window.html2canvas(captureEl, {
+                                scale: 2, useCORS: true, backgroundColor: '#ffffff',
+                                width: 500, logging: false, windowWidth: 500,
+                                scrollX: 0, scrollY: 0
+                            });
+                            element.style.display = 'none';
+                            const base64 = canvas.toDataURL('image/png');
+                            const filename = `ESlip_Buy_${Date.now()}.png`;
+                            const uploadRes = await saveReceiptImageToDrive(base64, filename);
+                            if (uploadRes && uploadRes.status === 'success' && uploadRes.url) {
+                                const uploadedUrl = uploadRes.url;
+                                if (buyId) {
+                                    updateRecord('buys', buyId, { receiptUrl: uploadedUrl }).catch(() => {});
+                                }
+                                if (targetFarmerId) {
+                                    sendLineReceipt(targetFarmerId, uploadedUrl)
+                                        .then(r => console.log('LINE Sent:', r))
+                                        .catch(e => console.error('LINE Error:', e));
+                                }
+                            }
+                        } else {
+                            element.style.display = 'none';
                         }
                     }
                 } catch (e) {
-                    console.error('E-Slip error:', e);
+                    console.error('Background E-Slip generation error:', e);
                 }
-            }
+            };
+
+            let receiptUrl = '';
 
             const payload = {
                 date: data.date, farmerId, farmerName, employeeId: data.employeeId || selectedEmployee?.id || null,
@@ -594,8 +643,26 @@ export const Buy = () => {
             } else {
                 const res = await addBuyRecord(payload);
                 if (res.status === 'success') {
-                    toast.success('บันทึกสำเร็จ', { id: toastId });
                     const newRecord = { ...payload, id: res.id, isOptimistic: true, timestamp: new Date().toISOString() };
+
+                    // PRINT FIRST: open the receipt preview before any other heavy work
+                    // (table re-render, Dexie loan updates, queue network call, E-Slip capture).
+                    let printDone = Promise.resolve();
+                    if (shouldPrintPaper) {
+                        toast.dismiss();
+                        printDone = handlePrintReceipt(newRecord);
+                    } else {
+                        toast.success('บันทึกสำเร็จ', { id: toastId });
+                    }
+
+                    // E-Slip (html2canvas) is very CPU heavy - run it only after the print dialog has opened
+                    if (shouldPrintESlip) {
+                        printDone
+                            .then(() => whenPrintIdle())
+                            .then(() => captureAndUploadESlipBackground(res.id, farmerId))
+                            .catch(() => {});
+                    }
+
                     setRecords(prev => sortBuys([newRecord, ...prev]));
 
                     // Update local Dexie DB for loans and loan_deductions
@@ -665,12 +732,6 @@ export const Buy = () => {
                         setActiveQueue(null);
                     }
 
-                    if (receiptUrl && farmerId) {
-                        sendLineReceipt(farmerId, receiptUrl)
-                            .then(r => console.log('LINE Sent:', r))
-                            .catch(e => console.error('LINE Error:', e));
-                    }
-
                     reset({
                         date: format(new Date(), 'yyyy-MM-dd'), farmerId: '', farmerName: '',
                         weight: '', bucketWeight: '', drc: '',
@@ -679,14 +740,6 @@ export const Buy = () => {
                     });
                     setFarmerSearch('');
                     setSubmitting(false);
-
-                    const shouldPrintPaper = settings.printPaperSlip === undefined ? true : (settings.printPaperSlip === 'true' || settings.printPaperSlip === true);
-                    if (shouldPrintPaper) {
-                        setTimeout(() => {
-                            toast.dismiss();
-                            handlePrintReceipt(newRecord);
-                        }, 500);
-                    }
                 } else {
                     setSubmitting(false);
                     toast.error(res.message, { id: toastId });
@@ -767,13 +820,29 @@ export const Buy = () => {
     };
 
     const handlePrintReceipt = (record) => {
-        setPrintingReceipt(record);
-        setTimeout(() => {
-            if (printRef.current) {
-                printRecord(printRef.current.innerHTML);
-                setPrintingReceipt(null);
-            }
-        }, 500);
+        // Render the hidden receipt synchronously so we can print right away (no timer delay)
+        try {
+            flushSync(() => setPrintingReceipt(record));
+        } catch (e) {
+            setPrintingReceipt(record);
+        }
+        if (printRef.current) {
+            const html = printRef.current.innerHTML;
+            setPrintingReceipt(null);
+            return printRecord(html);
+        }
+        // Fallback: ref not ready yet - retry on next frame
+        return new Promise((resolve) => {
+            requestAnimationFrame(() => {
+                if (printRef.current) {
+                    const html = printRef.current.innerHTML;
+                    setPrintingReceipt(null);
+                    printRecord(html).then(resolve);
+                } else {
+                    resolve();
+                }
+            });
+        });
     };
 
     const calculateTotal = () => {
@@ -967,9 +1036,14 @@ export const Buy = () => {
             <DeleteConfirmDialog confirmDeleteId={confirmDeleteId} setConfirmDeleteId={setConfirmDeleteId} confirmDelete={confirmDelete} />
 
             {showQueueModal && (
-                <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center">
+                <div 
+                    className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="queue-modal-title"
+                >
                     <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-lg w-full mx-4 border border-gray-100 animate-in fade-in duration-200">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">ดึงข้อมูลคิวที่วัด % ยางเสร็จแล้ว</h3>
+                        <h3 id="queue-modal-title" className="text-lg font-bold text-gray-900 mb-4">ดึงข้อมูลคิวที่วัด % ยางเสร็จแล้ว</h3>
                         <div className="divide-y divide-gray-100 max-h-60 overflow-y-auto mb-5">
                             {waitingPaymentQueues.length === 0 ? (
                                 <p className="text-sm text-gray-400 py-6 text-center italic">ไม่มีคิวที่รอชำระเงินในขณะนี้</p>
@@ -981,7 +1055,15 @@ export const Buy = () => {
                                             handleSelectQueue(q);
                                             setShowQueueModal(false);
                                         }}
-                                        className="p-3 text-sm hover:bg-rubber-50 hover:text-rubber-700 cursor-pointer transition-colors flex justify-between items-center"
+                                        className="p-3 text-sm hover:bg-rubber-50 hover:text-rubber-700 cursor-pointer transition-colors flex justify-between items-center rounded-lg"
+                                        role="button"
+                                        tabIndex={0}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                handleSelectQueue(q);
+                                                setShowQueueModal(false);
+                                            }
+                                        }}
                                     >
                                         <div className="flex items-center space-x-3">
                                             <span className="font-mono font-black text-rubber-700 text-lg">
@@ -999,9 +1081,12 @@ export const Buy = () => {
                         <div className="flex justify-end">
                             <button 
                                 onClick={() => setShowQueueModal(false)}
-                                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold"
+                                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold focus:ring-2 focus:ring-gray-400 focus:outline-none"
+                                title="ปิดหน้าต่าง (Esc)"
+                                aria-label="ปิดหน้าต่างคิว"
+                                autoFocus
                             >
-                                ปิดหน้าต่าง
+                                ปิดหน้าต่าง (Esc)
                             </button>
                         </div>
                     </div>

@@ -204,7 +204,7 @@ export const TransactionHistory = () => {
                 printRecord(buyPrintRef.current.innerHTML);
                 setPrintingReceipt(null);
             }
-        }, 500);
+        }, 80);
     };
 
     const handlePrintSell = (record) => {
@@ -214,7 +214,7 @@ export const TransactionHistory = () => {
                 printRecord(sellPrintRef.current.innerHTML);
                 setPrintingSellRecord(null);
             }
-        }, 500);
+        }, 80);
     };
 
     const [allPrintRecords, setAllPrintRecords] = useState([]);

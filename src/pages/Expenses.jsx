@@ -3,11 +3,45 @@ import { useAuth } from '../context/AuthContext';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
-import { PlusCircle, Trash2, Edit2, Receipt, Users, Search, Wallet, Calendar, Tag, FileText, Printer, Sparkles, Camera } from 'lucide-react';
+import { PlusCircle, Trash2, Edit2, Receipt, Users, Search, Wallet, Calendar, Tag, FileText, Printer, Sparkles, Camera, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { calculateWage } from '../utils/calculations';
 import { fetchExpenses, addExpense, fetchWages, addWage, fetchStaff, fetchBuyRecords, deleteRecord, updateRecord, getSettings, isCached, scanExpenseReceiptWithAI } from '../services/apiService';
 import ReportPrintHeader from '../components/ReportPrintHeader';
+
+const getMonthRange = (yyyyMm) => {
+    if (!yyyyMm || !/^\d{4}-\d{2}$/.test(yyyyMm)) {
+        return { startDate: '', endDate: '' };
+    }
+    const [year, month] = yyyyMm.split('-').map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    return {
+        startDate: `${yyyyMm}-01`,
+        endDate: `${yyyyMm}-${String(lastDay).padStart(2, '0')}`
+    };
+};
+
+const shiftMonth = (yyyyMm, delta) => {
+    if (!yyyyMm || !/^\d{4}-\d{2}$/.test(yyyyMm)) {
+        return format(new Date(), 'yyyy-MM');
+    }
+    const [year, month] = yyyyMm.split('-').map(Number);
+    const targetDate = new Date(year, month - 1 + delta, 1);
+    return format(targetDate, 'yyyy-MM');
+};
+
+const formatThaiMonth = (yyyyMm) => {
+    if (!yyyyMm || !/^\d{4}-\d{2}$/.test(yyyyMm)) return yyyyMm || '';
+    try {
+        const [year, month] = yyyyMm.split('-').map(Number);
+        const date = new Date(year, month - 1, 1);
+        const thaiMonthName = format(date, 'MMMM', { locale: th });
+        const thaiYear = year + 543;
+        return `${thaiMonthName} ${thaiYear}`;
+    } catch {
+        return yyyyMm;
+    }
+};
 
 const EXPENSE_CATEGORIES = [
     'ค่าน้ำมัน',
@@ -31,8 +65,11 @@ export const Expenses = () => {
     const [settings, setSettings] = useState({});
     const [loading, setLoading] = useState(true);
     const todayStr = format(new Date(), 'yyyy-MM-dd');
-    const [startDate, setStartDate] = useState(todayStr);
-    const [endDate, setEndDate] = useState(todayStr);
+    const currentMonthStr = format(new Date(), 'yyyy-MM');
+    const [filterMode, setFilterMode] = useState('month'); // 'month' | 'custom' | 'all'
+    const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
+    const [customStartDate, setCustomStartDate] = useState(todayStr);
+    const [customEndDate, setCustomEndDate] = useState(todayStr);
     const [showExpenseForm, setShowExpenseForm] = useState(false);
     const [showWageForm, setShowWageForm] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -42,6 +79,40 @@ export const Expenses = () => {
     const [isScanningAI, setIsScanningAI] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const isDemo = false;
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(15);
+
+    const { startDate, endDate } = React.useMemo(() => {
+        if (filterMode === 'month') {
+            return getMonthRange(selectedMonth);
+        }
+        if (filterMode === 'custom') {
+            return { startDate: customStartDate, endDate: customEndDate };
+        }
+        return { startDate: '', endDate: '' };
+    }, [filterMode, selectedMonth, customStartDate, customEndDate]);
+
+    const handlePrevMonth = () => {
+        setSelectedMonth(prev => shiftMonth(prev, -1));
+    };
+
+    const handleNextMonth = () => {
+        setSelectedMonth(prev => shiftMonth(prev, 1));
+    };
+
+    const handleCurrentMonth = () => {
+        setSelectedMonth(currentMonthStr);
+    };
+
+    useEffect(() => {
+        getSettings().then(s => s && setSettings(s)).catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeTab, searchTerm, selectedMonth, customStartDate, customEndDate, filterMode]);
 
     const compressImageForScan = (file) => {
         return new Promise((resolve) => {
@@ -363,6 +434,95 @@ export const Expenses = () => {
     const totalExpenses = filteredExpenses.reduce((s, r) => s + Number(r.amount || 0), 0);
     const totalWages = filteredWages.reduce((s, r) => s + Number(r.total || 0), 0);
 
+    const activeList = activeTab === 'expenses' ? filteredExpenses : filteredWages;
+    const totalRecords = activeList.length;
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const safePage = Math.min(Math.max(1, currentPage), totalPages);
+
+    const paginatedExpenses = filteredExpenses.slice((safePage - 1) * pageSize, safePage * pageSize);
+    const paginatedWages = filteredWages.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+    const renderPagination = (itemsCount) => {
+        if (itemsCount <= 0) return null;
+        const pageCount = Math.max(1, Math.ceil(itemsCount / pageSize));
+        const startIdx = (safePage - 1) * pageSize + 1;
+        const endIdx = Math.min(safePage * pageSize, itemsCount);
+
+        return (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-white border border-gray-100 rounded-xl mt-3 text-xs text-gray-600">
+                <div className="flex items-center space-x-1 sm:space-x-2">
+                    <span>แสดง</span>
+                    <span className="font-bold text-gray-900">{startIdx} - {endIdx}</span>
+                    <span>จากทั้งหมด</span>
+                    <span className="font-bold text-gray-900">{itemsCount}</span>
+                    <span>รายการ</span>
+                </div>
+
+                <div className="flex items-center space-x-1 sm:space-x-2">
+                    <div className="flex items-center mr-2">
+                        <span className="mr-1 text-gray-500">แถวต่อหน้า:</span>
+                        <select
+                            value={pageSize}
+                            onChange={(e) => {
+                                setPageSize(Number(e.target.value));
+                                setCurrentPage(1);
+                            }}
+                            className="bg-gray-50 border border-gray-200 rounded px-1.5 py-1 text-xs font-medium focus:ring-1 focus:ring-rubber-500 cursor-pointer"
+                        >
+                            <option value={10}>10</option>
+                            <option value={15}>15</option>
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                        </select>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setCurrentPage(1)}
+                        disabled={safePage === 1}
+                        className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed text-gray-600"
+                        title="หน้าแรก"
+                    >
+                        <ChevronsLeft size={14} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={safePage === 1}
+                        className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed text-gray-600"
+                        title="ก่อนหน้า"
+                    >
+                        <ChevronLeft size={14} />
+                    </button>
+
+                    <span className="px-2.5 py-1 font-bold text-rubber-700 bg-rubber-50 border border-rubber-100 rounded-lg">
+                        {safePage} / {pageCount}
+                    </span>
+
+                    <button
+                        type="button"
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, pageCount))}
+                        disabled={safePage >= pageCount}
+                        className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed text-gray-600"
+                        title="ถัดไป"
+                    >
+                        <ChevronRight size={14} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setCurrentPage(pageCount)}
+                        disabled={safePage >= pageCount}
+                        className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed text-gray-600"
+                        title="หน้าสุดท้าย"
+                    >
+                        <ChevronsRight size={14} />
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
     const watchStaffId = wageForm.watch('staffId');
     const selectedStaffSalary = staffList.find(s => s.id === watchStaffId)?.salary || '';
 
@@ -405,40 +565,106 @@ export const Expenses = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">บันทึกค่าใช้จ่าย</h1>
-                    <p className="text-gray-500">จัดการค่าใช้จ่ายรายวันและค่าจ้างพนักงาน</p>
+                    <p className="text-gray-500 text-sm">จัดการค่าใช้จ่ายรายวันและค่าจ้างพนักงาน ({filterMode === 'month' ? `ประจำเดือน ${formatThaiMonth(selectedMonth)}` : (startDate || endDate ? `${startDate || 'แรกเริ่ม'} ถึง ${endDate || 'ปัจจุบัน'}` : 'ข้อมูลทั้งหมด')})</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-xs text-sm">
-                        <Calendar size={16} className="text-gray-400 mr-2 flex-shrink-0" />
-                        <input 
-                            type="date" 
-                            value={startDate} 
-                            onChange={(e) => setStartDate(e.target.value)}
-                            className="border-none focus:ring-0 text-xs font-bold text-gray-700 bg-transparent p-0 cursor-pointer"
-                        />
-                        <span className="mx-2 text-gray-400 font-bold text-xs">-</span>
-                        <input 
-                            type="date" 
-                            value={endDate} 
-                            onChange={(e) => setEndDate(e.target.value)}
-                            className="border-none focus:ring-0 text-xs font-bold text-gray-700 bg-transparent p-0 cursor-pointer"
-                        />
-                    </div>
-                    {(startDate || endDate) && (
+                <div className="flex flex-wrap items-center gap-2.5">
+                    {/* Mode Toggle: Month vs Custom */}
+                    <div className="bg-gray-100 p-0.5 rounded-xl flex items-center text-xs">
                         <button
-                            onClick={() => { setStartDate(''); setEndDate(''); }}
+                            type="button"
+                            onClick={() => setFilterMode('month')}
+                            className={`px-3 py-1.5 rounded-lg font-bold transition-all ${filterMode === 'month' ? 'bg-white text-rubber-700 shadow-xs' : 'text-gray-500 hover:text-gray-900'}`}
+                        >
+                            รายเดือน
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setFilterMode('custom')}
+                            className={`px-3 py-1.5 rounded-lg font-bold transition-all ${filterMode === 'custom' ? 'bg-white text-rubber-700 shadow-xs' : 'text-gray-500 hover:text-gray-900'}`}
+                        >
+                            กำหนดวัน
+                        </button>
+                    </div>
+
+                    {/* Month Navigator (Default) */}
+                    {filterMode === 'month' ? (
+                        <div className="flex items-center bg-white border border-gray-200 rounded-xl px-2 py-1.5 shadow-xs">
+                            <button
+                                type="button"
+                                onClick={handlePrevMonth}
+                                className="p-1 text-gray-500 hover:text-rubber-600 hover:bg-gray-100 rounded-lg transition-all"
+                                title="เดือนก่อนหน้า"
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+                            <div className="flex items-center mx-1">
+                                <Calendar size={14} className="text-rubber-600 mr-1.5 flex-shrink-0" />
+                                <input 
+                                    type="month" 
+                                    value={selectedMonth} 
+                                    onChange={(e) => e.target.value && setSelectedMonth(e.target.value)}
+                                    className="border-none focus:ring-0 text-xs font-bold text-gray-800 bg-transparent p-0 cursor-pointer"
+                                />
+                                <span className="text-[11px] text-gray-500 font-medium ml-1.5 hidden md:inline">
+                                    ({formatThaiMonth(selectedMonth)})
+                                </span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleNextMonth}
+                                className="p-1 text-gray-500 hover:text-rubber-600 hover:bg-gray-100 rounded-lg transition-all"
+                                title="เดือนถัดไป"
+                            >
+                                <ChevronRight size={16} />
+                            </button>
+                            {selectedMonth !== currentMonthStr && (
+                                <button
+                                    type="button"
+                                    onClick={handleCurrentMonth}
+                                    className="ml-1.5 px-2 py-1 text-[11px] font-bold text-rubber-600 bg-rubber-50 hover:bg-rubber-100 rounded-md transition-all"
+                                    title="กลับมาเดือนปัจจุบัน"
+                                >
+                                    เดือนนี้
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 py-1.5 shadow-xs text-sm">
+                            <Calendar size={15} className="text-gray-400 mr-2 flex-shrink-0" />
+                            <input 
+                                type="date" 
+                                value={customStartDate} 
+                                onChange={(e) => setCustomStartDate(e.target.value)}
+                                className="border-none focus:ring-0 text-xs font-bold text-gray-700 bg-transparent p-0 cursor-pointer"
+                            />
+                            <span className="mx-2 text-gray-400 font-bold text-xs">-</span>
+                            <input 
+                                type="date" 
+                                value={customEndDate} 
+                                onChange={(e) => setCustomEndDate(e.target.value)}
+                                className="border-none focus:ring-0 text-xs font-bold text-gray-700 bg-transparent p-0 cursor-pointer"
+                            />
+                        </div>
+                    )}
+
+                    {filterMode === 'custom' && (customStartDate || customEndDate) && (
+                        <button
+                            type="button"
+                            onClick={() => { setCustomStartDate(''); setCustomEndDate(''); }}
                             className="px-2.5 py-1.5 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-bold transition-all"
                             title="แสดงข้อมูลย้อนหลังทั้งหมด"
                         >
                             แสดงทั้งหมด
                         </button>
                     )}
+
                     <button 
+                        type="button"
                         onClick={() => window.print()}
-                        className="flex items-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-md shadow-emerald-100 text-sm border border-emerald-700"
+                        className="flex items-center px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all shadow-sm text-xs border border-emerald-700"
                         title="พิมพ์รายงานสรุป"
                     >
-                        <Printer size={18} className="mr-2" />
+                        <Printer size={15} className="mr-1.5" />
                         พิมพ์รายงาน
                     </button>
                 </div>
@@ -618,7 +844,7 @@ export const Expenses = () => {
                                                 <Receipt size={36} className="mx-auto mb-2 opacity-20" />
                                                 ยังไม่มีรายการค่าใช้จ่าย
                                             </td></tr>
-                                        ) : filteredExpenses.map((r, i) => (
+                                        ) : paginatedExpenses.map((r, i) => (
                                             <tr key={r.id || i} className="hover:bg-gray-50/50 transition-colors">
                                                 <td className="px-5 py-4 whitespace-nowrap text-gray-600">
                                                     <div className="flex items-center space-x-1"><Calendar size={13} className="text-gray-400" /><span>{r.date}</span></div>
@@ -641,7 +867,7 @@ export const Expenses = () => {
                                                 <td className="px-5 py-4 text-center">
                                                     <div className="flex items-center justify-center space-x-2">
                                                         {(user?.role === 'owner' || user?.role === 'staff') && (
-                                                            <>
+                                                             <>
                                                                 <button onClick={() => handleEdit('Expenses', r)}
                                                                     className="text-gray-300 hover:text-blue-500 transition-colors p-1"><Edit2 size={17} /></button>
                                                                 <button onClick={() => handleDelete('Expenses', r.id)}
@@ -665,6 +891,7 @@ export const Expenses = () => {
                                     )}
                                 </table>
                             </div>
+                            {renderPagination(filteredExpenses.length)}
                         </div>
                     )}
 
@@ -804,7 +1031,7 @@ export const Expenses = () => {
                                                 <Users size={36} className="mx-auto mb-2 opacity-20" />
                                                 ยังไม่มีรายการค่าจ้าง
                                             </td></tr>
-                                        ) : filteredWages.map((r, i) => (
+                                        ) : paginatedWages.map((r, i) => (
                                             <tr key={r.id || i} className="hover:bg-gray-50/50 transition-colors">
                                                 <td className="px-5 py-4 whitespace-nowrap text-gray-600">{r.date}</td>
                                                 <td className="px-5 py-4 font-semibold text-gray-900">{r.staffName}</td>
@@ -839,6 +1066,7 @@ export const Expenses = () => {
                                     )}
                                 </table>
                             </div>
+                            {renderPagination(filteredWages.length)}
                         </div>
                     )}
                 </div>
@@ -851,6 +1079,7 @@ export const Expenses = () => {
                 <ReportPrintHeader 
                     settings={settings}
                     title={activeTab === 'expenses' ? 'รายงานสรุปค่าใช้จ่ายรายวัน' : 'รายงานสรุปค่าจ้างพนักงาน'}
+                    subtitle={filterMode === 'month' ? `ประจำเดือน: ${formatThaiMonth(selectedMonth)}` : (startDate || endDate ? `ช่วงวันที่: ${startDate || 'เริ่มต้น'} ถึง ${endDate || 'ปัจจุบัน'}` : 'ข้อมูลทั้งหมด')}
                 />
 
                 {/* Summary Box */}

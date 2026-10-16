@@ -366,15 +366,11 @@ export const SellAI = () => {
             let receiptUrl = data.receiptUrl || '';
 
             if (selectedFile) {
-                toast.loading('กำลังอัปโหลดรูปภาพ...', { id: toastId });
-                const reader = new FileReader();
-                const base64Promise = new Promise((resolve) => {
-                    reader.onloadend = () => resolve(reader.result);
-                    reader.readAsDataURL(selectedFile);
-                });
-                const base64 = await base64Promise;
-                const filename = `Sell_Receipt_${Date.now()}.png`;
-                const uploadRes = await saveReceiptImageToDrive(base64, filename);
+                toast.loading('กำลังย่อขนาดและอัปโหลดรูปภาพ...', { id: toastId });
+                const { compressImage } = await import('../utils/imageCompressor');
+                const compressed = await compressImage(selectedFile, { maxWidth: 1600, quality: 0.8 });
+                const filename = `Sell_Receipt_${Date.now()}.jpg`;
+                const uploadRes = await saveReceiptImageToDrive(compressed.base64, filename);
                 if (uploadRes.status === 'success') {
                     receiptUrl = uploadRes.url;
                 }
@@ -516,7 +512,7 @@ export const SellAI = () => {
                 toast.dismiss(toastId);
                 setPrintingRecord(null);
             }
-        }, 600);
+        }, 80);
     };
 
     const calculateDryRubber = () => {

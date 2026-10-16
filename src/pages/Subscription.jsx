@@ -46,21 +46,27 @@ const Subscription = () => {
         }
     };
 
-    const handleFileChange = (e) => {
+    const handleFileChange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        if (file.size > 2 * 1024 * 1024) {
-            toast.error('ไฟล์มีขนาดเกิน 2MB');
-            return;
+        const toastId = toast.loading('กำลังประมวลผลสลิป...');
+        try {
+            const { compressImage } = await import('../utils/imageCompressor');
+            const compressed = await compressImage(file, { maxWidth: 1600, quality: 0.8 });
+            setFilename(file.name);
+            setSlip64(compressed.base64);
+            toast.success(`เตรียมสลิปเรียบร้อย (${compressed.formattedCompressedSize})`, { id: toastId });
+        } catch (err) {
+            console.error('Error compressing slip:', err);
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => {
+                setSlip64(reader.result);
+                setFilename(file.name);
+                toast.success('แนบไฟล์เรียบร้อย', { id: toastId });
+            };
         }
-
-        setFilename(file.name);
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => {
-            setSlip64(reader.result);
-        };
     };
 
     const handleSubmit = async (e) => {
@@ -368,7 +374,7 @@ const Subscription = () => {
                                                             </div>
                                                             <div className="text-center">
                                                                 <span className="font-black text-sm text-gray-600 block">เลือกไฟล์รูปภาพหลักฐาน</span>
-                                                                <span className="text-[10px] font-bold text-gray-400 uppercase">Max size: 2MB</span>
+                                                                <span className="text-[10px] font-bold text-rubber-600 uppercase">⚡ ระบบย่อขนาดไฟล์อัตโนมัติ</span>
                                                             </div>
                                                         </>
                                                     )}

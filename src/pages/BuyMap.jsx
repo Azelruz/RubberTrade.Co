@@ -180,7 +180,7 @@ export const BuyMap = () => {
                         printRecord(printRef.current.innerHTML);
                         setPrintingReceipt(null);
                     }
-                }, 500);
+                }, 80);
             }
 
             // Refresh status immediately so marker turns green

@@ -12,6 +12,7 @@ import {
 } from '../../services/apiService';
 import { useAuth } from '../../context/AuthContext';
 import db from '../../services/db';
+import { ErrorButton } from '../../components/ErrorButton';
 
 export const GeneralSettings = () => {
     const { user } = useAuth();
@@ -38,7 +39,8 @@ export const GeneralSettings = () => {
             printPaperSlip: true,
             showPrizeDraw: true,
             enableBuyMap: true,
-            enableSellAI: true
+            enableSellAI: true,
+            enableCooperatives: true
         }
     });
 
@@ -139,7 +141,8 @@ export const GeneralSettings = () => {
                     printPaperSlip: res.data.printPaperSlip === undefined ? true : (res.data.printPaperSlip === 'true' || res.data.printPaperSlip === true),
                     showPrizeDraw: res.data.showPrizeDraw === undefined ? true : (res.data.showPrizeDraw === 'true' || res.data.showPrizeDraw === true),
                     enableBuyMap: res.data.enableBuyMap === undefined ? true : (res.data.enableBuyMap === 'true' || res.data.enableBuyMap === true),
-                    enableSellAI: res.data.enableSellAI === undefined ? true : (res.data.enableSellAI === 'true' || res.data.enableSellAI === true)
+                    enableSellAI: res.data.enableSellAI === undefined ? true : (res.data.enableSellAI === 'true' || res.data.enableSellAI === true),
+                    enableCooperatives: res.data.enableCooperatives === undefined ? true : (res.data.enableCooperatives === 'true' || res.data.enableCooperatives === true)
                 });
                 setLogoUrl(res.data.logoUrl || res.data.logo_url || '');
             }
@@ -173,27 +176,20 @@ export const GeneralSettings = () => {
         const file = e.target.files[0];
         if (!file) return;
 
-        if (file.size > 2 * 1024 * 1024) {
-            toast.error('ไฟล์มีขนาดใหญ่เกินไป (สูงสุด 2MB)');
-            return;
-        }
-
-        const toastId = toast.loading('กำลังอัปโหลดโลโก้...');
+        const toastId = toast.loading('กำลังปรับขนาดและอัปโหลดโลโก้...');
         try {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = async () => {
-                const base64 = reader.result;
-                const filename = `logo_${Date.now()}.${file.name.split('.').pop()}`;
-                const res = await saveReceiptImageToDrive(base64, filename);
-                if (res.status === 'success') {
-                    setLogoUrl(res.url);
-                    toast.success('อัปโหลดโลโก้สำเร็จ', { id: toastId });
-                } else {
-                    toast.error('อัปโหลดล้มเหลว: ' + res.message, { id: toastId });
-                }
-            };
+            const { compressImage } = await import('../../utils/imageCompressor');
+            const compressed = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.85, mimeType: 'image/png' });
+            const filename = `logo_${Date.now()}.png`;
+            const res = await saveReceiptImageToDrive(compressed.base64, filename);
+            if (res.status === 'success') {
+                setLogoUrl(res.url);
+                toast.success(`อัปโหลดโลโก้สำเร็จ (${compressed.formattedCompressedSize})`, { id: toastId });
+            } else {
+                toast.error('อัปโหลดล้มเหลว: ' + res.message, { id: toastId });
+            }
         } catch (error) {
+            console.error('Logo upload error:', error);
             toast.error('เกิดข้อผิดพลาดในการอัปโหลด', { id: toastId });
         }
     };
@@ -420,6 +416,10 @@ export const GeneralSettings = () => {
                                     <span className="text-[11px] font-bold text-gray-600 group-hover:text-gray-900">ขายน้ำยาง (สแกน AI)</span>
                                     <input type="checkbox" {...register('enableSellAI')} className="w-4 h-4 rounded-md border-gray-300 text-rubber-600" />
                                 </label>
+                                <label className="flex items-center justify-between p-2.5 bg-white border border-gray-50 rounded-xl hover:bg-gray-50/50 transition-colors cursor-pointer group">
+                                    <span className="text-[11px] font-bold text-gray-600 group-hover:text-gray-900">กลุ่มสมาชิก & ปันผลกำไร</span>
+                                    <input type="checkbox" {...register('enableCooperatives')} className="w-4 h-4 rounded-md border-gray-300 text-rubber-600" />
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -439,7 +439,7 @@ export const GeneralSettings = () => {
 
                 {/* Maintenance Section (Danger Zone) */}
                 <div className="mt-10 pt-6 border-t border-dashed border-gray-200">
-                    <div className="max-w-md mx-auto">
+                    <div className="max-w-md mx-auto space-y-4">
                         <div className="bg-red-50/30 rounded-2xl border border-red-100 p-5 flex flex-col items-center text-center">
                             <h4 className="text-[9px] font-black text-red-800 uppercase tracking-widest mb-1.5 flex items-center">
                                 <AlertTriangle size={12} className="mr-1.5" /> Maintenance
@@ -452,6 +452,17 @@ export const GeneralSettings = () => {
                             >
                                 <Trash2 size={12} className="mr-1.5 inline" /> Reset Local DB
                             </button>
+                        </div>
+
+                        {/* Sentry Error Tracking Test */}
+                        <div className="bg-amber-50/40 rounded-2xl border border-amber-200 p-5 flex flex-col items-center text-center">
+                            <h4 className="text-[9px] font-black text-amber-800 uppercase tracking-widest mb-1.5 flex items-center">
+                                ⚡ Sentry Error Tracking Diagnostic
+                            </h4>
+                            <p className="text-[9px] text-gray-500 font-medium leading-relaxed mb-4">
+                                คลิกปุ่มด้านล่างเพื่อทดสอบยิง Error จำลองไปยัง Sentry Dashboard
+                            </p>
+                            <ErrorButton />
                         </div>
                     </div>
                 </div>

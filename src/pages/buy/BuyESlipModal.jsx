@@ -127,12 +127,28 @@ const BuyESlipModal = ({ viewingEslip, setViewingEslip, settings, farmers, membe
         finalFscBonus = derived;
     }
 
+    React.useEffect(() => {
+        if (!viewingEslip) return;
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') setViewingEslip(null);
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [viewingEslip, setViewingEslip]);
+
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-2 no-print sm:p-4">
+        <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-2 no-print sm:p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="สลิปอิเล็กทรอนิกส์"
+        >
             <div className="bg-white rounded-[1.2rem] shadow-2xl max-w-[280px] w-full max-h-[95vh] overflow-y-auto relative animate-in fade-in zoom-in duration-300">
                 <button 
                     onClick={() => setViewingEslip(null)}
-                    className="absolute right-3 top-3 z-20 bg-black/10 hover:bg-black/20 text-white p-1 rounded-full transition-all hover:scale-110 active:scale-95"
+                    aria-label="ปิดสลิป"
+                    title="ปิดสลิป (Esc)"
+                    className="absolute right-3 top-3 z-20 bg-black/10 hover:bg-black/20 text-white p-1 rounded-full transition-all hover:scale-110 active:scale-95 focus:ring-2 focus:ring-white focus:outline-none"
                 >
                     <X size={14} />
                 </button>

@@ -135,10 +135,19 @@ const ActivityLog = () => {
     };
 
     const formatDateTime = (dateStr) => {
-        const date = new Date(dateStr);
+        if (!dateStr) return '-';
+        let isoStr = dateStr;
+        if (typeof dateStr === 'string') {
+            const sqliteFormat = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/;
+            if (sqliteFormat.test(dateStr) && !dateStr.includes('Z') && !dateStr.includes('+')) {
+                isoStr = dateStr.replace(' ', 'T') + 'Z';
+            }
+        }
+        const date = new Date(isoStr);
+        if (isNaN(date.getTime())) return String(dateStr);
         return date.toLocaleString('th-TH', { 
             year: 'numeric', month: 'short', day: 'numeric',
-            hour: '2-digit', minute: '2-digit'
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
         });
     };
 
@@ -344,9 +353,9 @@ const ActivityLog = () => {
                                                     {log.username}
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-5">
+                                            <td className="px-6 py-5 whitespace-nowrap">
                                                 <div className="flex items-center text-xs text-gray-500 font-medium">
-                                                    <Calendar size={14} className="mr-2 text-gray-300" />
+                                                    <Calendar size={14} className="mr-2 text-gray-300 shrink-0" />
                                                     {formatDateTime(log.created_at)}
                                                 </div>
                                             </td>

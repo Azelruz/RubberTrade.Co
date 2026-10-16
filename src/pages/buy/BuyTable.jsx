@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileText, Search, Printer, Trash2, Eye, User, Users, Image as ImageIcon, ChevronLeft, ChevronRight, QrCode, X } from 'lucide-react';
 import { format, addYears } from 'date-fns';
 import { th } from 'date-fns/locale';
@@ -6,6 +6,16 @@ import toast from 'react-hot-toast';
 
 const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearchTerm, selectedDate, setSelectedDate, handlePrintReceipt, handleDelete, setViewingEslip, user, pagination, onPageChange, loanDeductions = [], farmers = [], employees = [] }) => {
     const [qrModalData, setQrModalData] = useState(null);
+
+    // a11y: Escape key listener for QR modal
+    useEffect(() => {
+        if (!qrModalData) return;
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') setQrModalData(null);
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [qrModalData]);
 
     const handleShowQR = (record) => {
         const farmer = (farmers || []).find(f => String(f.id) === String(record.farmerId || record.farmer_id) || f.name === record.farmerName);
@@ -136,8 +146,9 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => handleShowQR(record)}
-                                                                    className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                                                                    className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors focus:ring-2 focus:ring-blue-500 focus:outline-none"
                                                                     title="สร้าง PromptPay QR Code ชำระเงิน"
+                                                                    aria-label={`สร้าง PromptPay QR Code ชำระเงินให้ ${record.farmerName}`}
                                                                 >
                                                                     <QrCode size={15} />
                                                                 </button>
@@ -168,24 +179,27 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
                                                     <div className="flex justify-center space-x-1">
                                                         <button
                                                             onClick={() => handlePrintReceipt(record)}
-                                                            className="p-1.5 text-gray-400 hover:text-rubber-600 hover:bg-rubber-50 rounded-lg transition-all"
-                                                            title="พิมพ์ Paper-slip"
+                                                            className="p-1.5 text-gray-400 hover:text-rubber-600 hover:bg-rubber-50 rounded-lg transition-all focus:ring-2 focus:ring-rubber-500 focus:outline-none"
+                                                            title="พิมพ์ใบเสร็จ (Print)"
+                                                            aria-label={`พิมพ์ใบเสร็จของ ${record.farmerName}`}
                                                         >
                                                             <Printer size={18} />
                                                         </button>
                                                         {(user?.role === 'owner' || user?.role === 'staff') && (
                                                             <button
                                                                 onClick={() => handleDelete(record.id)}
-                                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                                                title="ลบรายการ"
+                                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all focus:ring-2 focus:ring-red-500 focus:outline-none"
+                                                                title="ลบรายการนี้"
+                                                                aria-label={`ลบรายการรับซื้อบิล ${record.id}`}
                                                             >
                                                                 <Trash2 size={18} />
                                                             </button>
                                                         )}
                                                         <button
                                                             onClick={() => setViewingEslip(record)}
-                                                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                            title="ดู E-Slip"
+                                                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                            title="ดูสลิปอิเล็กทรอนิกส์ (E-Slip)"
+                                                            aria-label={`ดูสลิปอิเล็กทรอนิกส์ของ ${record.farmerName}`}
                                                         >
                                                             <Eye size={18} />
                                                         </button>
@@ -194,8 +208,9 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
                                                                 href={record.receiptUrl || record.receipt_url}
                                                                 target="_blank"
                                                                 rel="noreferrer"
-                                                                className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all"
+                                                                className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all focus:ring-2 focus:ring-green-500 focus:outline-none"
                                                                 title="ดูรูปที่บันทึกไว้ใน Cloud"
+                                                                aria-label="ดูรูปภาพใบเสร็จบน Cloud Drive"
                                                             >
                                                                 <ImageIcon size={18} />
                                                             </a>
@@ -240,13 +255,20 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
 
             {/* PromptPay QR Code Modal */}
             {qrModalData && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                <div 
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="qr-modal-title"
+                >
                     <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden animate-in fade-in zoom-in duration-300">
                         {/* Header */}
                         <div className="bg-blue-600 p-5 text-white relative">
                             <button 
                                 onClick={() => setQrModalData(null)}
-                                className="absolute right-4 top-4 p-1 hover:bg-white/20 rounded-full transition-colors"
+                                className="absolute right-4 top-4 p-1 hover:bg-white/20 rounded-full transition-colors focus:ring-2 focus:ring-white focus:outline-none"
+                                title="ปิด (Esc)"
+                                aria-label="ปิดหน้าต่าง QR Code"
                             >
                                 <X size={20} />
                             </button>
@@ -254,7 +276,7 @@ const BuyTable = ({ filteredRecords, dailySummary, loading, searchTerm, setSearc
                                 <div className="p-2.5 bg-white/20 rounded-xl">
                                     <QrCode size={22} />
                                 </div>
-                                <h3 className="text-xl font-bold">PromptPay QR Code</h3>
+                                <h3 id="qr-modal-title" className="text-xl font-bold">PromptPay QR Code</h3>
                             </div>
 
                             {/* Tab Switcher if has employee */}

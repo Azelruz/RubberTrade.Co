@@ -18,7 +18,9 @@ import {
     Maximize2,
     X,
     Printer,
-    ExternalLink
+    ExternalLink,
+    CreditCard,
+    PiggyBank
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -34,6 +36,18 @@ const Home = () => {
     const [isScrolled, setIsScrolled] = useState(false);
     const [activePreview, setActivePreview] = useState(null);
     const [showDriverModal, setShowDriverModal] = useState(false);
+    const [showMemberModal, setShowMemberModal] = useState(false);
+    const [memberInput, setMemberInput] = useState('');
+
+    const savedMemberPortal = typeof window !== 'undefined' ? localStorage.getItem('rubbertrade_member_portal_url') : null;
+    const savedMemberName = typeof window !== 'undefined' ? localStorage.getItem('rubbertrade_member_name') : null;
+
+    const handleMemberSearch = (e) => {
+        e?.preventDefault();
+        const clean = memberInput.trim();
+        if (!clean) return;
+        navigate(`/member-portal?memberNo=${encodeURIComponent(clean)}`);
+    };
 
     useEffect(() => {
         const handleScroll = () => {
@@ -139,7 +153,7 @@ const Home = () => {
                         </span>
                     </div>
 
-                        <div className="hidden md:flex items-center gap-8 text-sm font-bold text-gray-500">
+                        <div className="hidden md:flex items-center gap-6 text-sm font-bold text-gray-500">
                         <a href="#features" className="hover:text-rubber-600 transition-colors">คุณสมบัติ</a>
                         <a href="#preview" className="hover:text-rubber-600 transition-colors">ตัวอย่างระบบ</a>
                         <a href="#packages" className="hover:text-rubber-600 transition-colors">แพ็กเกจ</a>
@@ -150,16 +164,33 @@ const Home = () => {
                             <Printer size={15} />
                             <span>ไดรเวอร์เครื่องพิมพ์</span>
                         </button>
+                        <button 
+                            onClick={() => setShowMemberModal(true)} 
+                            className="hover:text-emerald-700 transition-colors flex items-center gap-1.5 font-bold text-emerald-700 bg-emerald-50 px-3.5 py-1.5 rounded-full border border-emerald-200 shadow-sm"
+                        >
+                            <CreditCard size={15} />
+                            <span>สำหรับสมาชิก</span>
+                        </button>
                         <a href="#about" className="hover:text-rubber-600 transition-colors">เกี่ยวกับเรา</a>
                     </div>
 
-                    <button 
-                        onClick={() => navigate('/login')}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-full font-black text-sm hover:bg-rubber-600 hover:shadow-xl hover:shadow-rubber-600/20 transition-all active:scale-95"
-                    >
-                        เข้าสู่ระบบ
-                        <ChevronRight size={16} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={() => setShowMemberModal(true)}
+                            className="md:hidden flex items-center gap-1 px-3 py-2 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-full font-bold text-xs shadow-xs"
+                            title="ตรวจสอบบัตรสมาชิก"
+                        >
+                            <CreditCard size={14} />
+                            <span>บัตรสมาชิก</span>
+                        </button>
+                        <button 
+                            onClick={() => navigate('/login')}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-full font-black text-sm hover:bg-rubber-600 hover:shadow-xl hover:shadow-rubber-600/20 transition-all active:scale-95"
+                        >
+                            เข้าสู่ระบบ
+                            <ChevronRight size={16} />
+                        </button>
+                    </div>
                 </div>
             </nav>
 
@@ -188,7 +219,7 @@ const Home = () => {
                             ลดข้อผิดพลาดงานบัญชี และเพิ่มประสิทธิภาพการทำงานให้สูงสุด
                         </p>
 
-                        <div className="flex flex-col sm:flex-row items-center gap-4 pt-4">
+                        <div className="flex flex-col sm:flex-row items-center gap-3 pt-4">
                             <button 
                                 onClick={() => navigate('/login')}
                                 className="w-full sm:w-auto px-8 py-5 bg-rubber-600 text-white rounded-3xl font-black text-lg shadow-2xl shadow-rubber-600/30 hover:bg-rubber-700 hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-3"
@@ -197,10 +228,17 @@ const Home = () => {
                                 <ArrowRight size={20} />
                             </button>
                             <button 
-                                onClick={() => document.getElementById('preview')?.scrollIntoView({ behavior: 'smooth' })}
-                                className="w-full sm:w-auto px-8 py-5 bg-white border-2 border-gray-100 text-gray-600 rounded-3xl font-black text-lg hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
+                                onClick={() => setShowMemberModal(true)}
+                                className="w-full sm:w-auto px-8 py-5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-2 border-emerald-300 rounded-3xl font-black text-lg shadow-md hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-3"
                             >
-                                <Smartphone size={20} />
+                                <CreditCard size={22} className="text-emerald-700" />
+                                <span>ตรวจสอบบัตรสมาชิก & เงินฝาก</span>
+                            </button>
+                            <button 
+                                onClick={() => document.getElementById('preview')?.scrollIntoView({ behavior: 'smooth' })}
+                                className="w-full sm:w-auto px-6 py-5 bg-white border-2 border-gray-100 text-gray-600 rounded-3xl font-black text-base hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+                            >
+                                <Smartphone size={18} />
                                 ดูตัวอย่างระบบ
                             </button>
                         </div>
@@ -685,6 +723,161 @@ const Home = () => {
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Member Lookup Modal */}
+            {showMemberModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 animate-in fade-in duration-300">
+                    <div 
+                        className="absolute inset-0 bg-gray-900/80 backdrop-blur-md"
+                        onClick={() => setShowMemberModal(false)}
+                    ></div>
+                    
+                    <div className="relative w-full max-w-lg bg-white rounded-[2rem] md:rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 border border-gray-100 flex flex-col">
+                        {/* Modal Header */}
+                        <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-rubber-800 p-6 md:p-8 text-white flex items-center justify-between relative overflow-hidden">
+                            <div className="flex items-center gap-4 relative z-10">
+                                <div className="p-3 bg-white/10 rounded-2xl border border-white/20 backdrop-blur-md">
+                                    <CreditCard size={28} className="text-emerald-200" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl md:text-2xl font-black tracking-tight">ข้อมูลเกษตรกร & บัตรสมาชิก</h3>
+                                    <p className="text-emerald-100 text-xs md:text-sm font-medium mt-0.5">
+                                        ตรวจสอบประวัติส่งน้ำยาง ข้อมูลสวนยาง และยอดเงินฝาก
+                                    </p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setShowMemberModal(false)}
+                                className="relative z-10 p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="p-6 md:p-8 space-y-6 bg-gray-50/50">
+                            <form onSubmit={handleMemberSearch} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">
+                                        กรอกรหัสสมาชิก, เลขทะเบียนเกษตรกร, รหัสคนกรีดยาง หรือ เบอร์โทร
+                                    </label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+                                            <Search size={20} />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            autoFocus
+                                            value={memberInput}
+                                            onChange={(e) => setMemberInput(e.target.value)}
+                                            placeholder="เช่น NAR-MB-001, MPU-F-7837, MPU-E-033 หรือ เบอร์โทร"
+                                            className="w-full pl-12 pr-4 py-4 bg-white border-2 border-gray-200 rounded-2xl text-gray-900 font-bold placeholder-gray-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 text-base md:text-lg transition-all shadow-sm"
+                                        />
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={!memberInput.trim()}
+                                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl font-black text-base shadow-lg shadow-emerald-600/25 hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <span>ค้นหาและเข้าสู่หน้าข้อมูล</span>
+                                    <ArrowRight size={18} />
+                                </button>
+                            </form>
+
+                            {/* Saved Portal in LocalStorage */}
+                            {savedMemberPortal && (
+                                <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl">
+                                    <div className="text-xs font-bold text-emerald-800 mb-1">
+                                        พบล่าสุดในอุปกรณ์นี้
+                                    </div>
+                                    <a
+                                        href={savedMemberPortal}
+                                        className="inline-flex items-center gap-2 text-sm font-black text-emerald-700 hover:text-emerald-900 underline"
+                                    >
+                                        <span>เปิดข้อมูลล่าสุดของคุณ {savedMemberName || 'เกษตรกร/สมาชิก/คนกรีด'}</span>
+                                        <ExternalLink size={14} />
+                                    </a>
+                                </div>
+                            )}
+
+                            {/* Demo Sample Button */}
+                            <div className="pt-2 border-t border-gray-200/80">
+                                <div className="text-xs font-bold text-gray-400 mb-2">
+                                    ตัวอย่างรหัสที่ค้นหาได้ในระบบ:
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMemberInput('NAR-MB-001');
+                                            navigate('/member-portal?memberNo=NAR-MB-001');
+                                        }}
+                                        className="px-3.5 py-2 bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-700 border border-gray-200 hover:border-emerald-300 rounded-xl text-xs font-black shadow-xs transition-all flex items-center gap-1.5"
+                                    >
+                                        <span>🟢 สมาชิก: NAR-MB-001 (คุณ az)</span>
+                                        <ArrowRight size={12} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMemberInput('MPU-F-7837');
+                                            navigate('/member-portal?memberNo=MPU-F-7837');
+                                        }}
+                                        className="px-3.5 py-2 bg-white hover:bg-teal-50 text-gray-700 hover:text-teal-700 border border-gray-200 hover:border-teal-300 rounded-xl text-xs font-black shadow-xs transition-all flex items-center gap-1.5"
+                                    >
+                                        <span>🌱 เกษตรกรขายยาง: MPU-F-7837 (ลุงสมยศ)</span>
+                                        <ArrowRight size={12} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMemberInput('MPU-E-033');
+                                            navigate('/member-portal?memberNo=MPU-E-033');
+                                        }}
+                                        className="px-3.5 py-2 bg-white hover:bg-amber-50 text-gray-700 hover:text-amber-800 border border-gray-200 hover:border-amber-300 rounded-xl text-xs font-black shadow-xs transition-all flex items-center gap-1.5"
+                                    >
+                                        <span>🔪 คนกรีดยาง: MPU-E-033 (พี่วะ)</span>
+                                        <ArrowRight size={12} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="text-[11px] text-gray-500 bg-white p-3.5 rounded-2xl border border-gray-100 flex items-start gap-2.5">
+                                <span className="text-base">💡</span>
+                                <div>
+                                    <strong className="text-gray-700">เคล็ดลับ:</strong> เมื่อเปิดหน้าบัตรสมาชิกแล้ว สามารถกดแชร์ (Share) แล้วเลือก <strong>"เพิ่มไปยังหน้าจอโฮม" (Add to Home Screen)</strong> เพื่อเปิดดูได้สะดวกเสมือนแอปพลิเคชัน
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-4 bg-white border-t border-gray-100 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setShowMemberModal(false)}
+                                className="px-5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-colors"
+                            >
+                                ปิด
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Quick Return to Member Portal Floating Badge */}
+            {savedMemberPortal && (
+                <div className="fixed bottom-6 right-6 z-50 animate-bounce">
+                    <a 
+                        href={savedMemberPortal} 
+                        className="flex items-center space-x-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-xl border-2 border-white transition-all backdrop-blur-md"
+                    >
+                        <span>🪪 กลับไปยังบัตรสมาชิก {savedMemberName ? `(${savedMemberName})` : ''}</span>
+                        <ChevronRight size={14} />
+                    </a>
                 </div>
             )}
         </div>

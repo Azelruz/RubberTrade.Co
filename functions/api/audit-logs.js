@@ -62,11 +62,18 @@ async function handleGet(context) {
 
         return jsonResponse({
             status: 'success',
-            results: results.map(r => ({
-                ...r,
-                oldData: r.oldData ? JSON.parse(r.oldData) : null,
-                newData: r.newData ? JSON.parse(r.newData) : null
-            })),
+            results: results.map(r => {
+                let createdAt = r.created_at;
+                if (typeof createdAt === 'string' && !createdAt.includes('Z') && !createdAt.includes('+')) {
+                    createdAt = createdAt.replace(' ', 'T') + 'Z';
+                }
+                return {
+                    ...r,
+                    created_at: createdAt,
+                    oldData: r.oldData ? JSON.parse(r.oldData) : null,
+                    newData: r.newData ? JSON.parse(r.newData) : null
+                };
+            }),
             total: totalResult?.total || 0
         });
     } catch (e) {

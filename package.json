@@ -1,14 +1,23 @@
 {
   "name": "rubertrade-co-ltd",
   "private": true,
-  "version": "1.7.7",
+  "version": "1.8.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "deploy": "npm run build && npx wrangler pages deploy dist --branch main",
     "deploy:prod": "npm run build && npx wrangler pages deploy dist --branch main",
     "deploy:test": "npm run build && npx wrangler pages deploy dist --branch test",
+    "branch:create": "node scripts/branch_manager.cjs create",
+    "branch:deploy": "node scripts/branch_manager.cjs deploy",
+    "branch:deploy-all": "node scripts/branch_manager.cjs deploy-all",
+    "branch:list": "node scripts/branch_manager.cjs list",
+    "guardian": "node scripts/system_guardian.cjs",
+    "guardian:morning": "node scripts/system_guardian.cjs --mode=morning",
+    "guardian:afternoon": "node scripts/system_guardian.cjs --mode=afternoon",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -17,11 +26,13 @@
     "@capacitor/cli": "^8.4.2",
     "@capacitor/core": "^8.4.2",
     "@line/liff": "^2.27.3",
+    "@sentry/react": "^11.4.0",
     "@supabase/supabase-js": "^2.102.1",
     "@turf/turf": "^7.4.0",
     "axios": "^1.13.6",
     "date-fns": "^4.1.0",
     "dexie": "^4.4.2",
+    "html2pdf.js": "^0.14.0",
     "jose": "^6.2.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.577.0",
@@ -48,6 +59,7 @@
     "postcss": "^8.5.8",
     "tailwindcss": "^3.4.19",
     "vite": "^7.3.1",
+    "vitest": "^5.0.3",
     "wrangler": "^4.72.0"
   }
 }

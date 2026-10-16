@@ -21,16 +21,18 @@ const SellTable = ({
                             type="date" 
                             value={selectedDate}
                             onChange={(e) => setSelectedDate(e.target.value)}
-                            className="w-full sm:w-auto px-3 py-1 border border-gray-300 rounded-lg text-sm shadow-sm" 
+                            aria-label="เลือกวันที่ประวัติการขาย"
+                            className="w-full sm:w-auto px-3 py-1 border border-gray-300 rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" 
                         />
-                        <div className="flex items-center bg-white border border-gray-300 rounded-lg px-2 py-1 shadow-sm">
+                        <div className="flex items-center bg-white border border-gray-300 rounded-lg px-2 py-1 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500">
                             <Search size={16} className="text-gray-400" />
                             <input 
                                 type="text" 
                                 placeholder="ค้นหาประวัติ..." 
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="ml-2 bg-transparent border-none focus:ring-0 text-sm" 
+                                aria-label="ค้นหาประวัติการขาย"
+                                className="ml-2 bg-transparent border-none focus:ring-0 text-sm focus:outline-none" 
                             />
                         </div>
                     </div>
@@ -89,19 +91,19 @@ const SellTable = ({
                                             <div className="text-[10px] text-gray-400">@{Number(r.pricePerKg).toFixed(2)}</div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center justify-center space-x-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="flex items-center justify-center space-x-1 opacity-100 sm:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                                                 {r.receiptUrl && (
-                                                    <a href={r.receiptUrl} target="_blank" rel="noreferrer" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="ดูหลักฐาน">
+                                                    <a href={r.receiptUrl} target="_blank" rel="noreferrer" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500" title="ดูหลักฐาน" aria-label={`ดูรูปหลักฐานการขาย ${r.buyerName || ''}`}>
                                                         <FileImage size={18} />
                                                     </a>
                                                 )}
-                                                <button onClick={() => handlePrint(r)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="พิมพ์ใบส่งของ">
+                                                <button onClick={() => handlePrint(r)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-green-500" title="พิมพ์ใบส่งของ" aria-label={`พิมพ์ใบส่งของ ${r.buyerName || ''}`}>
                                                     <Printer size={18} />
                                                 </button>
-                                                <button onClick={() => handleEdit(r)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="แก้ไข">
+                                                <button onClick={() => handleEdit(r)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500" title="แก้ไข" aria-label={`แก้ไขบันทึกการขาย ${r.buyerName || ''}`}>
                                                     <Edit2 size={18} />
                                                 </button>
-                                                <button onClick={() => handleDelete(r.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="ลบ">
+                                                <button onClick={() => handleDelete(r.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-500" title="ลบ" aria-label={`ลบบันทึกการขาย ${r.buyerName || ''}`}>
                                                     <Trash2 size={18} />
                                                 </button>
                                             </div>

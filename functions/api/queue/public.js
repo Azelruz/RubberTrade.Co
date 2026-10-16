@@ -18,12 +18,15 @@ export async function onRequestGet(context) {
             day: '2-digit' 
         }).format(new Date());
 
-        // Fetch queues matching the storeId for today
+        const todayStart = `${dateStr} 00:00:00`;
+        const todayEnd = `${dateStr} 23:59:59.999`;
+
+        // Fetch queues matching the storeId for today using indexed range scan
         const { results } = await context.env.DB.prepare(`
             SELECT * FROM queues 
-            WHERE userId = ? AND created_at LIKE ?
+            WHERE userId = ? AND created_at >= ? AND created_at <= ?
             ORDER BY created_at ASC
-        `).bind(storeId, `${dateStr}%`).all();
+        `).bind(storeId, todayStart, todayEnd).all();
 
         const res = jsonResponse(results);
         res.headers.set('Cache-Control', 'public, max-age=15, s-maxage=15');

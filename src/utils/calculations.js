@@ -4,6 +4,7 @@
 
 /**
  * Truncates a number to 1 decimal place (rounding down)
+ * Avoids IEEE-754 floating point precision bugs (e.g. 99.9 * 10 = 998.9999999999999)
  * Example: 12.99 -> 12.9
  * @param {number|string} value 
  * @returns {number}
@@ -11,12 +12,13 @@
 export const truncateOneDecimal = (value) => {
     const n = Number(value);
     if (isNaN(n)) return 0;
-    // Use Math.floor on the shifted number to truncate
-    return Math.floor(n * 10) / 10;
+    // Add micro-epsilon to prevent precision loss before Math.floor
+    return Math.floor((n + 1e-9) * 10) / 10;
 };
 
 /**
  * Truncates a number to 2 decimal places (rounding down)
+ * Avoids IEEE-754 floating point precision bugs
  * Example: 12.999 -> 12.99
  * @param {number|string} value 
  * @returns {number}
@@ -24,7 +26,7 @@ export const truncateOneDecimal = (value) => {
 export const truncateTwoDecimals = (value) => {
     const n = Number(value);
     if (isNaN(n)) return 0;
-    return Math.floor(n * 100) / 100;
+    return Math.floor((n + 1e-9) * 100) / 100;
 };
 
 /**
@@ -77,23 +79,25 @@ export const calculateDrcBonus = (drc, drcBonuses = []) => {
  * @param {number} bucketWeight - Bucket weight in kg
  * @param {number} drc - Dry rubber content percentage
  * @param {number} dailyPrice - Base price per dry kg
- * @param {Array|number} drcBonusInput - Bonus array or pre-calculated bonus per kg
+ * @param {Array|number|null} drcBonusInput - Bonus array, explicit bonus per kg, or null/undefined for auto-calculate
  * @param {number} empSharePct - Employee profit share percentage (0-100)
  * @returns {Object} { dryWeight, total, employeeTotal, farmerTotal, bonusDrc, actualPrice }
  */
-export const calculateBuyTotal = (weight, bucketWeight = 0, drc, dailyPrice, drcBonusInput = 0, empSharePct = 0) => {
+export const calculateBuyTotal = (weight, bucketWeight = 0, drc, dailyPrice, drcBonusInput = null, empSharePct = 0) => {
     const w = truncateOneDecimal(Number(weight) || 0);
     const bw = truncateOneDecimal(Number(bucketWeight) || 0);
     const netWeight = truncateOneDecimal(w - bw);
     const d = truncateOneDecimal(Number(drc) || 0);
     const p = truncateOneDecimal(Number(dailyPrice) || 0);
     
-    // Handle both pre-calculated bonus or the bonus array
+    // Handle bonus calculation: custom rule array, explicit number, or fallback calculation
     let b = 0;
     if (Array.isArray(drcBonusInput)) {
         b = calculateDrcBonus(d, drcBonusInput);
+    } else if (typeof drcBonusInput === 'number' && drcBonusInput !== 0) {
+        b = truncateOneDecimal(drcBonusInput);
     } else {
-        b = truncateOneDecimal(Number(drcBonusInput) || 0);
+        b = calculateDrcBonus(d);
     }
     
     const s = truncateOneDecimal(Number(empSharePct) || 0);

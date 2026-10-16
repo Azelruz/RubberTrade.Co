@@ -79,7 +79,9 @@ const BuyForm = ({
                                 <button 
                                     type="button" 
                                     onClick={onClearQueue}
-                                    className="text-xs text-red-500 hover:underline"
+                                    className="text-xs text-red-500 hover:underline focus:ring-2 focus:ring-red-500 rounded focus:outline-none"
+                                    aria-label="ยกเลิกการใช้คิวนี้"
+                                    title="ยกเลิกการใช้คิวนี้"
                                 >
                                     ยกเลิกคิวนี้
                                 </button>
@@ -88,7 +90,9 @@ const BuyForm = ({
                             <button
                                 type="button"
                                 onClick={onOpenQueueModal}
-                                className="w-full py-2.5 px-4 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-2 border border-orange-200"
+                                aria-label="ดึงข้อมูลจากจุดคิววัด % ยาง"
+                                title="ดึงข้อมูลจากจุดคิววัด % ยาง"
+                                className="w-full py-2.5 px-4 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-2 border border-orange-200 focus:ring-2 focus:ring-orange-500 focus:outline-none"
                             >
                                 <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
                                 <span>ดึงข้อมูลจากจุดคิววัด % แล้ว</span>
@@ -139,7 +143,12 @@ const BuyForm = ({
                         {showFarmerDropdown && (
                             <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
                                 {farmers
-                                    .filter(f => f.name.toLowerCase().includes(farmerSearch.toLowerCase()) || (f.id && f.id.toLowerCase().includes(farmerSearch.toLowerCase())))
+                                    .filter(f => 
+                                        (f.name || '').toLowerCase().includes(farmerSearch.toLowerCase()) || 
+                                        (f.realName || '').toLowerCase().includes(farmerSearch.toLowerCase()) ||
+                                        (f.idCard || '').includes(farmerSearch) ||
+                                        (f.id && f.id.toLowerCase().includes(farmerSearch.toLowerCase()))
+                                    )
                                     .map(f => (
                                         <div
                                             key={f.id}
@@ -150,12 +159,27 @@ const BuyForm = ({
                                                 setShowFarmerDropdown(false);
                                             }}
                                         >
-                                            <span className="text-sm font-medium text-gray-900">{f.name}</span>
-                                            <span className="text-[10px] text-gray-400 font-mono uppercase">{f.id}</span>
+                                            <div>
+                                                <span className="text-sm font-medium text-gray-900">{f.name}</span>
+                                                {f.realName && (
+                                                    <span className="text-xs text-gray-500 font-normal ml-1.5">
+                                                        ({f.realName})
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-[10px] text-gray-400 font-mono uppercase block">{f.id}</span>
+                                                {f.idCard && <span className="text-[9px] text-gray-400 font-mono block">{f.idCard}</span>}
+                                            </div>
                                         </div>
                                     ))
                                 }
-                                {farmers.filter(f => f.name.toLowerCase().includes(farmerSearch.toLowerCase())).length === 0 && (
+                                {farmers.filter(f => 
+                                    (f.name || '').toLowerCase().includes(farmerSearch.toLowerCase()) || 
+                                    (f.realName || '').toLowerCase().includes(farmerSearch.toLowerCase()) ||
+                                    (f.idCard || '').includes(farmerSearch) ||
+                                    (f.id && f.id.toLowerCase().includes(farmerSearch.toLowerCase()))
+                                ).length === 0 && (
                                     <div className="px-4 py-3 text-sm text-gray-500 italic text-center">
                                         ไม่พบในรายชื่อ...
                                     </div>
@@ -274,8 +298,9 @@ const BuyForm = ({
                                 <button
                                     type="button"
                                     onClick={() => setShowCalculator(true)}
-                                    className="text-rubber-600 hover:text-rubber-700 p-1 rounded-md hover:bg-rubber-50 transition-colors"
+                                    className="text-rubber-600 hover:text-rubber-700 p-1 rounded-md hover:bg-rubber-50 transition-colors focus:ring-2 focus:ring-rubber-500 focus:outline-none"
                                     title="เครื่องคิดเลขรวมน้ำหนัก"
+                                    aria-label="เปิดเครื่องคิดเลขรวมน้ำหนัก"
                                 >
                                     <Calculator size={16} />
                                 </button>

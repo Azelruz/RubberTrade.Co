@@ -1,16 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { 
-    Leaf, RefreshCw, Plus, Phone, MapPin, Database, Edit2, Trash2, 
-    UserCircle, Percent, X, Save, Search, Clock, Filter, AlertTriangle, ShoppingBag,
-    Link2, ChevronDown, ChevronUp, Star
-} from 'lucide-react';
-import { differenceInDays, format, parseISO } from 'date-fns';
-import { th } from 'date-fns/locale';
+import { Leaf, UserCircle, Percent, Link2 } from 'lucide-react';
+import { differenceInDays } from 'date-fns';
 import toast from 'react-hot-toast';
 import { db } from '../../services/db';
-import ReportPrintHeader from '../../components/ReportPrintHeader';
 import { 
     fetchFarmers, 
     fetchEmployees, 
@@ -24,9 +18,14 @@ import {
     addEmployee, 
     deleteRecord,
     updateRecord,
-    addMemberType as addMemberTypeAPI,
-    deleteMemberType as deleteMemberTypeAPI
+    addMemberType as addMemberTypeAPI
 } from '../../services/apiService';
+
+import { FarmerManagementTab } from './user-management/FarmerManagementTab';
+import { EmployeeManagementTab } from './user-management/EmployeeManagementTab';
+import { MemberTypeManagementTab } from './user-management/MemberTypeManagementTab';
+import { FarmerEmployeeAssignmentsTab } from './user-management/FarmerEmployeeAssignmentsTab';
+import { FarmerEmployeeLinkModal } from './user-management/FarmerEmployeeLinkModal';
 
 export const UserManagement = () => {
     const location = useLocation();
@@ -43,7 +42,7 @@ export const UserManagement = () => {
     const [settings, setSettings] = useState({});
 
     // Activity Filter State
-    const [activityFilter, setActivityFilter] = useState(location.state?.activityFilter || 'all'); // 'all', 'active', 'inactive_30', 'inactive_60', 'never', 'custom_days'
+    const [activityFilter, setActivityFilter] = useState(location.state?.activityFilter || 'all');
     const [customDaysThreshold, setCustomDaysThreshold] = useState(location.state?.customDaysThreshold || 60);
 
     useEffect(() => {
@@ -76,6 +75,8 @@ export const UserManagement = () => {
     const [expandedFarmerIds, setExpandedFarmerIds] = useState({});
     const [expandedEmployeeIds, setExpandedEmployeeIds] = useState({});
     const [assignmentSearch, setAssignmentSearch] = useState('');
+    const [farmerSearch, setFarmerSearch] = useState('');
+    const [employeeSearch, setEmployeeSearch] = useState('');
 
     const toggleFarmerExpand = (id) => {
         setExpandedFarmerIds(prev => ({ ...prev, [id]: !prev[id] }));
@@ -84,32 +85,6 @@ export const UserManagement = () => {
     const toggleEmployeeExpand = (id) => {
         setExpandedEmployeeIds(prev => ({ ...prev, [id]: !prev[id] }));
     };
-
-    const handleSaveLink = async () => {
-        if (!linkingEmployee || !linkFarmerId) return toast.error('กรุณาเลือกเกษตรกร');
-        setSaving(true);
-        try {
-            await saveFarmerEmployeeLink({
-                farmerId: linkFarmerId,
-                employeeId: linkingEmployee.id,
-                profitSharePct: Number(linkPct || 50),
-                isDefault: linkIsDefault ? 1 : 0
-            });
-            toast.success(`ผูกสวนยางให้ ${linkingEmployee.name} สำเร็จ`);
-            setShowLinkModal(false);
-            setLinkingEmployee(null);
-            setLinkFarmerId('');
-            loadData();
-        } catch (e) {
-            toast.error('ผูกสวนล้มเหลว: ' + e.message);
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    // Search States
-    const [farmerSearch, setFarmerSearch] = useState('');
-    const [employeeSearch, setEmployeeSearch] = useState('');
 
     const farmerForm = useForm({
         defaultValues: {
@@ -130,7 +105,6 @@ export const UserManagement = () => {
     const loadData = async () => {
         setLoading(true);
         try {
-            // First load local buys from Dexie if available
             try {
                 const localBuys = await db.buys.toArray();
                 if (localBuys && localBuys.length > 0) setBuys(localBuys);
@@ -157,7 +131,28 @@ export const UserManagement = () => {
         }
     };
 
-    // Farmer Handlers
+    const handleSaveLink = async () => {
+        if (!linkingEmployee || !linkFarmerId) return toast.error('กรุณาเลือกเกษตรกร');
+        setSaving(true);
+        try {
+            await saveFarmerEmployeeLink({
+                farmerId: linkFarmerId,
+                employeeId: linkingEmployee.id,
+                profitSharePct: Number(linkPct || 50),
+                isDefault: linkIsDefault ? 1 : 0
+            });
+            toast.success(`ผูกสวนยางให้ ${linkingEmployee.name} สำเร็จ`);
+            setShowLinkModal(false);
+            setLinkingEmployee(null);
+            setLinkFarmerId('');
+            loadData();
+        } catch (e) {
+            toast.error('ผูกสวนล้มเหลว: ' + e.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const onSubmitFarmer = async (data) => {
         setSaving(true);
         try {
@@ -187,6 +182,8 @@ export const UserManagement = () => {
         setShowFarmerForm(true);
         farmerForm.reset({
             name: farmer.name,
+            realName: farmer.realName || '',
+            idCard: farmer.idCard || '',
             phone: farmer.phone,
             bankAccount: farmer.bankAccount,
             bankName: farmer.bankName,
@@ -198,7 +195,6 @@ export const UserManagement = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    // Employee Handlers
     const onSubmitEmployee = async (data) => {
         setSaving(true);
         try {
@@ -253,7 +249,6 @@ export const UserManagement = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    // Member Type Handlers
     const handleMemberTypeSubmit = async () => {
         if (!mtFormData.name) return toast.error('กรุณาระบุชื่อประเภทสมาชิก');
         setSaving(true);
@@ -290,8 +285,7 @@ export const UserManagement = () => {
         }
     };
 
-    // Compute Farmer Last Buy Activity and Days Inactive
-    const farmerActivityMap = React.useMemo(() => {
+    const farmerActivityMap = useMemo(() => {
         const map = {};
         const today = new Date();
 
@@ -311,14 +305,12 @@ export const UserManagement = () => {
             }
         });
 
-        // Resolve map entries for all farmers by id or name, combining local buys with server-computed lastBuyDate
         const result = {};
         farmers.forEach(f => {
             const entry = map[f.id] || map[f.name];
             const localDate = entry?.lastDate || null;
             const apiDate = f.lastBuyDate ? new Date(f.lastBuyDate) : null;
 
-            // Pick the latest known purchase date between local buys and server API
             let finalLastDate = null;
             if (localDate && apiDate) {
                 finalLastDate = localDate > apiDate ? localDate : apiDate;
@@ -341,8 +333,7 @@ export const UserManagement = () => {
         return result;
     }, [buys, farmers]);
 
-    // Statistics for Inactive Farmers
-    const activityStats = React.useMemo(() => {
+    const activityStats = useMemo(() => {
         let active = 0;
         let inactive30 = 0;
         let inactive60 = 0;
@@ -364,10 +355,11 @@ export const UserManagement = () => {
         return { active, inactive30, inactive60, never, total: farmers.length };
     }, [farmers, farmerActivityMap]);
 
-    // Filtered Farmers List
-    const filteredFarmers = React.useMemo(() => {
+    const filteredFarmers = useMemo(() => {
         return farmers.filter(f => {
             const matchesSearch = f.name?.toLowerCase().includes(farmerSearch.toLowerCase()) || 
+                f.realName?.toLowerCase().includes(farmerSearch.toLowerCase()) || 
+                f.idCard?.includes(farmerSearch) ||
                 f.phone?.includes(farmerSearch) ||
                 f.id?.toLowerCase().includes(farmerSearch.toLowerCase());
             
@@ -383,8 +375,7 @@ export const UserManagement = () => {
         });
     }, [farmers, farmerSearch, activityFilter, farmerActivityMap, customDaysThreshold]);
 
-    // Filtered Assignments List
-    const filteredAssignments = React.useMemo(() => {
+    const filteredAssignments = useMemo(() => {
         return farmerEmployees.filter(fe => {
             if (!assignmentSearch) return true;
             const search = assignmentSearch.toLowerCase();
@@ -411,1280 +402,190 @@ export const UserManagement = () => {
             ` }} />
             
             <div className="no-print space-y-6">
-            {/* Sub-Tabs */}
-            <div className="flex space-x-1 bg-gray-100 rounded-xl p-1">
-                <button
-                    onClick={() => setActiveSubTab('farmers')}
-                    className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-bold transition-all duration-200 ${
-                        activeSubTab === 'farmers'
-                            ? 'bg-white text-rubber-700 shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                >
-                    <Leaf size={16} />
-                    <span>เกษตรกร</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                        activeSubTab === 'farmers' ? 'bg-rubber-600 text-white' : 'bg-gray-200 text-gray-600'
-                    }`}>
-                        {farmers.length}
-                    </span>
-                </button>
-                <button
-                    onClick={() => setActiveSubTab('employees')}
-                    className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-bold transition-all duration-200 ${
-                        activeSubTab === 'employees'
-                            ? 'bg-white text-blue-700 shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                >
-                    <UserCircle size={16} />
-                    <span>ลูกจ้าง</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                        activeSubTab === 'employees' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
-                    }`}>
-                        {employees.length}
-                    </span>
-                </button>
-                <button
-                    onClick={() => setActiveSubTab('member_types')}
-                    className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-bold transition-all duration-200 ${
-                        activeSubTab === 'member_types'
-                            ? 'bg-white text-amber-700 shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                >
-                    <Percent size={16} />
-                    <span>ประเภทและโบนัส</span>
-                </button>
-                <button
-                    onClick={() => setActiveSubTab('assignments')}
-                    className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-bold transition-all duration-200 ${
-                        activeSubTab === 'assignments'
-                            ? 'bg-white text-emerald-700 shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                >
-                    <Link2 size={16} />
-                    <span>ผูกคนกรีด-สวน</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                        activeSubTab === 'assignments' ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600'
-                    }`}>
-                        {farmerEmployees.length}
-                    </span>
-                </button>
-            </div>
-
-            {/* ===================== FARMERS TAB ===================== */}
-            {activeSubTab === 'farmers' && (
-                <section className="animate-in fade-in duration-300">
-                    {/* Activity Status Summary Cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                        <div 
-                            onClick={() => setActivityFilter('active')}
-                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${activityFilter === 'active' ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-500/20' : 'bg-white border-gray-100 hover:border-gray-200'}`}
-                        >
-                            <div className="flex items-center justify-between text-xs font-bold text-emerald-700 mb-1">
-                                <span className="flex items-center"><div className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></div>มาขายปกติ (≤30 วัน)</span>
-                                <span className="font-mono">{activityStats.active}</span>
-                            </div>
-                            <div className="text-[11px] text-gray-400">เกษตรกรที่มาขายน้ำยางสม่ำเสมอ</div>
-                        </div>
-
-                        <div 
-                            onClick={() => setActivityFilter('inactive_30')}
-                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${activityFilter === 'inactive_30' ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-500/20' : 'bg-white border-gray-100 hover:border-gray-200'}`}
-                        >
-                            <div className="flex items-center justify-between text-xs font-bold text-amber-700 mb-1">
-                                <span className="flex items-center"><Clock size={13} className="mr-1 text-amber-500" />ขาดติดต่อ (31-60 วัน)</span>
-                                <span className="font-mono">{activityStats.inactive30}</span>
-                            </div>
-                            <div className="text-[11px] text-gray-400">ไม่ได้มาขายมากกว่า 1 เดือน</div>
-                        </div>
-
-                        <div 
-                            onClick={() => setActivityFilter('inactive_60')}
-                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${activityFilter === 'inactive_60' ? 'bg-red-50 border-red-300 ring-2 ring-red-500/20' : 'bg-white border-gray-100 hover:border-gray-200'}`}
-                        >
-                            <div className="flex items-center justify-between text-xs font-bold text-red-700 mb-1">
-                                <span className="flex items-center"><AlertTriangle size={13} className="mr-1 text-red-500" />ไม่ได้มาขาย &gt;60 วัน</span>
-                                <span className="font-mono">{activityStats.inactive60}</span>
-                            </div>
-                            <div className="text-[11px] text-gray-400">ขาดการติดต่อนานเกิน 2 เดือน</div>
-                        </div>
-
-                        <div 
-                            onClick={() => setActivityFilter('never')}
-                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${activityFilter === 'never' ? 'bg-gray-100 border-gray-300 ring-2 ring-gray-400/20' : 'bg-white border-gray-100 hover:border-gray-200'}`}
-                        >
-                            <div className="flex items-center justify-between text-xs font-bold text-gray-600 mb-1">
-                                <span className="flex items-center"><ShoppingBag size={13} className="mr-1 text-gray-400" />ยังไม่เคยขาย</span>
-                                <span className="font-mono">{activityStats.never}</span>
-                            </div>
-                            <div className="text-[11px] text-gray-400">ไม่มีประวัติรายการรับซื้อ</div>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto flex-1">
-                            <div className="relative w-full sm:w-64">
-                                <input
-                                    type="text"
-                                    placeholder="ค้นหาชื่อหรือเบอร์โทร..."
-                                    value={farmerSearch}
-                                    onChange={(e) => setFarmerSearch(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-rubber-500 focus:border-rubber-500 text-sm shadow-sm"
-                                />
-                                <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                                {farmerSearch && (
-                                    <button 
-                                        onClick={() => setFarmerSearch('')}
-                                        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                                    >
-                                        <X size={16} />
-                                    </button>
-                                )}
-                            </div>
-
-                            {/* Status Filter Selector */}
-                            <div className="flex items-center space-x-2">
-                                <select
-                                    value={activityFilter}
-                                    onChange={(e) => setActivityFilter(e.target.value)}
-                                    className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-semibold bg-white text-gray-700 shadow-sm focus:ring-rubber-500 focus:border-rubber-500 cursor-pointer"
-                                >
-                                    <option value="all">🌐 แสดงทุกสถานะ ({activityStats.total} คน)</option>
-                                    <option value="active">🟢 มาขายปกติ (≤30 วัน) [{activityStats.active} คน]</option>
-                                    <option value="inactive_30">🟡 ขาดการติดต่อ (31-60 วัน) [{activityStats.inactive30} คน]</option>
-                                    <option value="inactive_60">🔴 ขาดการติดต่อนาน (&gt;60 วัน) [{activityStats.inactive60} คน]</option>
-                                    <option value="never">⚪ ยังไม่เคยมีประวัติขาย [{activityStats.never} คน]</option>
-                                    <option value="custom_days">⏱️ กำหนดจำนวนวันขาดติดต่อเอง...</option>
-                                </select>
-
-                                {activityFilter === 'custom_days' && (
-                                    <div className="flex items-center space-x-1.5 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl animate-in fade-in duration-200">
-                                        <span className="text-xs font-bold text-amber-800">ขาดขาย ≥</span>
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            max="999"
-                                            value={customDaysThreshold}
-                                            onChange={(e) => setCustomDaysThreshold(Math.max(1, Number(e.target.value)))}
-                                            className="w-16 px-2 py-1 bg-white border border-amber-300 rounded-lg text-sm font-bold text-amber-900 text-center focus:ring-2 focus:ring-amber-500"
-                                        />
-                                        <span className="text-xs font-bold text-amber-800">วัน</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex space-x-2 w-full md:w-auto">
-                            <button
-                                onClick={() => loadData()}
-                                className="flex-1 md:flex-none inline-flex items-center justify-center px-3 py-2 text-rubber-600 hover:bg-rubber-50 rounded-lg transition text-sm font-bold"
-                            >
-                                <RefreshCw size={18} className={`mr-1 ${loading ? 'animate-spin' : ''}`} />
-                                รีเฟรช
-                            </button>
-                            {!showFarmerForm && (
-                                <button
-                                    onClick={() => {
-                                        setEditingFarmer(null);
-                                        farmerForm.reset();
-                                        setShowFarmerForm(true);
-                                    }}
-                                    className="flex-1 md:flex-none inline-flex items-center justify-center px-4 py-2 bg-rubber-600 text-white rounded-lg hover:bg-rubber-700 transition shadow-sm font-medium"
-                                >
-                                    <Plus size={18} className="mr-1" />
-                                    เพิ่มเกษตรกร
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {showFarmerForm && (
-                        <div className={`rounded-xl p-6 mb-8 animate-in fade-in slide-in-from-top-4 shadow-sm border ${editingFarmer ? 'bg-amber-50/50 border-amber-100' : 'bg-gray-50 border-gray-200 shadow-inner'}`}>
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className={`font-bold ${editingFarmer ? 'text-amber-800' : 'text-gray-700'}`}>
-                                    {editingFarmer ? `แก้ไขข้อมูล: ${editingFarmer.name}` : 'เพิ่มข้อมูลเกษตรกรใหม่'}
-                                </h3>
-                                <button onClick={() => { setShowFarmerForm(false); setEditingFarmer(null); farmerForm.reset(); }} className="text-gray-400 hover:text-gray-600">
-                                    <X size={20} />
-                                </button>
-                            </div>
-                            <form onSubmit={farmerForm.handleSubmit(onSubmitFarmer)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
-                                    <input 
-                                        {...farmerForm.register('name', { required: 'กรุณาระบุชื่อ-นามสกุล' })} 
-                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-rubber-500 ${farmerForm.formState.errors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} 
-                                        placeholder="นายสมชาย ใจดี" 
-                                    />
-                                    {farmerForm.formState.errors.name && <p className="text-red-500 text-[10px] mt-1 font-medium">{farmerForm.formState.errors.name.message}</p>}
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">เบอร์โทรศัพท์</label>
-                                    <input {...farmerForm.register('phone')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="08x-xxx-xxxx" />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">เลขบัญชีธนาคาร</label>
-                                    <input {...farmerForm.register('bankAccount')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="xxx-x-xxxxx-x" />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">ชื่อธนาคาร</label>
-                                    <input {...farmerForm.register('bankName')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="กสิกรไทย / ธกส." />
-                                </div>
-                                <div className="md:col-span-1 space-y-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">ที่อยู่</label>
-                                    <input {...farmerForm.register('address')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="123 ม.1 ต..." />
-                                </div>
-                                <div className="md:col-span-1 space-y-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">หมายเหตุ</label>
-                                    <input {...farmerForm.register('note')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="..." />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">รหัส FSC (FSCID)</label>
-                                    <input {...farmerForm.register('fscId')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500" placeholder="รหัส FSC" />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">ประเภทสมาชิก (โบนัส)</label>
-                                    <select {...farmerForm.register('memberTypeId')} className="w-full px-3 py-2 border rounded-lg focus:ring-rubber-500 bg-white">
-                                        <option value="">-- บุคคลทั่วไป (ไม่มีโบนัส) --</option>
-                                        {memberTypes.map(mt => (
-                                            <option key={mt.id} value={mt.id}>{mt.name} (โบนัส +{mt.bonus} บาท)</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="lg:col-span-3 flex justify-end space-x-2 pt-2">
-                                    <button type="button" onClick={() => { setShowFarmerForm(false); setEditingFarmer(null); farmerForm.reset(); }} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button>
-                                    <button type="submit" disabled={saving} className={`px-6 py-2 text-white rounded-lg disabled:opacity-50 transition-colors flex items-center space-x-2 ${editingFarmer ? 'bg-amber-600 hover:bg-amber-700' : 'bg-rubber-600 hover:bg-rubber-700'}`}>
-                                        <Save size={18} />
-                                        <span>{editingFarmer ? 'บันทึกการแก้ไข' : 'บันทึกเกษตรกร'}</span>
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    )}
-
-                    {/* Report Summary Banner */}
-                    {activityFilter !== 'all' && (
-                        <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-4 mb-4 flex items-center justify-between animate-in fade-in">
-                            <div className="flex items-center space-x-3">
-                                <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl">
-                                    <AlertTriangle size={20} />
-                                </div>
-                                <div>
-                                    <h4 className="text-sm font-bold text-amber-900">
-                                        {activityFilter === 'custom_days' 
-                                            ? `รายงานสรุปเกษตรกรที่ไม่ได้มาขายน้ำยางเกิน ${customDaysThreshold} วัน`
-                                            : activityFilter === 'inactive_30'
-                                            ? 'รายงานสรุปเกษตรกรที่ขาดการติดต่อ 31 - 60 วัน'
-                                            : activityFilter === 'inactive_60'
-                                            ? 'รายงานสรุปเกษตรกรที่ขาดการติดต่อนานเกิน 60 วัน'
-                                            : activityFilter === 'never'
-                                            ? 'รายงานสรุปเกษตรกรที่ยังไม่เคยมีประวัติขาย'
-                                            : 'รายงานสรุปเกษตรกรที่มาขายปกติ'}
-                                    </h4>
-                                    <p className="text-xs text-amber-700 mt-0.5">
-                                        พบทั้งหมด <strong className="font-bold text-amber-900">{filteredFarmers.length} คน</strong> จากเกษตรกรในระบบ {farmers.length} คน
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => window.print()}
-                                className="px-3.5 py-2 bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center space-x-1.5 cursor-pointer"
-                            >
-                                <span>🖨️ พิมพ์รายงานสรุป</span>
-                            </button>
-                        </div>
-                    )}
-
-                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50 font-medium text-gray-500 text-[11px] uppercase tracking-wider">
-                                <tr>
-                                    <th className="px-6 py-4 text-left">เกษตรกร</th>
-                                    <th className="px-6 py-4 text-left">ประวัติขายล่าสุด</th>
-                                    <th className="px-6 py-4 text-left">สถานะ LINE</th>
-                                    <th className="px-6 py-4 text-left">ติดต่อ / ที่อยู่</th>
-                                    <th className="px-6 py-4 text-left text-center">รหัส FSC / ประเภท</th>
-                                    <th className="px-6 py-4 text-center">จัดการ</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 text-sm">
-                                {filteredFarmers.map(f => {
-                                    const act = farmerActivityMap[f.id];
-                                    return (
-                                        <React.Fragment key={f.id}>
-                                            <tr className={`hover:bg-rubber-50/30 transition-colors group ${editingFarmer?.id === f.id ? 'bg-amber-50/30' : ''}`}>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center space-x-3">
-                                                {f.linePicture ? (
-                                                    <img src={f.linePicture} alt={f.lineName} className="w-10 h-10 rounded-full border-2 border-rubber-100" />
-                                                ) : (
-                                                    <div className="w-10 h-10 rounded-full bg-rubber-100 flex items-center justify-center text-rubber-600 font-bold text-sm">
-                                                        {f.name.charAt(0)}
-                                                    </div>
-                                                )}
-                                                <div>
-                                                    <div className="font-bold text-gray-900">{f.name}</div>
-                                                    <div className="text-[10px] text-gray-400 font-mono">ID: {f.id}</div>
-                                                    {(() => {
-                                                        const farmerEmps = farmerEmployees.filter(fe => fe.farmerId === f.id);
-                                                        if (farmerEmps.length > 0) {
-                                                            return (
-                                                                <div className="flex flex-wrap gap-1 mt-1">
-                                                                    {farmerEmps.map(fe => (
-                                                                        <span key={fe.id || fe.employeeId} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${fe.isDefault ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
-                                                                            👤 {fe.employeeName || employees.find(e => e.id === fe.employeeId)?.name || 'ลูกจ้าง'} ({fe.profitSharePct}%)
-                                                                        </span>
-                                                                    ))}
-                                                                </div>
-                                                            );
-                                                        }
-                                                        const legacy = employees.filter(e => e.farmerId === f.id);
-                                                        if (legacy.length > 0) {
-                                                            return (
-                                                                <div className="flex flex-wrap gap-1 mt-1">
-                                                                    {legacy.map(e => (
-                                                                        <span key={e.id} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
-                                                                            👤 {e.name} ({e.profitSharePct}%)
-                                                                        </span>
-                                                                    ))}
-                                                                </div>
-                                                            );
-                                                        }
-                                                        return <div className="text-[10px] text-amber-600 font-medium mt-0.5">🌾 เจ้าของกรีดเอง</div>;
-                                                    })()}
-                                                    <button
-                                                        onClick={() => toggleFarmerExpand(f.id)}
-                                                        className="inline-flex items-center space-x-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200 mt-1.5 transition-all"
-                                                    >
-                                                        <span>👥 ตารางคนกรีด ({farmerEmployees.filter(fe => fe.farmerId === f.id).length})</span>
-                                                        {expandedFarmerIds[f.id] ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        {/* Last Purchase Activity Column */}
-                                        <td className="px-6 py-4">
-                                            {act && act.lastDate ? (
-                                                <div className="flex flex-col space-y-1">
-                                                    <div className="flex items-center space-x-1.5">
-                                                        {act.daysAgo <= 30 ? (
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
-                                                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-1"></span>
-                                                                {act.daysAgo === 0 ? 'วันนี้' : `${act.daysAgo} วันที่แล้ว`}
-                                                            </span>
-                                                        ) : act.daysAgo <= 60 ? (
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
-                                                                <Clock size={11} className="mr-1 text-amber-600" />
-                                                                {act.daysAgo} วันที่แล้ว
-                                                            </span>
-                                                        ) : (
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 animate-pulse">
-                                                                <AlertTriangle size={11} className="mr-1 text-red-600" />
-                                                                ไม่ได้มา {act.daysAgo} วันแล้ว
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-[11px] text-gray-500">
-                                                        {format(act.lastDate, 'd MMM yyyy', { locale: th })} ({act.count} รายการ)
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-400 italic border border-gray-200">
-                                                    ยังไม่มีประวัติ
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {f.lineName ? (
-                                                <div className="flex flex-col">
-                                                    <div className="flex items-center text-[11px] text-green-600 font-black uppercase tracking-wider mb-1">
-                                                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                                                        Connected
-                                                    </div>
-                                                    <div className="text-xs font-medium text-gray-600">{f.lineName}</div>
-                                                </div>
-                                            ) : (
-                                                <span className="text-[11px] text-gray-400 uppercase tracking-wider font-bold italic">Manual</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="space-y-1">
-                                                <div className="flex items-center text-gray-700 font-medium font-mono">
-                                                    <Phone size={12} className="mr-1.5 text-rubber-400" />
-                                                    {f.phone || '-'}
-                                                </div>
-                                                <div className="flex items-center text-[11px] text-gray-500 max-w-[200px] truncate" title={f.address}>
-                                                    <MapPin size={12} className="mr-1.5 text-gray-300" />
-                                                    {f.address || '-'}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col items-center space-y-1">
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold text-center w-full max-w-[120px] ${f.fscId ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'text-gray-300 italic border border-transparent'}`}>
-                                                    FSC: {f.fscId || '-'}
-                                                </span>
-                                                {f.memberTypeId && memberTypes.find(mt => mt.id === f.memberTypeId) ? (
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rubber-100 text-rubber-700 border border-rubber-200 text-center w-full max-w-[120px]">
-                                                        {memberTypes.find(mt => mt.id === f.memberTypeId)?.name} (+{memberTypes.find(mt => mt.id === f.memberTypeId)?.bonus})
-                                                    </span>
-                                                ) : (
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium text-gray-400 border border-gray-100 text-center w-full max-w-[120px]">ทั่วไป</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <div className="flex justify-center space-x-1">
-                                                <button
-                                                    onClick={() => handleEditFarmer(f)}
-                                                    className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
-                                                    title="แก้ไข"
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeleteRecord('farmers', f.id)}
-                                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                                    title="ลบ"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    {expandedFarmerIds[f.id] && (
-                                        <tr key={`sub-farmer-${f.id}`} className="bg-blue-50/40 animate-in fade-in">
-                                            <td colSpan="6" className="px-6 py-3 border-y border-blue-100">
-                                                <div className="bg-white p-3 rounded-lg border border-blue-200 shadow-inner space-y-2">
-                                                    <div className="flex justify-between items-center border-b pb-2">
-                                                        <span className="font-bold text-xs text-blue-900 flex items-center">
-                                                            <UserCircle size={14} className="mr-1 text-blue-600" />
-                                                            รายชื่อคนกรีดประจำสวน: {f.name}
-                                                        </span>
-                                                        <button
-                                                            onClick={() => {
-                                                                setLinkingEmployee(null);
-                                                                setLinkFarmerId(f.id);
-                                                                setLinkPct('50');
-                                                                setLinkIsDefault(false);
-                                                                setShowLinkModal(true);
-                                                            }}
-                                                            className="px-2.5 py-1 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 transition"
-                                                        >
-                                                            + ผูกคนกรีดประจำสวนนี้เพิ่ม
-                                                        </button>
-                                                    </div>
-                                                    {(() => {
-                                                        const links = farmerEmployees.filter(fe => fe.farmerId === f.id);
-                                                        if (links.length === 0) {
-                                                            return <p className="text-xs text-gray-400 italic py-1">ยังไม่มีการผูกคนกรีด (เจ้าของสวนกรีดเอง)</p>;
-                                                        }
-                                                        return (
-                                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                                                                {links.map(fe => {
-                                                                    const empObj = employees.find(e => e.id === fe.employeeId);
-                                                                    return (
-                                                                        <div key={fe.id || fe.employeeId} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-gray-200 text-xs">
-                                                                            <div>
-                                                                                <div className="font-bold text-gray-900 flex items-center">
-                                                                                    👤 {fe.employeeName || empObj?.name || fe.employeeId}
-                                                                                    {fe.isDefault === 1 && <span className="ml-1 text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-bold">หลัก</span>}
-                                                                                </div>
-                                                                                <div className="text-gray-500 font-mono text-[10px]">% ส่วนแบ่ง: <span className="font-bold text-blue-700">{fe.profitSharePct}%</span></div>
-                                                                            </div>
-                                                                            <div className="flex space-x-1">
-                                                                                <button
-                                                                                    onClick={() => {
-                                                                                        setEditingAssignment(fe);
-                                                                                        setLinkFarmerId(fe.farmerId);
-                                                                                        setLinkingEmployee(empObj || { id: fe.employeeId, name: fe.employeeName });
-                                                                                        setLinkPct(fe.profitSharePct.toString());
-                                                                                        setLinkIsDefault(fe.isDefault === 1);
-                                                                                        setShowLinkModal(true);
-                                                                                    }}
-                                                                                    className="p-1 text-gray-400 hover:text-blue-600"
-                                                                                    title="แก้ไข %"
-                                                                                >
-                                                                                    <Edit2 size={13} />
-                                                                                </button>
-                                                                                <button
-                                                                                    onClick={async () => {
-                                                                                        if (window.confirm(`ยกเลิกการผูกสวนนี้?`)) {
-                                                                                            await deleteFarmerEmployeeLink({ farmerId: fe.farmerId, employeeId: fe.employeeId });
-                                                                                            toast.success('ยกเลิกแล้ว');
-                                                                                            loadData();
-                                                                                        }
-                                                                                    }}
-                                                                                    className="p-1 text-gray-400 hover:text-red-600"
-                                                                                    title="ลบ"
-                                                                                >
-                                                                                    <Trash2 size={13} />
-                                                                                </button>
-                                                                            </div>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        );
-                                                    })()}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                        </React.Fragment>
-                                    );
-                                })}
-                                {filteredFarmers.length === 0 && !loading && (
-                                    <tr>
-                                        <td colSpan="6" className="px-6 py-12 text-center text-gray-400">
-                                            <div className="flex flex-col items-center">
-                                                <Leaf size={40} className="mb-2 opacity-20" />
-                                                <p>ไม่พบข้อมูลเกษตรกรในเงื่อนไขที่เลือก</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            )}
-
-            {/* ===================== EMPLOYEES TAB ===================== */}
-            {activeSubTab === 'employees' && (
-                <section className="animate-in fade-in duration-300">
-                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                        <div className="relative w-full md:w-72">
-                            <input
-                                type="text"
-                                placeholder="ค้นหาชื่อลูกจ้าง..."
-                                value={employeeSearch}
-                                onChange={(e) => setEmployeeSearch(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-blue-500 focus:border-blue-500 text-sm shadow-sm"
-                            />
-                            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                            {employeeSearch && (
-                                <button 
-                                    onClick={() => setEmployeeSearch('')}
-                                    className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                                >
-                                    <X size={16} />
-                                </button>
-                            )}
-                        </div>
-                        {!showEmployeeForm && (
-                            <button
-                                onClick={() => {
-                                    setEditingEmployee(null);
-                                    employeeForm.reset();
-                                    setShowEmployeeForm(true);
-                                }}
-                                className="w-full md:w-auto inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm font-medium"
-                            >
-                                <Plus size={18} className="mr-1" />
-                                เพิ่มลูกจ้าง
-                            </button>
-                        )}
-                    </div>
-
-                    {showEmployeeForm && (
-                        <div className={`rounded-xl p-6 mb-8 animate-in fade-in slide-in-from-top-4 shadow-sm border ${editingEmployee ? 'bg-amber-50/50 border-amber-100' : 'bg-blue-50 border-blue-100 shadow-inner'}`}>
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className={`font-bold ${editingEmployee ? 'text-amber-800' : 'text-blue-800'}`}>
-                                    {editingEmployee ? `แก้ไขข้อมูล: ${editingEmployee.name}` : 'เพิ่มข้อมูลลูกจ้างใหม่'}
-                                </h3>
-                                <button onClick={() => { setShowEmployeeForm(false); setEditingEmployee(null); employeeForm.reset(); }} className="text-gray-400 hover:text-gray-600">
-                                    <X size={20} />
-                                </button>
-                            </div>
-                            <form onSubmit={employeeForm.handleSubmit(onSubmitEmployee)} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                <div className="space-y-1">
-                                    <label className={`text-xs font-bold uppercase ${editingEmployee ? 'text-amber-600' : 'text-blue-600'}`}>ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
-                                    <input 
-                                        {...employeeForm.register('name', { required: 'กรุณาระบุชื่อลูกจ้าง' })} 
-                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-blue-500 ${employeeForm.formState.errors.name ? 'border-red-500 bg-red-50' : 'border-gray-200'}`} 
-                                        placeholder="ชื่อลูกจ้าง" 
-                                    />
-                                    {employeeForm.formState.errors.name && <p className="text-red-500 text-[10px] mt-1 font-medium">{employeeForm.formState.errors.name.message}</p>}
-                                </div>
-                                <div className="space-y-1">
-                                    <label className={`text-xs font-bold uppercase ${editingEmployee ? 'text-amber-600' : 'text-blue-600'}`}>สังกัดเกษตรกร <span className="text-red-500">*</span></label>
-                                    <select {...employeeForm.register('farmerId', { required: true })} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 bg-white">
-                                        <option value="">-- เลือกเกษตรกร --</option>
-                                        {farmers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="space-y-1">
-                                    <label className={`text-xs font-bold uppercase flex items-center ${editingEmployee ? 'text-amber-600' : 'text-blue-600'}`}>
-                                        ส่วนแบ่งกำไร (%) <Percent size={12} className="ml-1" />
-                                    </label>
-                                    <input 
-                                        type="number" 
-                                        step="0.01" 
-                                        {...employeeForm.register('profitSharePct', { 
-                                            required: 'กรุณาระบุส่วนแบ่งกำไร',
-                                            min: { value: 0, message: 'ห้ามต่ำกว่า 0%' },
-                                            max: { value: 100, message: 'ห้ามเกิน 100%' }
-                                        })} 
-                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-blue-500 ${employeeForm.formState.errors.profitSharePct ? 'border-red-500 bg-red-50' : 'border-gray-200'}`} 
-                                        placeholder="เช่น 10" 
-                                    />
-                                    {employeeForm.formState.errors.profitSharePct && <p className="text-red-500 text-[10px] mt-1 font-medium">{employeeForm.formState.errors.profitSharePct.message}</p>}
-                                </div>
-                                <div className="space-y-1">
-                                    <label className={`text-xs font-bold uppercase ${editingEmployee ? 'text-amber-600' : 'text-blue-600'}`}>เบอร์โทรศัพท์</label>
-                                    <input {...employeeForm.register('phone')} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" placeholder="08x-xxx-xxxx" />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className={`text-xs font-bold uppercase ${editingEmployee ? 'text-amber-600' : 'text-blue-600'}`}>เลขบัญชีธนาคาร</label>
-                                    <input {...employeeForm.register('bankAccount')} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" placeholder="xxx-x-xxxxx-x" />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className={`text-xs font-bold uppercase ${editingEmployee ? 'text-amber-600' : 'text-blue-600'}`}>ชื่อธนาคาร</label>
-                                    <input {...employeeForm.register('bankName')} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" placeholder="กสิกรไทย / ไทยพาณิชย์" />
-                                </div>
-                                <div className="lg:col-span-3 flex justify-end space-x-2 pt-2">
-                                    <button type="button" onClick={() => { setShowEmployeeForm(false); setEditingEmployee(null); employeeForm.reset(); }} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button>
-                                    <button type="submit" disabled={saving} className={`px-6 py-2 text-white rounded-lg disabled:opacity-50 transition-colors flex items-center space-x-2 ${editingEmployee ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                                        <Save size={18} />
-                                        <span>{editingEmployee ? 'บันทึกการแก้ไข' : 'บันทึกลูกจ้าง'}</span>
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    )}
-
-                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50 font-medium text-gray-500 text-xs uppercase tracking-wider">
-                                <tr>
-                                    <th className="px-6 py-4 text-left">ลูกจ้าง</th>
-                                    <th className="px-6 py-4 text-left">ในสังกัด</th>
-                                    <th className="px-6 py-4 text-center">ส่วนแบ่ง</th>
-                                    <th className="px-6 py-4 text-left">ติดต่อ/บัญชีธนาคาร</th>
-                                    <th className="px-6 py-4 text-center">จัดการ</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 text-sm">
-                                {employees
-                                    .filter(e => 
-                                        e.name?.toLowerCase().includes(employeeSearch.toLowerCase()) || 
-                                        e.phone?.includes(employeeSearch) ||
-                                        farmers.find(f => f.id === e.farmerId)?.name?.toLowerCase().includes(employeeSearch.toLowerCase())
-                                    )
-                                    .map(e => (
-                                    <React.Fragment key={e.id}>
-                                    <tr className={`hover:bg-blue-50/30 transition-colors ${editingEmployee?.id === e.id ? 'bg-amber-50/30' : ''}`}>
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-gray-900">{e.name}</div>
-                                            <div className="text-[11px] text-gray-400">ID: {e.id}</div>
-                                            <button
-                                                onClick={() => toggleEmployeeExpand(e.id)}
-                                                className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 mt-1.5 transition-all"
-                                            >
-                                                <span>🌿 ตารางสวนที่รับกรีด ({farmerEmployees.filter(fe => fe.employeeId === e.id).length})</span>
-                                                {expandedEmployeeIds[e.id] ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                                            </button>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-wrap gap-1.5 items-center">
-                                                {(() => {
-                                                    const links = farmerEmployees.filter(fe => fe.employeeId === e.id);
-                                                    if (links.length === 0) {
-                                                        const legacyFarmer = farmers.find(f => f.id === e.farmerId);
-                                                        return legacyFarmer ? (
-                                                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-gray-700 text-xs border border-gray-200">
-                                                                <Leaf size={12} className="mr-1 text-rubber-500" />
-                                                                {legacyFarmer.name} ({e.profitSharePct}%)
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-gray-400 italic text-xs">ยังไม่ผูกสวน</span>
-                                                        );
-                                                    }
-                                                    return links.map(link => (
-                                                        <span key={link.id || link.farmerId} className="inline-flex items-center px-2 py-1 rounded-md bg-emerald-50 text-emerald-800 text-xs border border-emerald-200 font-medium">
-                                                            <Leaf size={12} className="mr-1 text-emerald-600" />
-                                                            {link.farmerName || farmers.find(f => f.id === link.farmerId)?.name || link.farmerId} ({link.profitSharePct}%)
-                                                            <button
-                                                                onClick={async () => {
-                                                                    if (window.confirm(`ลบการผูกสวนนี้ออก?`)) {
-                                                                        await deleteFarmerEmployeeLink({ farmerId: link.farmerId, employeeId: e.id });
-                                                                        toast.success('ลบการผูกสวนแล้ว');
-                                                                        loadData();
-                                                                    }
-                                                                }}
-                                                                className="ml-1.5 text-red-400 hover:text-red-600 font-bold"
-                                                                title="ยกเลิกการผูกสวนนี้"
-                                                            >
-                                                                ×
-                                                            </button>
-                                                        </span>
-                                                    ));
-                                                })()}
-                                                
-                                                <button
-                                                    onClick={() => {
-                                                        setLinkingEmployee(e);
-                                                        setShowLinkModal(true);
-                                                    }}
-                                                    className="inline-flex items-center px-2 py-1 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs border border-blue-200 font-bold transition-all"
-                                                    title="ผูกสวนเพิ่ม"
-                                                >
-                                                    + ผูกสวนเพิ่ม
-                                                </button>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className="inline-block px-3 py-1 bg-blue-50 text-blue-700 font-black rounded-lg border border-blue-100">
-                                                {e.profitSharePct}%
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col space-y-0.5">
-                                                <div className="flex items-center text-gray-600 font-mono"><Phone size={12} className="mr-1" /> {e.phone || '-'}</div>
-                                                <div className="flex items-center text-gray-900 font-mono text-[11px]"><Database size={12} className="mr-1 text-gray-400" /> {e.bankAccount || '-'} {e.bankName ? `(${e.bankName})` : ''}</div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <div className="flex justify-center space-x-1">
-                                                <button
-                                                    onClick={() => handleEditEmployee(e)}
-                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                    title="แก้ไข"
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeleteRecord('employees', e.id)}
-                                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                                    title="ลบ"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    </React.Fragment>
-                                ))}
-                                {employees.length === 0 && !loading && (
-                                    <tr>
-                                        <td colSpan="5" className="px-6 py-12 text-center text-gray-400">
-                                            <UserCircle size={40} className="mb-2 opacity-20 mx-auto" />
-                                            ยังไม่มีข้อมูลลูกจ้างในระบบ
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            )}
-
-            {/* ===================== MEMBER TYPES TAB ===================== */}
-            {activeSubTab === 'member_types' && (
-                <section className="animate-in fade-in duration-300">
-                    <div className="flex justify-end items-center mb-6">
-                        {!showMemberTypeForm && (
-                            <button
-                                onClick={() => {
-                                    setEditingMemberType(null);
-                                    setMtFormData({ name: '', bonus: '0' });
-                                    setShowMemberTypeForm(true);
-                                }}
-                                className="inline-flex items-center px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition shadow-sm font-medium"
-                            >
-                                <Plus size={18} className="mr-1" />
-                                เพิ่มประเภทสมาชิก
-                            </button>
-                        )}
-                    </div>
-
-                    {showMemberTypeForm && (
-                        <div className="bg-amber-50 border border-amber-100 rounded-xl p-6 mb-8 animate-in fade-in slide-in-from-top-4 shadow-inner">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                <div className="space-y-1">
-                                    <label className="text-xs font-black text-amber-700 uppercase tracking-widest">ชื่อประเภทสมาชิก <span className="text-red-500">*</span></label>
-                                    <input 
-                                        value={mtFormData.name}
-                                        onChange={e => setMtFormData({...mtFormData, name: e.target.value})}
-                                        className="w-full px-4 py-2 border rounded-xl focus:ring-amber-500 font-bold" 
-                                        placeholder="เช่น VIP / สมาชิกประจำ" 
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-black text-amber-700 uppercase tracking-widest">โบนัสบวกเพิ่ม (บาท/กก.)</label>
-                                    <div className="relative">
-                                        <input 
-                                            type="number" 
-                                            step="0.01"
-                                            value={mtFormData.bonus}
-                                            onChange={e => setMtFormData({...mtFormData, bonus: e.target.value})}
-                                            className="w-full px-4 py-2 border rounded-xl focus:ring-amber-500 font-mono font-bold" 
-                                            placeholder="0.0" 
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex items-end space-x-2">
-                                    <button 
-                                        onClick={handleMemberTypeSubmit}
-                                        disabled={saving}
-                                        className="flex-1 bg-amber-600 text-white font-bold py-2 rounded-xl hover:bg-amber-700 transition shadow-lg shadow-amber-200"
-                                    >
-                                        {editingMemberType ? 'บันทึกการแก้ไข' : 'ยืนยันเพิ่มประเภท'}
-                                    </button>
-                                    <button 
-                                        onClick={() => setShowMemberTypeForm(false)}
-                                        className="px-4 py-2 text-amber-600 font-bold hover:bg-amber-100 rounded-xl transition"
-                                    >
-                                        ยกเลิก
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50 font-black text-gray-400 text-[10px] uppercase tracking-wider">
-                                <tr>
-                                    <th className="px-8 py-5 text-left">ประเภทสมาชิก</th>
-                                    <th className="px-8 py-5 text-center">โบนัส (บาท/กก.)</th>
-                                    <th className="px-8 py-5 text-center">จำนวนสมาชิก</th>
-                                    <th className="px-8 py-5 text-right">จัดการ</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {memberTypes.map(mt => (
-                                    <tr key={mt.id} className="hover:bg-amber-50/20 transition-all group">
-                                        <td className="px-8 py-5">
-                                            <div className="flex items-center space-x-3">
-                                                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600">
-                                                    <Percent size={16} />
-                                                </div>
-                                                <div className="font-bold text-gray-900">{mt.name}</div>
-                                            </div>
-                                        </td>
-                                        <td className="px-8 py-5 text-center font-mono font-bold text-amber-700">
-                                            +{Number(mt.bonus || 0).toFixed(2)}
-                                        </td>
-                                        <td className="px-8 py-5 text-center text-xs text-gray-500">
-                                            {farmers.filter(f => f.memberTypeId === mt.id).length} คน
-                                        </td>
-                                        <td className="px-8 py-5 text-right">
-                                            <div className="flex justify-end space-x-1">
-                                                <button
-                                                    onClick={() => {
-                                                        setEditingMemberType(mt);
-                                                        setMtFormData({ name: mt.name, bonus: mt.bonus });
-                                                        setShowMemberTypeForm(true);
-                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                    }}
-                                                    className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={async () => {
-                                                        if (!window.confirm(`ยืนยันการลบประเภท "${mt.name}"?`)) return;
-                                                        const res = await deleteMemberTypeAPI(mt.id);
-                                                        if (res.status === 'success') loadData();
-                                                    }}
-                                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            )}
-
-            {/* ===================== ASSIGNMENTS TAB ===================== */}
-            {activeSubTab === 'assignments' && (
-                <section className="animate-in fade-in duration-300 space-y-6">
-                    {/* Header & Search */}
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                        <div className="relative w-full md:w-80">
-                            <input
-                                type="text"
-                                placeholder="ค้นหาชื่อเกษตรกร หรือชื่อคนกรีด..."
-                                value={assignmentSearch}
-                                onChange={(e) => setAssignmentSearch(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 text-sm shadow-sm font-medium"
-                            />
-                            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                            {assignmentSearch && (
-                                <button onClick={() => setAssignmentSearch('')} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
-                                    <X size={16} />
-                                </button>
-                            )}
-                        </div>
-                        <button
-                            onClick={() => {
-                                setEditingAssignment(null);
-                                setLinkingEmployee(null);
-                                setLinkFarmerId('');
-                                setLinkPct('50');
-                                setLinkIsDefault(false);
-                                setShowLinkModal(true);
-                            }}
-                            className="w-full md:w-auto inline-flex items-center justify-center px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition shadow-sm font-bold text-sm"
-                        >
-                            <Plus size={18} className="mr-1.5" />
-                            ผูกคนกรีดกับสวนยางเพิ่ม
-                        </button>
-                    </div>
-
-                    {/* Summary Counter Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-emerald-50/60 border border-emerald-100 p-4 rounded-xl flex items-center space-x-3 shadow-sm">
-                            <div className="p-3 bg-emerald-600 text-white rounded-lg shadow-sm">
-                                <Link2 size={20} />
-                            </div>
-                            <div>
-                                <div className="text-xs text-emerald-800 font-bold uppercase">การผูกสวนทั้งหมด</div>
-                                <div className="text-2xl font-black text-emerald-900">{farmerEmployees.length} <span className="text-xs font-medium">รายการ</span></div>
-                            </div>
-                        </div>
-
-                        <div className="bg-blue-50/60 border border-blue-100 p-4 rounded-xl flex items-center space-x-3 shadow-sm">
-                            <div className="p-3 bg-blue-600 text-white rounded-lg shadow-sm">
-                                <Leaf size={20} />
-                            </div>
-                            <div>
-                                <div className="text-xs text-blue-800 font-bold uppercase">สวนยางที่มีคนกรีด</div>
-                                <div className="text-2xl font-black text-blue-900">
-                                    {new Set(farmerEmployees.map(fe => fe.farmerId)).size} <span className="text-xs font-medium">สวน</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-purple-50/60 border border-purple-100 p-4 rounded-xl flex items-center space-x-3 shadow-sm">
-                            <div className="p-3 bg-purple-600 text-white rounded-lg shadow-sm">
-                                <UserCircle size={20} />
-                            </div>
-                            <div>
-                                <div className="text-xs text-purple-800 font-bold uppercase">ลูกจ้างที่รับกรีด</div>
-                                <div className="text-2xl font-black text-purple-900">
-                                    {new Set(farmerEmployees.map(fe => fe.employeeId)).size} <span className="text-xs font-medium">คน</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Assignments Table */}
-                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50 font-bold text-gray-500 text-xs uppercase tracking-wider">
-                                <tr>
-                                    <th className="px-6 py-4 text-left">เกษตรกร (เจ้าของสวน)</th>
-                                    <th className="px-6 py-4 text-left">คนกรีด (ลูกจ้าง)</th>
-                                    <th className="px-6 py-4 text-center">% ส่วนแบ่งกำไร</th>
-                                    <th className="px-6 py-4 text-center">สถานะคนกรีดหลัก</th>
-                                    <th className="px-6 py-4 text-center">จัดการ</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 text-sm">
-                                {filteredAssignments.map(item => {
-                                    const farmerObj = farmers.find(f => f.id === item.farmerId);
-                                    const empObj = employees.find(e => e.id === item.employeeId);
-                                    return (
-                                        <tr key={item.id || `${item.farmerId}-${item.employeeId}`} className="hover:bg-emerald-50/30 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <div className="font-bold text-gray-900 flex items-center">
-                                                    🌿 {item.farmerName || farmerObj?.name || item.farmerId}
-                                                </div>
-                                                <div className="text-[10px] text-gray-400 font-mono">ID: {item.farmerId}</div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="font-bold text-gray-900 flex items-center">
-                                                    👤 {item.employeeName || empObj?.name || item.employeeId}
-                                                </div>
-                                                <div className="text-[10px] text-gray-400 font-mono">ID: {item.employeeId}</div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-800 font-black rounded-lg border border-emerald-200">
-                                                    {item.profitSharePct}%
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                {item.isDefault === 1 ? (
-                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                                        <Star size={12} className="mr-1 fill-amber-500 text-amber-500" /> คนกรีดหลัก (Default)
-                                                    </span>
-                                                ) : (
-                                                    <button
-                                                        onClick={async () => {
-                                                            await saveFarmerEmployeeLink({
-                                                                farmerId: item.farmerId,
-                                                                employeeId: item.employeeId,
-                                                                profitSharePct: item.profitSharePct,
-                                                                isDefault: 1
-                                                            });
-                                                            toast.success('ตั้งเป็นคนกรีดหลักเรียบร้อย');
-                                                            loadData();
-                                                        }}
-                                                        className="text-xs text-gray-400 hover:text-amber-600 font-bold underline transition"
-                                                    >
-                                                        ตั้งเป็นหลัก
-                                                    </button>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4 text-center space-x-1">
-                                                <button
-                                                    onClick={() => {
-                                                        setEditingAssignment(item);
-                                                        setLinkFarmerId(item.farmerId);
-                                                        setLinkingEmployee(empObj || { id: item.employeeId, name: item.employeeName });
-                                                        setLinkPct(item.profitSharePct.toString());
-                                                        setLinkIsDefault(item.isDefault === 1);
-                                                        setShowLinkModal(true);
-                                                    }}
-                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                    title="แก้ไข % ส่วนแบ่ง"
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={async () => {
-                                                        if (window.confirm(`ยกเลิกการผูกสวนนี้?`)) {
-                                                            await deleteFarmerEmployeeLink({ farmerId: item.farmerId, employeeId: item.employeeId });
-                                                            toast.success('ลบการผูกสวนแล้ว');
-                                                            loadData();
-                                                        }
-                                                    }}
-                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                                    title="ลบการผูก"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                                {filteredAssignments.length === 0 && (
-                                    <tr>
-                                        <td colSpan="5" className="px-6 py-12 text-center text-gray-400 italic">
-                                            <Link2 size={40} className="mb-2 opacity-20 mx-auto text-emerald-600" />
-                                            ยังไม่มีข้อมูลการผูกคนกรีดกับสวนยางในระบบ
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            )}
-            </div>
-            {/* End no-print wrapper */}
-
-            {/* A4 Printable View (Visible only during window.print()) */}
-            <div className="hidden print:block text-black p-4 font-sans bg-white">
-                <ReportPrintHeader 
-                    settings={settings}
-                    title={
-                        activityFilter === 'custom_days' 
-                            ? `รายงานสรุปเกษตรกรที่ไม่ได้มาขายน้ำยางเกิน ${customDaysThreshold} วัน`
-                            : activityFilter === 'inactive_30'
-                            ? 'รายงานสรุปเกษตรกรที่ขาดการติดต่อ 31 - 60 วัน'
-                            : activityFilter === 'inactive_60'
-                            ? 'รายงานสรุปเกษตรกรที่ขาดการติดต่อนานเกิน 60 วัน'
-                            : activityFilter === 'never'
-                            ? 'รายงานสรุปเกษตรกรที่ยังไม่เคยมีประวัติขาย'
-                            : activityFilter === 'active'
-                            ? 'รายงานสรุปเกษตรกรที่มาขายปกติ (≤30 วัน)'
-                            : 'รายงานสรุปรายชื่อเกษตรกรทั้งหมด'
-                    }
-                    subtitle={`ข้อมูล ณ วันที่ ${format(new Date(), 'd MMMM yyyy', { locale: th })} | พบทั้งหมด ${filteredFarmers.length} คน จากเกษตรกรในระบบ ${farmers.length} คน`}
-                />
-
-                {/* Summary Info Cards */}
-                <div className="grid grid-cols-4 gap-2 mb-4 p-3 border border-black rounded bg-gray-50 text-center text-xs">
-                    <div>
-                        <span className="block text-[10px] font-bold text-gray-600">มาขายปกติ (≤30 วัน)</span>
-                        <span className="text-sm font-bold">{activityStats.active} คน</span>
-                    </div>
-                    <div>
-                        <span className="block text-[10px] font-bold text-gray-600">ขาดติดต่อ (31-60 วัน)</span>
-                        <span className="text-sm font-bold">{activityStats.inactive30} คน</span>
-                    </div>
-                    <div>
-                        <span className="block text-[10px] font-bold text-gray-600">ขาดติดต่อนาน (&gt;60 วัน)</span>
-                        <span className="text-sm font-bold">{activityStats.inactive60} คน</span>
-                    </div>
-                    <div>
-                        <span className="block text-[10px] font-bold text-gray-600">ยังไม่เคยขาย</span>
-                        <span className="text-sm font-bold">{activityStats.never} คน</span>
-                    </div>
+                {/* Sub-Tabs Navigation */}
+                <div className="flex space-x-1 bg-gray-100 rounded-xl p-1">
+                    <button
+                        onClick={() => setActiveSubTab('farmers')}
+                        className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-bold transition-all duration-200 ${
+                            activeSubTab === 'farmers'
+                                ? 'bg-white text-rubber-700 shadow-sm'
+                                : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                        <Leaf size={16} />
+                        <span>เกษตรกร</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                            activeSubTab === 'farmers' ? 'bg-rubber-600 text-white' : 'bg-gray-200 text-gray-600'
+                        }`}>
+                            {farmers.length}
+                        </span>
+                    </button>
+                    <button
+                        onClick={() => setActiveSubTab('employees')}
+                        className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-bold transition-all duration-200 ${
+                            activeSubTab === 'employees'
+                                ? 'bg-white text-blue-700 shadow-sm'
+                                : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                        <UserCircle size={16} />
+                        <span>ลูกจ้าง</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                            activeSubTab === 'employees' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+                        }`}>
+                            {employees.length}
+                        </span>
+                    </button>
+                    <button
+                        onClick={() => setActiveSubTab('member_types')}
+                        className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-bold transition-all duration-200 ${
+                            activeSubTab === 'member_types'
+                                ? 'bg-white text-amber-700 shadow-sm'
+                                : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                        <Percent size={16} />
+                        <span>ประเภทและโบนัส</span>
+                    </button>
+                    <button
+                        onClick={() => setActiveSubTab('assignments')}
+                        className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-lg text-sm font-bold transition-all duration-200 ${
+                            activeSubTab === 'assignments'
+                                ? 'bg-white text-emerald-700 shadow-sm'
+                                : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                        <Link2 size={16} />
+                        <span>ผูกคนกรีด-สวน</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                            activeSubTab === 'assignments' ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600'
+                        }`}>
+                            {farmerEmployees.length}
+                        </span>
+                    </button>
                 </div>
 
-                {/* Details Table */}
-                <table className="w-full border-collapse border border-black text-xs">
-                    <thead>
-                        <tr className="bg-gray-100 border-b border-black">
-                            <th className="border border-black p-1.5 text-center w-10">ลำดับ</th>
-                            <th className="border border-black p-1.5 text-left">ชื่อ-นามสกุล (รหัส)</th>
-                            <th className="border border-black p-1.5 text-left">เบอร์โทรศัพท์</th>
-                            <th className="border border-black p-1.5 text-left">ประวัติการขายล่าสุด</th>
-                            <th className="border border-black p-1.5 text-center">สถานะกิจกรรม</th>
-                            <th className="border border-black p-1.5 text-left">ที่อยู่</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredFarmers.map((f, idx) => {
-                            const act = farmerActivityMap[f.id];
-                            return (
-                                <tr key={f.id} className="border-b border-gray-300">
-                                    <td className="border border-black p-1.5 text-center">{idx + 1}</td>
-                                    <td className="border border-black p-1.5 font-bold">
-                                        {f.name} <span className="font-normal text-[10px] text-gray-500">({f.id})</span>
-                                    </td>
-                                    <td className="border border-black p-1.5 font-mono">{f.phone || '-'}</td>
-                                    <td className="border border-black p-1.5">
-                                        {act && act.lastDate ? (
-                                            `${format(act.lastDate, 'd MMM yyyy', { locale: th })} (${act.count} รายการ)`
-                                        ) : (
-                                            'ยังไม่มีประวัติ'
-                                        )}
-                                    </td>
-                                    <td className="border border-black p-1.5 text-center font-bold">
-                                        {act && act.daysAgo !== null ? (
-                                            act.daysAgo === 0 ? 'วันนี้' : `${act.daysAgo} วันที่แล้ว`
-                                        ) : (
-                                            'ยังไม่เคยขาย'
-                                        )}
-                                    </td>
-                                    <td className="border border-black p-1.5">{f.address || '-'}</td>
-                                </tr>
-                            );
-                        })}
-                        {filteredFarmers.length === 0 && (
-                            <tr>
-                                <td colSpan="6" className="border border-black p-4 text-center text-gray-500">
-                                    ไม่พบข้อมูลเกษตรกรในเงื่อนไขที่เลือก
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
+                {/* Sub-Tabs Content */}
+                {activeSubTab === 'farmers' && (
+                    <FarmerManagementTab
+                        farmers={farmers}
+                        employees={employees}
+                        farmerEmployees={farmerEmployees}
+                        memberTypes={memberTypes}
+                        activityFilter={activityFilter}
+                        setActivityFilter={setActivityFilter}
+                        customDaysThreshold={customDaysThreshold}
+                        setCustomDaysThreshold={setCustomDaysThreshold}
+                        farmerSearch={farmerSearch}
+                        setFarmerSearch={setFarmerSearch}
+                        loading={loading}
+                        saving={saving}
+                        showFarmerForm={showFarmerForm}
+                        setShowFarmerForm={setShowFarmerForm}
+                        editingFarmer={editingFarmer}
+                        setEditingFarmer={setEditingFarmer}
+                        farmerForm={farmerForm}
+                        onSubmitFarmer={onSubmitFarmer}
+                        handleEditFarmer={handleEditFarmer}
+                        handleDeleteRecord={handleDeleteRecord}
+                        farmerActivityMap={farmerActivityMap}
+                        activityStats={activityStats}
+                        filteredFarmers={filteredFarmers}
+                        expandedFarmerIds={expandedFarmerIds}
+                        toggleFarmerExpand={toggleFarmerExpand}
+                        loadData={loadData}
+                        setLinkingEmployee={setLinkingEmployee}
+                        setLinkFarmerId={setLinkFarmerId}
+                        setLinkPct={setLinkPct}
+                        setLinkIsDefault={setLinkIsDefault}
+                        setShowLinkModal={setShowLinkModal}
+                        setEditingAssignment={setEditingAssignment}
+                        deleteFarmerEmployeeLink={deleteFarmerEmployeeLink}
+                    />
+                )}
 
-                {/* Print Footer / Signatures */}
-                <div className="mt-8 flex justify-between items-end text-xs pt-4 border-t border-gray-300">
-                    <div>
-                        <p>ผู้ออกรายงาน: ....................................................</p>
-                        <p className="mt-1">วันที่พิมพ์: {format(new Date(), 'dd/MM/yyyy HH:mm')} น.</p>
-                    </div>
-                    <div className="text-center">
-                        <p>ลงชื่อ ....................................................</p>
-                        <p className="mt-1">( ผู้รับผิดชอบ/เจ้าหน้าที่ )</p>
-                    </div>
-                </div>
+                {activeSubTab === 'employees' && (
+                    <EmployeeManagementTab
+                        employees={employees}
+                        farmers={farmers}
+                        farmerEmployees={farmerEmployees}
+                        employeeSearch={employeeSearch}
+                        setEmployeeSearch={setEmployeeSearch}
+                        showEmployeeForm={showEmployeeForm}
+                        setShowEmployeeForm={setShowEmployeeForm}
+                        editingEmployee={editingEmployee}
+                        setEditingEmployee={setEditingEmployee}
+                        employeeForm={employeeForm}
+                        onSubmitEmployee={onSubmitEmployee}
+                        saving={saving}
+                        handleEditEmployee={handleEditEmployee}
+                        handleDeleteRecord={handleDeleteRecord}
+                        toggleEmployeeExpand={toggleEmployeeExpand}
+                        expandedEmployeeIds={expandedEmployeeIds}
+                        deleteFarmerEmployeeLink={deleteFarmerEmployeeLink}
+                        loadData={loadData}
+                        setLinkingEmployee={setLinkingEmployee}
+                        setShowLinkModal={setShowLinkModal}
+                    />
+                )}
+
+                {activeSubTab === 'member_types' && (
+                    <MemberTypeManagementTab
+                        memberTypes={memberTypes}
+                        showMemberTypeForm={showMemberTypeForm}
+                        setShowMemberTypeForm={setShowMemberTypeForm}
+                        editingMemberType={editingMemberType}
+                        setEditingMemberType={setEditingMemberType}
+                        mtFormData={mtFormData}
+                        setMtFormData={setMtFormData}
+                        saving={saving}
+                        handleMemberTypeSubmit={handleMemberTypeSubmit}
+                        handleDeleteRecord={handleDeleteRecord}
+                    />
+                )}
+
+                {activeSubTab === 'assignments' && (
+                    <FarmerEmployeeAssignmentsTab
+                        farmerEmployees={farmerEmployees}
+                        farmers={farmers}
+                        employees={employees}
+                        assignmentSearch={assignmentSearch}
+                        setAssignmentSearch={setAssignmentSearch}
+                        filteredAssignments={filteredAssignments}
+                        setEditingAssignment={setEditingAssignment}
+                        setLinkingEmployee={setLinkingEmployee}
+                        setLinkFarmerId={setLinkFarmerId}
+                        setLinkPct={setLinkPct}
+                        setLinkIsDefault={setLinkIsDefault}
+                        setShowLinkModal={setShowLinkModal}
+                        deleteFarmerEmployeeLink={deleteFarmerEmployeeLink}
+                        loadData={loadData}
+                    />
+                )}
             </div>
 
-            {/* Modal ผูกสวนยางเพิ่ม / แก้ไข % */}
-            {showLinkModal && (
-                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-                        <div className="flex justify-between items-center border-b pb-3">
-                            <h3 className="font-bold text-gray-900 text-base flex items-center">
-                                <Link2 className="mr-2 text-emerald-600" size={20} />
-                                {editingAssignment ? 'แก้ไขข้อมูลการผูกสวน' : 'ผูกคนกรีดกับสวนยางเพิ่ม'}
-                            </h3>
-                            <button onClick={() => { setShowLinkModal(false); setLinkingEmployee(null); setEditingAssignment(null); }} className="text-gray-400 hover:text-gray-600">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="space-y-4 text-xs font-medium">
-                            <div>
-                                <label className="block text-gray-700 font-bold mb-1">เกษตรกร (เจ้าของสวน) <span className="text-red-500">*</span></label>
-                                <select
-                                    value={linkFarmerId}
-                                    disabled={!!editingAssignment}
-                                    onChange={(e) => setLinkFarmerId(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white focus:ring-emerald-500 font-bold disabled:bg-gray-100"
-                                >
-                                    <option value="">-- เลือกเจ้าของสวน --</option>
-                                    {farmers.map(f => (
-                                        <option key={f.id} value={f.id}>{f.name} ({f.id})</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-gray-700 font-bold mb-1">คนกรีด (ลูกจ้าง) <span className="text-red-500">*</span></label>
-                                {linkingEmployee ? (
-                                    <div className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 font-bold text-gray-800">
-                                        👤 {linkingEmployee.name} ({linkingEmployee.id})
-                                    </div>
-                                ) : (
-                                    <select
-                                        value={linkingEmployee?.id || ''}
-                                        disabled={!!editingAssignment}
-                                        onChange={(e) => setLinkingEmployee(employees.find(emp => emp.id === e.target.value) || null)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white focus:ring-emerald-500 font-bold disabled:bg-gray-100"
-                                    >
-                                        <option value="">-- เลือกคนกรีด (ลูกจ้าง) --</option>
-                                        {employees.map(e => (
-                                            <option key={e.id} value={e.id}>{e.name} ({e.id})</option>
-                                        ))}
-                                    </select>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-gray-700 font-bold mb-1">% ส่วนแบ่งลูกจ้างในสวนนี้ <span className="text-red-500">*</span></label>
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    value={linkPct}
-                                    onChange={(e) => setLinkPct(e.target.value)}
-                                    placeholder="50"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-emerald-500 font-bold"
-                                />
-                            </div>
-
-                            <div className="flex items-center space-x-2 pt-1">
-                                <input
-                                    type="checkbox"
-                                    id="linkIsDefault"
-                                    checked={linkIsDefault}
-                                    onChange={(e) => setLinkIsDefault(e.target.checked)}
-                                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                                />
-                                <label htmlFor="linkIsDefault" className="text-xs text-gray-700 cursor-pointer font-bold">
-                                    ตั้งเป็นคนกรีดหลักประจำสวนนี้ (Default Tapper)
-                                </label>
-                            </div>
-                        </div>
-
-                        <div className="flex justify-end space-x-2 pt-3 border-t">
-                            <button
-                                type="button"
-                                onClick={() => { setShowLinkModal(false); setLinkingEmployee(null); setEditingAssignment(null); }}
-                                className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-xl font-bold"
-                            >
-                                ยกเลิก
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleSaveLink}
-                                disabled={saving || !linkFarmerId || (!linkingEmployee && !editingAssignment)}
-                                className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-bold disabled:opacity-50 transition-all flex items-center space-x-1 shadow-sm"
-                            >
-                                <Save size={16} />
-                                <span>บันทึกข้อมูล</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Shared Farmer Employee Link Modal */}
+            <FarmerEmployeeLinkModal
+                showModal={showLinkModal}
+                onClose={() => {
+                    setShowLinkModal(false);
+                    setLinkingEmployee(null);
+                    setEditingAssignment(null);
+                }}
+                linkingEmployee={linkingEmployee}
+                linkFarmerId={linkFarmerId}
+                setLinkFarmerId={setLinkFarmerId}
+                linkPct={linkPct}
+                setLinkPct={setLinkPct}
+                linkIsDefault={linkIsDefault}
+                setLinkIsDefault={setLinkIsDefault}
+                editingAssignment={editingAssignment}
+                farmers={farmers}
+                saving={saving}
+                onSaveLink={handleSaveLink}
+            />
         </div>
     );
 };
+
+export default UserManagement;

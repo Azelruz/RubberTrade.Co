@@ -4,6 +4,8 @@ DROP TABLE IF EXISTS farmers;
 CREATE TABLE farmers (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    realName TEXT,
+    idCard TEXT,
     phone TEXT,
     bankAccount TEXT,
     bankName TEXT,
@@ -374,7 +376,197 @@ CREATE INDEX IF NOT EXISTS idx_chemical_usage_user_chem_date ON chemical_usage(u
 -- Covering Index for Farmer Stats Aggregations (Migration 0029)
 CREATE INDEX IF NOT EXISTS idx_buys_user_farmer_date ON buys(userId, farmerId, date DESC);
 
+-- Notification Optimization Partial Indexes (v1.8.2 / Migration 0034)
+CREATE INDEX IF NOT EXISTS idx_loans_active_debt ON loans(userId, remainingAmount) WHERE remainingAmount > 0;
+CREATE INDEX IF NOT EXISTS idx_subscription_pending ON subscription_requests(status) WHERE status = 'pending';
 
+-- Cooperative, Shareholders & Dividend Distribution Schema (v1.8.0 / Migration 0031)
+CREATE TABLE IF NOT EXISTS coop_members (
+    id TEXT PRIMARY KEY,
+    memberNo TEXT NOT NULL,
+    farmerId TEXT,
+    name TEXT NOT NULL,
+    phone TEXT,
+    idCard TEXT,
+    bankAccount TEXT,
+    bankName TEXT,
+    address TEXT,
+    orgPosition TEXT DEFAULT 'member',
+    positionAllowance REAL DEFAULT 0,
+    totalShares INTEGER DEFAULT 0,
+    shareValue REAL DEFAULT 0,
+    savingsBalance REAL DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    joinedDate TEXT NOT NULL,
+    userId TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (farmerId) REFERENCES farmers(id) ON DELETE SET NULL
+);
 
+CREATE INDEX IF NOT EXISTS idx_coop_members_user ON coop_members(userId);
+CREATE INDEX IF NOT EXISTS idx_coop_members_user_status ON coop_members(userId, status);
+CREATE INDEX IF NOT EXISTS idx_coop_members_farmer ON coop_members(userId, farmerId);
+CREATE INDEX IF NOT EXISTS idx_coop_members_position ON coop_members(userId, orgPosition);
+CREATE INDEX IF NOT EXISTS idx_coop_members_search ON coop_members(userId, name, memberNo, phone);
+
+CREATE TABLE IF NOT EXISTS share_transactions (
+    id TEXT PRIMARY KEY,
+    memberId TEXT NOT NULL,
+    date TEXT NOT NULL,
+    type TEXT NOT NULL,
+    shares INTEGER NOT NULL,
+    pricePerShare REAL NOT NULL,
+    totalAmount REAL NOT NULL,
+    paymentMethod TEXT DEFAULT 'cash',
+    receiptUrl TEXT,
+    note TEXT,
+    userId TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (memberId) REFERENCES coop_members(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_share_tx_user ON share_transactions(userId);
+CREATE INDEX IF NOT EXISTS idx_share_tx_user_member ON share_transactions(userId, memberId);
+CREATE INDEX IF NOT EXISTS idx_share_tx_user_date ON share_transactions(userId, date DESC, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS dividend_periods (
+    id TEXT PRIMARY KEY,
+    year INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    startDate TEXT NOT NULL,
+    endDate TEXT NOT NULL,
+    netProfit REAL NOT NULL,
+    allocatedProfit REAL NOT NULL,
+    reservePct REAL DEFAULT 10,
+    reserveAmount REAL DEFAULT 0,
+    welfarePct REAL DEFAULT 5,
+    welfareAmount REAL DEFAULT 0,
+    boardBonusPct REAL DEFAULT 5,
+    boardBonusAmount REAL DEFAULT 0,
+    dividendShareRate REAL DEFAULT 0,
+    dividendShareTotal REAL DEFAULT 0,
+    patronageFormulaType TEXT DEFAULT 'dry_rubber',
+    patronageRefundRate REAL DEFAULT 0,
+    patronageRefundTotal REAL DEFAULT 0,
+    totalDistributed REAL DEFAULT 0,
+    status TEXT DEFAULT 'draft',
+    approvedAt DATETIME,
+    userId TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_div_periods_user_year ON dividend_periods(userId, year DESC);
+CREATE INDEX IF NOT EXISTS idx_div_periods_user_status ON dividend_periods(userId, status);
+
+CREATE TABLE IF NOT EXISTS dividend_distributions (
+    id TEXT PRIMARY KEY,
+    periodId TEXT NOT NULL,
+    memberId TEXT NOT NULL,
+    farmerId TEXT,
+    memberName TEXT NOT NULL,
+    orgPosition TEXT,
+    shareCount INTEGER DEFAULT 0,
+    shareValue REAL DEFAULT 0,
+    dividendShareAmount REAL DEFAULT 0,
+    businessVolumeKg REAL DEFAULT 0,
+    businessDryRubberKg REAL DEFAULT 0,
+    businessTotalAmount REAL DEFAULT 0,
+    patronageRefundAmount REAL DEFAULT 0,
+    boardBonusAmount REAL DEFAULT 0,
+    grossPayout REAL DEFAULT 0,
+    deductedLoanAmount REAL DEFAULT 0,
+    netPayout REAL DEFAULT 0,
+    payoutStatus TEXT DEFAULT 'pending',
+    paidDate TEXT,
+    payoutMethod TEXT,
+    receiptUrl TEXT,
+    note TEXT,
+    userId TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (periodId) REFERENCES dividend_periods(id) ON DELETE CASCADE,
+    FOREIGN KEY (memberId) REFERENCES coop_members(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_div_dist_user_period ON dividend_distributions(userId, periodId);
+CREATE INDEX IF NOT EXISTS idx_div_dist_user_member ON dividend_distributions(userId, memberId);
+CREATE INDEX IF NOT EXISTS idx_div_dist_user_status ON dividend_distributions(userId, payoutStatus);
+CREATE INDEX IF NOT EXISTS idx_div_dist_period_payout ON dividend_distributions(periodId, payoutStatus);
+
+-- Plot Activities, Fertilizer Logs & Care Management Schema (v1.8.2 / Migration 0032)
+CREATE TABLE IF NOT EXISTS plot_activities (
+    id TEXT PRIMARY KEY,
+    plotId TEXT NOT NULL,
+    farmerId TEXT NOT NULL,
+    activityType TEXT NOT NULL, -- 'fertilizer', 'mowing', 'weed_control', 'disease_treatment', 'service_fee', 'other'
+    date DATE NOT NULL,
+    title TEXT NOT NULL,
+    details TEXT,
+    fertilizerFormula TEXT,
+    brand TEXT,
+    amountKg REAL DEFAULT 0,
+    bags REAL DEFAULT 0,
+    cost REAL DEFAULT 0,
+    serviceProvider TEXT,
+    isPaid INTEGER DEFAULT 1,
+    nextDueDate DATE,
+    note TEXT,
+    userId TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (plotId) REFERENCES land_plots(id) ON DELETE CASCADE,
+    FOREIGN KEY (farmerId) REFERENCES farmers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_plot_activities_plot_date ON plot_activities(plotId, date DESC);
+CREATE INDEX IF NOT EXISTS idx_plot_activities_user_farmer ON plot_activities(userId, farmerId, date DESC);
+CREATE INDEX IF NOT EXISTS idx_plot_activities_type ON plot_activities(plotId, activityType, date DESC);
+
+-- Member Savings Accounts (Multi-Account), Transactions & Interest Schema (v1.8.3 / Migration 0033)
+CREATE TABLE IF NOT EXISTS savings_accounts (
+    id TEXT PRIMARY KEY,
+    memberId TEXT NOT NULL,
+    accountNo TEXT NOT NULL,
+    accountName TEXT NOT NULL,
+    accountType TEXT DEFAULT 'savings',
+    balance REAL DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    openedDate TEXT NOT NULL,
+    interestRate REAL DEFAULT 0,
+    userId TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (memberId) REFERENCES coop_members(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_savings_acc_user_member ON savings_accounts(userId, memberId);
+CREATE INDEX IF NOT EXISTS idx_savings_acc_user_no ON savings_accounts(userId, accountNo);
+CREATE INDEX IF NOT EXISTS idx_savings_acc_user_status ON savings_accounts(userId, status);
+
+CREATE TABLE IF NOT EXISTS savings_transactions (
+    id TEXT PRIMARY KEY,
+    accountId TEXT,
+    memberId TEXT NOT NULL,
+    accountNo TEXT,
+    date TEXT NOT NULL,
+    type TEXT NOT NULL, -- 'deposit', 'withdraw', 'interest'
+    amount REAL NOT NULL,
+    balanceAfter REAL NOT NULL,
+    paymentMethod TEXT DEFAULT 'cash',
+    receiptUrl TEXT,
+    note TEXT,
+    recordedBy TEXT,
+    userId TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (accountId) REFERENCES savings_accounts(id) ON DELETE CASCADE,
+    FOREIGN KEY (memberId) REFERENCES coop_members(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_savings_tx_user_date ON savings_transactions(userId, date DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_savings_tx_user_member ON savings_transactions(userId, memberId, date DESC);
+CREATE INDEX IF NOT EXISTS idx_savings_tx_user_acc ON savings_transactions(userId, accountId, date DESC);
+CREATE INDEX IF NOT EXISTS idx_savings_tx_user_type ON savings_transactions(userId, type);
+
+-- Migration 0036: Portal and Search Optimization Indexes
+CREATE INDEX IF NOT EXISTS idx_farmers_phone ON farmers(phone);
+CREATE INDEX IF NOT EXISTS idx_employees_phone ON employees(phone);
+CREATE INDEX IF NOT EXISTS idx_buys_user_farmername ON buys(userId, farmerName);
 
 

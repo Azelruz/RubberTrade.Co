@@ -2,17 +2,36 @@ import React from 'react';
 import { Calculator, X, Trash2 } from 'lucide-react';
 
 const WeightCalculator = ({ showCalculator, setShowCalculator, calcItems, setCalcItems, calcInput, setCalcInput, addCalcItem, removeCalcItem, applyCalcResult }) => {
+    React.useEffect(() => {
+        if (!showCalculator) return;
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') setShowCalculator(false);
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [showCalculator, setShowCalculator]);
+
     if (!showCalculator) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/40 z-[110] flex items-center justify-center p-4">
+        <div 
+            className="fixed inset-0 bg-black/40 z-[110] flex items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="weight-calc-title"
+        >
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-gray-100">
                 <div className="bg-rubber-600 p-4 text-white flex justify-between items-center">
                     <div className="flex items-center">
                         <Calculator className="mr-2" size={20} />
-                        <h3 className="font-bold">เครื่องคิดเลขรวมน้ำหนัก</h3>
+                        <h3 id="weight-calc-title" className="font-bold">เครื่องคิดเลขรวมน้ำหนัก</h3>
                     </div>
-                    <button onClick={() => setShowCalculator(false)} className="hover:bg-rubber-700 p-1 rounded-full transition-colors">
+                    <button 
+                        onClick={() => setShowCalculator(false)} 
+                        className="hover:bg-rubber-700 p-1 rounded-full transition-colors focus:ring-2 focus:ring-white focus:outline-none"
+                        title="ปิด (Esc)"
+                        aria-label="ปิดเครื่องคิดเลข"
+                    >
                         <X size={20} />
                     </button>
                 </div>
@@ -45,7 +64,12 @@ const WeightCalculator = ({ showCalculator, setShowCalculator, calcItems, setCal
                                 {calcItems.map((val, idx) => (
                                     <div key={idx} className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100 shadow-sm">
                                         <span className="font-mono text-gray-700 font-bold">{val.toLocaleString(undefined, { minimumFractionDigits: 1 })} กก.</span>
-                                        <button onClick={() => removeCalcItem(idx)} className="text-red-400 hover:text-red-600 p-1">
+                                        <button 
+                                            onClick={() => removeCalcItem(idx)} 
+                                            className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 focus:ring-2 focus:ring-red-400 focus:outline-none"
+                                            title="ลบรายการนี้"
+                                            aria-label={`ลบรายการน้ำหนัก ${val} กก.`}
+                                        >
                                             <Trash2 size={14} />
                                         </button>
                                     </div>
