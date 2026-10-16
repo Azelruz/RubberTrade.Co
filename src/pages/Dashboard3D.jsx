@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { fetchDashboardData } from '../services/apiService';
 import { useYardSimulation } from '../hooks/useYardSimulation';
-import { YardSceneIsometric } from '../components/dashboard3d/YardSceneIsometric';
+import { YardSceneWebGL } from '../components/dashboard3d/YardSceneWebGL';
 import { YardInspectorDrawer } from '../components/dashboard3d/YardInspectorDrawer';
 import { YardBottomTrackingBar } from '../components/dashboard3d/YardBottomTrackingBar';
 import { YardCameraToolbar } from '../components/dashboard3d/YardCameraToolbar';
@@ -229,7 +229,7 @@ export const Dashboard3D = () => {
 
             {/* Main Interactive Stage with Floating Inspector Drawer */}
             <div className="relative">
-                <YardSceneIsometric 
+                <YardSceneWebGL 
                     simState={simState}
                     activeJob={activeJob}
                     onSelectEntity={handleSelectEntity}
