@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard,
+    Layers,
     Droplets,
     Truck,
     BarChart3,
@@ -407,6 +408,7 @@ export const Layout = () => {
 
     const navItems = [
         { name: 'แดชบอร์ด', path: '/', icon: <LayoutDashboard size={20} />, roles: ['owner', 'admin', 'staff'] },
+        { name: '3D Isometric ลานยาง', path: '/dashboard-3d', icon: <Layers size={20} className="text-blue-500" />, roles: ['owner', 'admin', 'staff'] },
         { name: 'รับซื้อน้ำยาง', path: '/buy', icon: <Droplets size={20} />, roles: ['owner', 'admin', 'staff'] },
         { name: 'รับซื้อน้ำยาง (Map View)', path: '/buy-map', icon: <MapPin size={20} className="text-emerald-500" />, roles: ['owner', 'admin', 'staff'] },
         { name: 'ขายน้ำยาง', path: '/sell-ai', icon: <Truck size={20} />, roles: ['owner', 'admin', 'staff'] },

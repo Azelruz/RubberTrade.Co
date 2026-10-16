@@ -31,6 +31,7 @@ const PageLoader = () => (
 // Lazy Loaded Pages
 const Login = lazy(() => import('./pages/Login'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Dashboard3D = lazy(() => import('./pages/Dashboard3D'));
 const Buy = lazy(() => import('./pages/Buy'));
 const BuyMap = lazy(() => import('./pages/BuyMap').then(m => ({ default: m.BuyMap })));
 const LandPlots = lazy(() => import('./pages/LandPlots').then(m => ({ default: m.LandPlots })));
@@ -125,6 +126,7 @@ function App() {
             {/* Root Route: Dashboard if logged in, Home if guest */}
             <Route path="/" element={<RootIndex />}>
               <Route index element={<Dashboard />} />
+              <Route path="dashboard-3d" element={<Dashboard3D />} />
               <Route path="buy" element={<Buy />} />
               <Route path="buy-map" element={<BuyMap />} />
               <Route path="land-plots" element={<LandPlots />} />
