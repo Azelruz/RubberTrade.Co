@@ -42,29 +42,7 @@ export const fetchBuyHistory = async (params = {}) => {
 };
 
 export const addBuyRecord = async (payload) => {
-    const res = await offlineWrite('buys', '/buys', payload);
-    if (res && (res.status === 'success' || res.id)) {
-        try {
-            if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('yard-simulation-trigger', {
-                    detail: {
-                        id: res.id,
-                        farmerName: payload.farmerName || 'เกษตรกร',
-                        rubberType: payload.rubberType || 'latex',
-                        weight: Number(payload.weight) || 0,
-                        netWeight: Number(payload.dryRubber || payload.weight) || 0,
-                        drc: Number(payload.drc) || 0,
-                        totalPrice: Number(payload.total) || 0,
-                        station: 'Station 1',
-                        timestamp: Date.now()
-                    }
-                }));
-            }
-        } catch {
-            // Non-blocking background event
-        }
-    }
-    return res;
+    return await offlineWrite('buys', '/buys', payload);
 };
 
 export const scanExpenseReceiptWithAI = async (file) => {

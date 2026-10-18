@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Gift, Wallet, Sliders, Layers } from 'lucide-react';
+import { Gift, Wallet, Sliders } from 'lucide-react';
 import { 
     fetchDashboardData, fetchFarmers, fetchChemicalUsage, 
     addBulkWages, addPromotion, addChemicalUsage, fetchBuyRecords,
@@ -27,7 +26,6 @@ import { WageConfirmModal, LuckyDrawModal, PriceEditModal } from './dashboard/Da
 import DashboardCustomizeModal from './dashboard/DashboardCustomizeModal';
 
 export const Dashboard = () => {
-    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
         todayBuy: 0,
@@ -620,16 +618,6 @@ export const Dashboard = () => {
                     <p className="text-gray-500">ข้อมูลสรุปการรับซื้อ-ขายน้ำยางพาราประจำวัน</p>
                 </div>
                 <div className="flex items-center space-x-3 flex-wrap gap-2">
-                    <button
-                        onClick={() => navigate('/dashboard-3d')}
-                        className="bg-gradient-to-r from-blue-600 via-indigo-600 to-rubber-600 hover:from-blue-700 hover:via-indigo-700 hover:to-rubber-700 text-white font-bold py-2 px-4 rounded-xl shadow-md hover:shadow-lg hover:scale-[1.02] transition-all flex items-center space-x-2"
-                    >
-                        <Layers size={18} className="text-blue-200 animate-pulse" />
-                        <span>3D Isometric ลานยาง</span>
-                        <span className="bg-white/20 text-white text-[10px] uppercase font-black px-1.5 py-0.5 rounded-full border border-white/30">
-                            Dashboard 2
-                        </span>
-                    </button>
                     <button
                         onClick={() => setShowCustomizeModal(true)}
                         className="bg-white border border-gray-200 hover:border-rubber-300 text-gray-700 hover:bg-gray-50 font-bold py-2 px-4 rounded-xl shadow-sm transition-all flex items-center space-x-2"
