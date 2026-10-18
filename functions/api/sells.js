@@ -189,8 +189,15 @@ async function handlePost(context) {
 
         // Bulk Insert Support
         if (body.action === 'bulk' && Array.isArray(body.payloads)) {
-            const stationCode = await getSetting(context.env.DB, 'station_code', storeId, '0335');
-            const format = await getSetting(context.env.DB, 'format_sell_bill', storeId, 'S-{STATION}{YYYY}-{SEQ4}');
+            const { results: settingRows } = await context.env.DB.prepare(
+                "SELECT key, value FROM settings WHERE userId = ? AND key IN ('station_code', 'format_sell_bill')"
+            ).bind(storeId).all();
+            const settingsMap = {};
+            if (settingRows) {
+                for (const row of settingRows) settingsMap[row.key] = row.value;
+            }
+            const stationCode = settingsMap['station_code'] || '0335';
+            const format = settingsMap['format_sell_bill'] || 'S-{STATION}{YYYY}-{SEQ4}';
             const stmts = [];
 
             const sellSchema = {
@@ -291,8 +298,15 @@ async function handlePost(context) {
 
         let id = payload.id;
         if (!id || isUUID(id)) {
-            const stationCode = await getSetting(context.env.DB, 'station_code', storeId, '0335');
-            const format = await getSetting(context.env.DB, 'format_sell_bill', storeId, 'S-{STATION}{YYYY}-{SEQ4}');
+            const { results: settingRows } = await context.env.DB.prepare(
+                "SELECT key, value FROM settings WHERE userId = ? AND key IN ('station_code', 'format_sell_bill')"
+            ).bind(storeId).all();
+            const settingsMap = {};
+            if (settingRows) {
+                for (const row of settingRows) settingsMap[row.key] = row.value;
+            }
+            const stationCode = settingsMap['station_code'] || '0335';
+            const format = settingsMap['format_sell_bill'] || 'S-{STATION}{YYYY}-{SEQ4}';
             const nonce = isUUID(id) ? id.substring(0, 6).toUpperCase() : '';
             id = await generateNextId(context.env.DB, 'sells', format, stationCode, storeId, nonce, 0);
         }

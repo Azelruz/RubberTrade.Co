@@ -65,7 +65,7 @@ export const Loans = () => {
             console.error("Local load error", err);
         }
 
-        // Step 2: Fetch background revalidation from remote D1
+        // Step 2: Fetch background revalidation from remote D1 (offlineRead already updates Dexie)
         if (navigator.onLine) {
             try {
                 const [lList, dList, fList, eList, sList, setRes] = await Promise.all([
@@ -77,27 +77,13 @@ export const Loans = () => {
                     getSettings()
                 ]);
 
-                if (Array.isArray(lList)) {
-                    await db.loans.clear();
-                    await db.loans.bulkPut(lList);
-                    setLoans(lList);
-                }
-                if (Array.isArray(dList)) {
-                    await db.loan_deductions.clear();
-                    await db.loan_deductions.bulkPut(dList);
-                    setDeductions(dList);
-                }
-                if (Array.isArray(fList)) {
-                    await db.farmers.bulkPut(fList);
-                    setFarmers(fList);
-                }
-                if (Array.isArray(eList)) {
-                    await db.employees.bulkPut(eList);
-                    setEmployees(eList);
-                }
-                if (Array.isArray(sList)) {
-                    await db.staff.bulkPut(sList);
-                    setStaff(sList);
+                if (Array.isArray(lList)) setLoans(lList);
+                if (Array.isArray(dList)) setDeductions(dList);
+                if (Array.isArray(fList)) setFarmers(fList);
+                if (Array.isArray(eList)) setEmployees(eList);
+                if (Array.isArray(sList)) setStaff(sList);
+                if (setRes && setRes.status === 'success' && setRes.data) {
+                    setSettings(setRes.data);
                 }
             } catch (error) {
                 console.warn("Background revalidation failed:", error.message);

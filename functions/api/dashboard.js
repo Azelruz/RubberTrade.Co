@@ -18,7 +18,6 @@ async function handleGet(context) {
             farmersCount,
             staff,
             settings,
-            priceSetting,
             // Summaries
             todayBuysStats,
             monthBuysTotal,
@@ -36,7 +35,6 @@ async function handleGet(context) {
             db.prepare("SELECT COUNT(*) as count FROM farmers WHERE userId = ?").bind(storeId).first(),
             db.prepare("SELECT * FROM staff WHERE userId = ?").bind(storeId).all(),
             db.prepare("SELECT * FROM settings WHERE userId = ?").bind(storeId).all(),
-            db.prepare("SELECT value, updated_at FROM settings WHERE userId = ? AND key = 'daily_price'").bind(storeId).first(),
             
             // Buy stats: Today stats (filtered strictly by date = today to scan only today's rows)
             db.prepare(`
@@ -118,7 +116,13 @@ async function handleGet(context) {
         // Process Settings
         const settingsList = settings?.results || [];
         const settingsMap = {};
-        settingsList.forEach(s => { if (s.key) settingsMap[s.key] = s.value; });
+        let priceSetting = null;
+        settingsList.forEach(s => {
+            if (s.key) {
+                settingsMap[s.key] = s.value;
+                if (s.key === 'daily_price') priceSetting = s;
+            }
+        });
 
         const dailyPrice = {
             price: priceSetting ? (priceSetting.value || '0') : '0',
@@ -155,6 +159,7 @@ async function handleGet(context) {
                 todayLatexWeight: Number(todayBuysStats?.todayLatexWeight || 0),
                 todayCupLumpWeight: Number(todayBuysStats?.todayCupLumpWeight || 0),
                 todayBuyWeight: Number(todayBuysStats?.todayLatexWeight || 0) + Number(todayBuysStats?.todayCupLumpWeight || 0),
+                todayTotalDryWeight: Number(todayBuysStats?.todayLatexDry || 0),
                 todayExpense: Number(expensesStats?.todayTotal || 0) + Number(wagesStats?.todayTotal || 0),
                 todayAvgDrc: (Number(todayBuysStats?.todayLatexWeight || 0) > 1) ? (Number(todayBuysStats?.todayLatexDry || 0) / Number(todayBuysStats?.todayLatexWeight)) * 100 : 0,
                 

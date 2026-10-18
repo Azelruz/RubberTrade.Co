@@ -206,8 +206,15 @@ async function handlePost(context) {
 
         // Bulk Insert Support
         if (body.action === 'bulk' && Array.isArray(body.payloads)) {
-            const stationCode = await getSetting(context.env.DB, 'station_code', storeId, '0335');
-            const format = await getSetting(context.env.DB, 'format_buy_bill', storeId, 'B-{STATION}{YYYY}-{SEQ4}');
+            const { results: settingRows } = await context.env.DB.prepare(
+                "SELECT key, value FROM settings WHERE userId = ? AND key IN ('station_code', 'format_buy_bill')"
+            ).bind(storeId).all();
+            const settingsMap = {};
+            if (settingRows) {
+                for (const row of settingRows) settingsMap[row.key] = row.value;
+            }
+            const stationCode = settingsMap['station_code'] || '0335';
+            const format = settingsMap['format_buy_bill'] || 'B-{STATION}{YYYY}-{SEQ4}';
             const stmts = [];
 
             const buySchema = {

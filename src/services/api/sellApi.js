@@ -2,7 +2,6 @@ import { fetchAPI, offlineRead, offlineWrite, getCache, setCache } from './apiCl
 
 export const fetchSellRecords = async (force = false, dateParams = null) => {
     let endpoint = '/sells';
-    let isForced = force;
     if (dateParams) {
         if (typeof dateParams === 'string') {
             endpoint = `/sells?startDate=${dateParams}&endDate=${dateParams}`;
@@ -10,9 +9,8 @@ export const fetchSellRecords = async (force = false, dateParams = null) => {
             const query = new URLSearchParams(dateParams).toString();
             if (query) endpoint = `/sells?${query}`;
         }
-        isForced = true;
     }
-    return await offlineRead('sells', endpoint, isForced);
+    return await offlineRead('sells', endpoint, force);
 };
 
 export const fetchStockSummary = async (force = false) => {

@@ -52,7 +52,15 @@ export const setCache = (key, data) => {
 export const clearCache = (...keys) => {
     keys.forEach(k => { 
         memoryCache.delete(k);
-        try { sessionStorage.removeItem('gc_' + k); } catch {} 
+        memoryCache.forEach((_, memKey) => {
+            if (memKey.startsWith(k + ':')) memoryCache.delete(memKey);
+        });
+        try {
+            sessionStorage.removeItem('gc_' + k);
+            Object.keys(sessionStorage)
+                .filter(sk => sk.startsWith('gc_' + k + ':'))
+                .forEach(sk => sessionStorage.removeItem(sk));
+        } catch {} 
     });
 };
 
@@ -67,7 +75,7 @@ export const clearAllCache = () => {
 
 export const isCached = (...keys) => {
     try {
-        return keys.every(k => !!sessionStorage.getItem('gc_' + k));
+        return keys.every(k => memoryCache.has(k) || !!sessionStorage.getItem('gc_' + k));
     } catch { return false; }
 };
 
@@ -108,7 +116,7 @@ if (typeof window !== 'undefined') {
     });
 }
 
-const getFastSession = async () => {
+export const getFastSession = async () => {
     if (cachedSession?.access_token) {
         const expiresAtMs = (cachedSession.expires_at || 0) * 1000;
         // Use cached session if it has > 60s before expiry
@@ -130,6 +138,8 @@ export const triggerDataRefresh = (table = null) => {
     if (table === 'buys') {
         // Only invalidate buys & related financial/dashboard caches; keep static reference caches (farmers, employees, settings, member_types) intact!
         clearCache('buys', 'dashboard', 'farmer_buy_stats', 'loans', 'loan_deductions');
+    } else if (table === 'sells') {
+        clearCache('sells', 'stock_summary', 'dashboard');
     } else if (table) {
         clearCache(table, 'dashboard');
     } else {
@@ -209,10 +219,12 @@ export const fetchAPI = async (endpoint, options = {}) => {
 // --- HYBRID READ: Online = API, Offline = IndexedDB ---
 export const offlineRead = async (table, fallbackEndpoint, force = false) => {
     const switchedStoreId = localStorage.getItem('rt_active_store_id');
+    const isPartialQuery = /[?&](startDate|endDate|search|page|since)=/.test(fallbackEndpoint || '');
+    const cacheKey = isPartialQuery ? `${table}:${fallbackEndpoint}` : table;
 
     if (navigator.onLine) {
         if (!switchedStoreId && !force) {
-            const cached = getCache(table);
+            const cached = getCache(cacheKey);
             if (cached) return cached;
         }
 
@@ -224,12 +236,16 @@ export const offlineRead = async (table, fallbackEndpoint, force = false) => {
             
             if (!switchedStoreId) {
                 try {
-                    await db[table].clear();
+                    // Only clear the entire IndexedDB table on full-table reads;
+                    // for filtered/date-range queries, upsert via bulkPut so other dates remain intact!
+                    if (!isPartialQuery) {
+                        await db[table].clear();
+                    }
                     if (Array.isArray(data) && data.length > 0) {
                         await db[table].bulkPut(data);
                     }
                 } catch {}
-                setCache(table, data);
+                setCache(cacheKey, data);
             }
             
             return data;
@@ -244,7 +260,7 @@ export const offlineRead = async (table, fallbackEndpoint, force = false) => {
     }
     
     if (!switchedStoreId) {
-        const cached = getCache(table);
+        const cached = getCache(cacheKey) || getCache(table);
         if (cached) return cached;
     }
     

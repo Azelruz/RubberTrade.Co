@@ -1,8 +1,7 @@
 import db from './db';
 import Dexie from 'dexie';
 
-import { supabase } from '../utils/supabase';
-import { clearAllCache, validateRecordData, triggerDataRefresh } from './apiService';
+import { clearAllCache, validateRecordData, triggerDataRefresh, getFastSession } from './apiService';
 
 /**
  * Direct API fetch helper with token reuse, timeout protection, and structured error responses.
@@ -10,7 +9,7 @@ import { clearAllCache, validateRecordData, triggerDataRefresh } from './apiServ
 const directFetch = async (endpoint, options = {}) => {
     let token = options.token;
     if (token === undefined) {
-        const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+        const session = await getFastSession();
         token = session?.access_token;
     }
 
@@ -123,7 +122,7 @@ export const hydrateLocalDB = async (providedToken = null) => {
 
         let token = providedToken;
         if (!token) {
-            const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+            const session = await getFastSession();
             token = session?.access_token;
         }
 
@@ -216,6 +215,11 @@ export const syncQueueToServer = async () => {
     const failedReasons = [];
 
     try {
+        const totalQueued = await db.sync_queue.count();
+        if (totalQueued === 0) {
+            return;
+        }
+
         const allItems = await db.sync_queue.orderBy('createdAt').toArray();
         // Skip failed items and items with max retries
         const queue = allItems.filter(item => (item.retryCount || 0) < 5 && item.status !== 'failed');
@@ -225,7 +229,7 @@ export const syncQueueToServer = async () => {
         }
 
         // Fetch auth token once for the entire batch
-        const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+        const session = await getFastSession();
         const currentUserId = session?.user?.id;
         const token = session?.access_token;
 

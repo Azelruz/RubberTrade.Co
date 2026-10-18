@@ -170,10 +170,19 @@ export const withAuth = (handler) => {
         const clientTz = context.request.headers.get('X-User-Timezone');
         context.user.timezone = clientTz || context.request.cf?.timezone || 'Asia/Bangkok';
 
-        // If staff, we need to respect the owner's subscription status
+        // If staff, we need to respect the owner's subscription status (Cached 60s in userAuthMap)
         let effectiveSubscriptionExpiry = userRecord.subscription_expiry;
         if (userRecord.parentId) {
-            const ownerRecord = await db.prepare("SELECT subscription_status, subscription_expiry FROM users WHERE id = ?").bind(userRecord.parentId).first();
+            const cachedOwner = userAuthMap.get(userRecord.parentId);
+            let ownerRecord = null;
+            if (cachedOwner && (Date.now() - cachedOwner._timestamp < 60000)) {
+                ownerRecord = cachedOwner.data;
+            } else {
+                ownerRecord = await db.prepare("SELECT * FROM users WHERE id = ?").bind(userRecord.parentId).first();
+                if (ownerRecord) {
+                    userAuthMap.set(userRecord.parentId, { data: ownerRecord, _timestamp: Date.now() });
+                }
+            }
             if (ownerRecord) {
                 effectiveSubscriptionExpiry = ownerRecord.subscription_expiry;
                 context.user.subscription_status = ownerRecord.subscription_status;

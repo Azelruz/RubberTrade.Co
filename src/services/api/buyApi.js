@@ -1,9 +1,7 @@
-import { fetchAPI, offlineRead, offlineWrite, getCache, setCache } from './apiClient';
-import { supabase } from '../../utils/supabase';
+import { fetchAPI, offlineRead, offlineWrite, getCache, setCache, getFastSession } from './apiClient';
 
 export const fetchBuyRecords = async (force = false, dateParams = null) => {
     let endpoint = '/buys';
-    let isForced = force;
     if (dateParams) {
         if (typeof dateParams === 'string') {
             endpoint = `/buys?startDate=${dateParams}&endDate=${dateParams}`;
@@ -11,9 +9,8 @@ export const fetchBuyRecords = async (force = false, dateParams = null) => {
             const query = new URLSearchParams(dateParams).toString();
             if (query) endpoint = `/buys?${query}`;
         }
-        isForced = true;
     }
-    return await offlineRead('buys', endpoint, isForced);
+    return await offlineRead('buys', endpoint, force);
 };
 
 export const fetchFarmerBuyStats = async (force = false) => {
@@ -49,7 +46,7 @@ export const scanExpenseReceiptWithAI = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
     
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getFastSession();
     const token = session?.access_token || '';
     const switchedStoreId = localStorage.getItem('rt_active_store_id');
     
@@ -75,7 +72,7 @@ export const scanSellReceiptWithAI = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
     
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await getFastSession();
     const token = session?.access_token || '';
     const switchedStoreId = localStorage.getItem('rt_active_store_id');
     

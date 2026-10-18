@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import toast from 'react-hot-toast';
 import { 
     addSellRecord, fetchSellRecords, deleteRecord, updateRecord, fetchFarmers, fetchStaff, 
@@ -108,24 +108,27 @@ export const Sell = () => {
      const loadData = async () => {
          setIsLoading(true);
          try {
-             const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
-             const [recs, facs, trks, stf, buys, chems, stockRes] = await Promise.all([
+             const [recs, facs, trks, stf, stockRes] = await Promise.all([
                  fetchSellRecords(),
                  fetchFactories(),
                  fetchTrucks(),
                  fetchStaff(),
-                 fetchBuyRecords(false, { startDate: thirtyDaysAgo }),
-                 fetchChemicalUsage(),
                  fetchStockSummary()
              ]);
              setRecords(recs || []);
              setFactories(facs || []);
              setTrucks(trks || []);
              setStaff(stf || []);
-             setAllBuys(buys || []);
-             setChemicalUsage(chems || []);
              if (stockRes) {
                  setServerStockMetrics(stockRes);
+             } else {
+                 const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
+                 const [buys, chems] = await Promise.all([
+                     fetchBuyRecords(false, { startDate: thirtyDaysAgo }),
+                     fetchChemicalUsage()
+                 ]);
+                 setAllBuys(buys || []);
+                 setChemicalUsage(chems || []);
              }
          } catch (error) {
              toast.error('โหลดข้อมูลล้มเหลว');

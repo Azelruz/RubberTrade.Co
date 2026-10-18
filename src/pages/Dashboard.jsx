@@ -88,12 +88,14 @@ export const Dashboard = () => {
         try { hasCache = !!sessionStorage.getItem('gc_dashboard'); } catch {}
         if (!silent && !hasCache) setLoading(true);
         try {
-            const [dashData, farmers, chemUsage, fullBuys] = await Promise.all([
+            const [dashData, farmers, chemUsage] = await Promise.all([
                 fetchDashboardData(silent),
                 fetchFarmers(true),
-                fetchChemicalUsage(),
-                fetchBuyRecords()
+                fetchChemicalUsage()
             ]);
+
+            // Only fetch fullBuys if server-side stats are unavailable (e.g. offline fallback)
+            const fullBuys = dashData?.stats ? [] : await fetchBuyRecords();
 
             const buys = Array.isArray(dashData?.buys) ? dashData.buys : [];
             const sells = Array.isArray(dashData?.sells) ? dashData.sells : [];
@@ -150,7 +152,7 @@ export const Dashboard = () => {
                 return true;
             }).length;
 
-            // Calculate Today's Dry Rubber Weight (matching Daily Summary Report logic)
+            // Calculate Today's Dry Rubber Weight (use server-calculated todayTotalDryWeight when available, else local fallback)
             const todayStr = format(new Date(), 'yyyy-MM-dd');
             const todayRange = { start: startOfDay(new Date()), end: endOfDay(new Date()) };
             const buysToCalc = Array.isArray(fullBuys) && fullBuys.length > 0 ? fullBuys : buys;
@@ -178,9 +180,11 @@ export const Dashboard = () => {
                 return (net * drc) / 100;
             };
 
-            const todayDryWeightTotal = buysToCalc
-                .filter(b => isTodayRecord(b) && isLatexType(b))
-                .reduce((sum, item) => sum + getRecordDryWeight(item), 0);
+            const todayDryWeightTotal = (dashData?.stats?.todayTotalDryWeight !== undefined)
+                ? Number(dashData.stats.todayTotalDryWeight)
+                : buysToCalc
+                    .filter(b => isTodayRecord(b) && isLatexType(b))
+                    .reduce((sum, item) => sum + getRecordDryWeight(item), 0);
 
             // Use server-side stats if available, otherwise fallback to local calc
             if (dashData?.stats) {
@@ -197,7 +201,7 @@ export const Dashboard = () => {
                 setStats({
                     ...s,
                     todayAvgDrc: truncateOneDecimal(s.todayAvgDrc || 0),
-                    todayTotalDryWeight: truncateOneDecimal(todayDryWeightTotal),
+                    todayTotalDryWeight: truncateOneDecimal(dryWeight),
                     inactiveFarmers15Days: inactiveFarmersCount,
                     dailyPrice: Number(dashData?.dailyPrice?.price || 0),
                     cupLumpPrice: Number(dashData?.dailyPrice?.cupLumpPrice || dashData?.settings?.cupLumpPrice || 0),
@@ -233,7 +237,7 @@ export const Dashboard = () => {
             }
         } catch (error) {
             console.error("Dashboard error:", error);
-        } fontally: {
+        } finally {
             setLoading(false);
         }
     };

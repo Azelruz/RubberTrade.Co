@@ -128,24 +128,27 @@ export const SellAI = () => {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
-            const [recs, facs, trks, stf, buys, chems, stockRes] = await Promise.all([
+            const [recs, facs, trks, stf, stockRes] = await Promise.all([
                 fetchSellRecords().catch(() => []),
                 fetchFactories().catch(() => []),
                 fetchTrucks().catch(() => []),
                 fetchStaff().catch(() => []),
-                fetchBuyRecords(false, { startDate: thirtyDaysAgo }).catch(() => []),
-                fetchChemicalUsage().catch(() => []),
                 fetchStockSummary().catch(() => null)
             ]);
             setRecords(recs || []);
             setFactories(facs || []);
             setTrucks(trks || []);
             setStaff(stf || []);
-            setAllBuys(buys || []);
-            setChemicalUsage(chems || []);
             if (stockRes) {
                 setServerStockMetrics(stockRes);
+            } else {
+                const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
+                const [buys, chems] = await Promise.all([
+                    fetchBuyRecords(false, { startDate: thirtyDaysAgo }).catch(() => []),
+                    fetchChemicalUsage().catch(() => [])
+                ]);
+                setAllBuys(buys || []);
+                setChemicalUsage(chems || []);
             }
         } catch (error) {
             console.error('[SellAI loadData error]', error);

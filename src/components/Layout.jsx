@@ -37,8 +37,8 @@ import {
     CloudOff
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { fetchNotificationStats, adminFetchAllMembers, clearAllCache, fetchTeamMembers, getSettings, adminFetchBranches } from '../services/apiService';
-import { supabase } from '../utils/supabase';
+import { fetchNotificationStats, adminFetchAllMembers, clearAllCache, fetchTeamMembers, getSettings, adminFetchBranches, getFastSession } from '../services/apiService';
+import { db } from '../services/db';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -98,7 +98,7 @@ const BranchSwitcher = () => {
         toast.loading(`กำลังสลับฐานข้อมูลไปยัง ${target.name}...`, { id: 'branch-switch' });
 
         try {
-            const { data: { session } } = await supabase.auth.getSession();
+            const session = await getFastSession();
             let targetUrl = target.url;
             if (session?.access_token && session?.refresh_token) {
                 targetUrl += `#access_token=${session.access_token}&refresh_token=${session.refresh_token}&token_type=bearer&type=recovery`;
@@ -323,7 +323,6 @@ export const Layout = () => {
 
         const updateQueueCount = async () => {
             try {
-                const { db } = await import('../services/db');
                 const count = await db.sync_queue.count();
                 setSyncQueueCount(count);
             } catch (err) {
@@ -335,7 +334,10 @@ export const Layout = () => {
             setIsOnline(true);
             updateQueueCount();
         };
-        const handleOffline = () => setIsOnline(false);
+        const handleOffline = () => {
+            setIsOnline(false);
+            updateQueueCount();
+        };
         const handleSyncComplete = (e) => {
             const count = e.detail?.count || 0;
             const failedCount = e.detail?.failedCount || 0;
@@ -354,10 +356,11 @@ export const Layout = () => {
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
         window.addEventListener('sync-complete', handleSyncComplete);
+        window.addEventListener('sync-item-failed', updateQueueCount);
+        window.addEventListener('data-updated', updateQueueCount);
 
-        // Initial count and periodic update
+        // Initial count (Event-driven thereafter — no 5-second IndexedDB polling)
         updateQueueCount();
-        const interval = setInterval(updateQueueCount, 5000); 
 
         // Notification Stats Polling
         const updateNotifications = async () => {
@@ -395,7 +398,8 @@ export const Layout = () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
             window.removeEventListener('sync-complete', handleSyncComplete);
-            clearInterval(interval);
+            window.removeEventListener('sync-item-failed', updateQueueCount);
+            window.removeEventListener('data-updated', updateQueueCount);
             clearInterval(notifInterval);
         };
     }, [user]);

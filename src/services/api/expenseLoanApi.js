@@ -2,7 +2,6 @@ import { fetchAPI, offlineRead, offlineWrite, triggerDataRefresh } from './apiCl
 
 export const fetchExpenses = async (dateParams = null, force = false) => {
     let endpoint = '/expenses';
-    let isForced = force;
     if (dateParams) {
         if (typeof dateParams === 'string') {
             endpoint = `/expenses?startDate=${dateParams}&endDate=${dateParams}`;
@@ -10,16 +9,14 @@ export const fetchExpenses = async (dateParams = null, force = false) => {
             const query = new URLSearchParams(dateParams).toString();
             if (query) endpoint = `/expenses?${query}`;
         }
-        isForced = true;
     }
-    return await offlineRead('expenses', endpoint, isForced);
+    return await offlineRead('expenses', endpoint, force);
 };
 
 export const addExpense = async (payload) => await offlineWrite('expenses', '/expenses', payload);
 
 export const fetchWages = async (dateParams = null, force = false) => {
     let endpoint = '/wages';
-    let isForced = force;
     if (dateParams) {
         if (typeof dateParams === 'string') {
             endpoint = `/wages?startDate=${dateParams}&endDate=${dateParams}`;
@@ -27,9 +24,8 @@ export const fetchWages = async (dateParams = null, force = false) => {
             const query = new URLSearchParams(dateParams).toString();
             if (query) endpoint = `/wages?${query}`;
         }
-        isForced = true;
     }
-    return await offlineRead('wages', endpoint, isForced);
+    return await offlineRead('wages', endpoint, force);
 };
 
 export const addWage = async (payload) => await offlineWrite('wages', '/wages', payload);
@@ -37,7 +33,7 @@ export const addWage = async (payload) => await offlineWrite('wages', '/wages', 
 export const addBulkWages = async (payloads) => {
     if (!navigator.onLine) return { status: 'offline' };
     const res = await fetchAPI('/wages', { method: 'POST', body: { action: 'addBulkWages', payloads } });
-    triggerDataRefresh();
+    triggerDataRefresh('wages');
     return res;
 };
 
@@ -52,14 +48,14 @@ export const deleteChemicalUsage = async (id) => {
     return await deleteRecord('chemicals', id);
 };
 
-export const fetchLoans = async () => {
-    return await fetchAPI('/loans');
+export const fetchLoans = async (force = false) => {
+    return await offlineRead('loans', '/loans', force);
 };
 
 export const addLoan = async (payload) => await offlineWrite('loans', '/loans', payload);
 
 export const addLoanDeduction = async (payload) => await offlineWrite('loan_deductions', '/loans/deductions', payload);
 
-export const fetchLoanDeductions = async () => {
-    return await fetchAPI('/loans/deductions');
+export const fetchLoanDeductions = async (force = false) => {
+    return await offlineRead('loan_deductions', '/loans/deductions', force);
 };
