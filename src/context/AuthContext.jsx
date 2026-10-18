@@ -10,6 +10,7 @@ export const AuthProvider = ({ children }) => {
     const [session, setSession] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [activeStoreId, setActiveStoreId] = useState(localStorage.getItem('rt_active_store_id') || null);
+    const lastUserIdRef = React.useRef(null);
 
     // PERSIST switched store ID
     useEffect(() => {
@@ -20,8 +21,11 @@ export const AuthProvider = ({ children }) => {
         }
     }, [activeStoreId]);
 
-    const updateUser = async (sbUser) => {
+    const updateUser = async (sbUser, forceSubscriptionCheck = false) => {
         if (sbUser) {
+            const isSameUser = lastUserIdRef.current === sbUser.id;
+            lastUserIdRef.current = sbUser.id;
+
             // Basic info from Supabase
             const baseUser = {
                 id: sbUser.id,
@@ -36,7 +40,13 @@ export const AuthProvider = ({ children }) => {
                 lastSync: localStorage.getItem('rt_last_sync')
             };
 
-            setUser(baseUser);
+            if (!isSameUser) {
+                setUser(baseUser);
+            }
+
+            if (isSameUser && !forceSubscriptionCheck) {
+                return;
+            }
 
             // Fetch extra info (subscription) from our D1 API
             try {
@@ -55,7 +65,7 @@ export const AuthProvider = ({ children }) => {
                     localStorage.setItem('rt_last_sync', now);
 
                     setUser(prev => ({
-                        ...prev,
+                        ...(prev || baseUser),
                         subscriptionStatus: status,
                         subscriptionExpiry: expiry,
                         storeName: storeName,
@@ -67,6 +77,7 @@ export const AuthProvider = ({ children }) => {
                 console.error("Error fetching subscription status:", err);
             }
         } else {
+            lastUserIdRef.current = null;
             setUser(null);
         }
     };
@@ -75,17 +86,18 @@ export const AuthProvider = ({ children }) => {
         // Get initial session
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session);
-            updateUser(session?.user);
+            updateUser(session?.user, true);
             setIsLoading(false);
         });
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            console.log("DEBUG: Auth State Changed:", event);
-            console.log("DEBUG: Session detected:", session ? "YES" : "NO");
-            
             setSession(session);
-            updateUser(session?.user);
+            // On hourly TOKEN_REFRESHED, keep current user state without re-triggering subscription API or full re-render
+            if (event === 'TOKEN_REFRESHED' && session?.user && lastUserIdRef.current === session.user.id) {
+                return;
+            }
+            updateUser(session?.user, event === 'SIGNED_IN');
             setIsLoading(false);
         });
 

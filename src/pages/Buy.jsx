@@ -200,7 +200,8 @@ export const Buy = () => {
         };
         document.addEventListener('mousedown', handleClickOutside);
         
-        const handleRefresh = () => {
+        const handleRefresh = (e) => {
+            if (e?.detail?.table === 'buys') return;
             loadData(true);
         };
         window.addEventListener('dashboard-refresh', handleRefresh);
@@ -589,7 +590,8 @@ export const Buy = () => {
                             if (uploadRes && uploadRes.status === 'success' && uploadRes.url) {
                                 const uploadedUrl = uploadRes.url;
                                 if (buyId) {
-                                    updateRecord('buys', buyId, { receiptUrl: uploadedUrl }).catch(() => {});
+                                    updateRecord('buys', buyId, { receiptUrl: uploadedUrl }, { silent: true }).catch(() => {});
+                                    setRecords(prev => prev.map(r => String(r.id) === String(buyId) ? { ...r, receiptUrl: uploadedUrl } : r));
                                 }
                                 if (targetFarmerId) {
                                     sendLineReceipt(targetFarmerId, uploadedUrl)
@@ -716,8 +718,13 @@ export const Buy = () => {
                                 });
                             }
                             
-                            // Refresh local state
-                            setTimeout(loadData, 500);
+                            // Refresh local loan state directly from Dexie without firing 9 API requests
+                            const [updatedLoans, updatedDeds] = await Promise.all([
+                                db.loans.toArray(),
+                                db.loan_deductions.toArray()
+                            ]);
+                            setLoans(updatedLoans);
+                            setLoanDeductions(updatedDeds);
                         } catch (dexieErr) {
                             console.error("Dexie loan sync error:", dexieErr);
                         }
@@ -796,8 +803,13 @@ export const Buy = () => {
                         }
                         await db.loan_deductions.where({ buyId: id }).delete();
                         
-                        // Reload state
-                        setTimeout(loadData, 500);
+                        // Reload local loan state directly from Dexie without firing 9 API requests
+                        const [updatedLoans, updatedDeds] = await Promise.all([
+                            db.loans.toArray(),
+                            db.loan_deductions.toArray()
+                        ]);
+                        setLoans(updatedLoans);
+                        setLoanDeductions(updatedDeds);
                     }
                 } catch (dexieErr) {
                     console.error("Dexie loan delete revert error:", dexieErr);

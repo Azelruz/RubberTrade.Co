@@ -334,15 +334,25 @@ async function handlePost(context) {
         }
 
         let id = payload.id;
-        if (!id || isUUID(id)) {
-            const stationCode = await getSetting(context.env.DB, 'station_code', storeId, '0335');
-            const format = await getSetting(context.env.DB, 'format_buy_bill', storeId, 'B-{STATION}{YYYY}-{SEQ4}');
+        const isNewGeneratedId = !id || isUUID(id);
+        if (isNewGeneratedId) {
+            const { results: settingRows } = await context.env.DB.prepare(
+                "SELECT key, value FROM settings WHERE userId = ? AND key IN ('station_code', 'format_buy_bill')"
+            ).bind(storeId).all();
+            const settingsMap = {};
+            if (settingRows) {
+                for (const row of settingRows) settingsMap[row.key] = row.value;
+            }
+            const stationCode = settingsMap['station_code'] || '0335';
+            const format = settingsMap['format_buy_bill'] || 'B-{STATION}{YYYY}-{SEQ4}';
             const nonce = isUUID(id) ? id.substring(0, 6).toUpperCase() : '';
             id = await generateNextId(context.env.DB, 'buys', format, stationCode, storeId, nonce, 0);
         }
 
-        // Check if existing record exists to record accurate audit log (CREATE vs UPDATE)
-        const existingRecord = await context.env.DB.prepare("SELECT * FROM buys WHERE id = ? AND userId = ?").bind(id, storeId).first();
+        // Check if existing record exists to record accurate audit log (CREATE vs UPDATE) only when not a newly generated ID
+        const existingRecord = isNewGeneratedId
+            ? null
+            : await context.env.DB.prepare("SELECT * FROM buys WHERE id = ? AND userId = ?").bind(id, storeId).first();
         const isUpdate = !!existingRecord;
 
         const { 
@@ -395,8 +405,10 @@ async function handlePost(context) {
         ).run();
 
         // --- Process Loan Deductions ---
-        // 1. Revert any existing deductions for this buyId (in case this is an update)
-        await refundLoanDeductions(context.env.DB, id, storeId);
+        // 1. Revert any existing deductions for this buyId ONLY if updating an existing bill
+        if (isUpdate) {
+            await refundLoanDeductions(context.env.DB, id, storeId);
+        }
 
         // 2. Process new deductions if present in payload
         if (Array.isArray(payload.loanDeductions) && payload.loanDeductions.length > 0) {

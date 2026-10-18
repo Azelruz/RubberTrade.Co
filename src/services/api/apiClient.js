@@ -97,11 +97,49 @@ export const validateRecordData = (table, data) => {
     return { valid: true };
 };
 
+// --- Fast in-memory Supabase Session Cache to avoid navigator.locks contention on every API call ---
+let cachedSession = null;
+if (typeof window !== 'undefined') {
+    supabase.auth.getSession().then(({ data }) => {
+        if (data?.session) cachedSession = data.session;
+    }).catch(() => {});
+    supabase.auth.onAuthStateChange((_event, session) => {
+        cachedSession = session || null;
+    });
+}
+
+const getFastSession = async () => {
+    if (cachedSession?.access_token) {
+        const expiresAtMs = (cachedSession.expires_at || 0) * 1000;
+        // Use cached session if it has > 60s before expiry
+        if (!expiresAtMs || Date.now() < expiresAtMs - 60000) {
+            return cachedSession;
+        }
+    }
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) cachedSession = session;
+        return session;
+    } catch {
+        return cachedSession;
+    }
+};
+
 // Global refresh trigger for UI
-export const triggerDataRefresh = () => {
-    clearAllCache();
-    window.dispatchEvent(new CustomEvent('dashboard-refresh', { detail: { timestamp: Date.now() } }));
-    window.dispatchEvent(new CustomEvent('data-updated', { detail: { timestamp: Date.now() } }));
+export const triggerDataRefresh = (table = null) => {
+    if (table === 'buys') {
+        // Only invalidate buys & related financial/dashboard caches; keep static reference caches (farmers, employees, settings, member_types) intact!
+        clearCache('buys', 'dashboard', 'farmer_buy_stats', 'loans', 'loan_deductions');
+    } else if (table) {
+        clearCache(table, 'dashboard');
+    } else {
+        clearAllCache();
+    }
+    // Defer event dispatch to next macrotask so caller (e.g. Buy.jsx handlePrintReceipt) can open print dialog first
+    setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('dashboard-refresh', { detail: { timestamp: Date.now(), table } }));
+        window.dispatchEvent(new CustomEvent('data-updated', { detail: { timestamp: Date.now(), table } }));
+    }, 0);
 };
 
 // Internal helper to ensure no 'undefined' values reach D1
@@ -121,7 +159,7 @@ export const sanitizePayload = (data) => {
 // Internal fetch wrapper
 export const fetchAPI = async (endpoint, options = {}) => {
     try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const session = await getFastSession();
         const token = session?.access_token;
         const switchedStoreId = localStorage.getItem('rt_active_store_id');
 
@@ -243,7 +281,7 @@ export const offlineWrite = async (table, endpoint, payload, action = 'POST') =>
                 } catch {}
             }
             
-            triggerDataRefresh();
+            triggerDataRefresh(table);
             return res;
         } catch {}
     }
@@ -257,7 +295,7 @@ export const offlineWrite = async (table, endpoint, payload, action = 'POST') =>
             await db[table].put(finalPayload);
         }
         
-        const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+        const session = await getFastSession();
         const currentUserId = session?.user?.id || null;
 
         await db.sync_queue.put({
@@ -271,7 +309,7 @@ export const offlineWrite = async (table, endpoint, payload, action = 'POST') =>
             uuid: crypto.randomUUID()
         });
         
-        triggerDataRefresh();
+        triggerDataRefresh(table);
         return { status: 'success', id };
     } catch (e) {
         console.error("[Offline Write] Error", e);
@@ -312,7 +350,7 @@ export const deleteRecord = async (sheetName, id) => {
         try {
             const res = await fetchAPI('/deleteRecord', { method: 'POST', body: { sheetName, id } });
             try { await db[table].delete(id); } catch {}
-            triggerDataRefresh();
+            triggerDataRefresh(table);
             return res;
         } catch {}
     }
@@ -321,7 +359,7 @@ export const deleteRecord = async (sheetName, id) => {
         throw new Error('ไม่สามารถลบข้อมูลแบบออฟไลน์ขณะแก้ไขข้อมูลแทนร้านค้าอื่นได้ กรุณาเชื่อมต่ออินเทอร์เน็ต');
     }
 
-    const { data: { session: sess2 } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+    const sess2 = await getFastSession();
     await db.sync_queue.put({
         type: 'deleteRecord',
         action: 'POST',
@@ -334,13 +372,14 @@ export const deleteRecord = async (sheetName, id) => {
     });
     
     try { await db[table].delete(id); } catch {}
-    triggerDataRefresh();
+    triggerDataRefresh(table);
     return { status: 'success', message: 'Queued for deletion' };
 };
 
-export const updateRecord = async (sheetName, id, updates) => {
+export const updateRecord = async (sheetName, id, updates, options = {}) => {
     const table = sheetName.toLowerCase();
     const switchedStoreId = localStorage.getItem('rt_active_store_id');
+    const silent = Boolean(options?.silent);
     
     const key = `${table}:${String(id)}`;
     const existing = pendingUpdatesMap.get(key) || {};
@@ -350,7 +389,8 @@ export const updateRecord = async (sheetName, id, updates) => {
         try {
             const res = await fetchAPI('/updateRecord', { method: 'POST', body: { sheetName, id, updates } });
             try { await db[table].update(id, updates); } catch {}
-            triggerDataRefresh();
+            if (!silent) triggerDataRefresh(table);
+            else clearCache(table);
             return res;
         } catch {}
     }
@@ -359,7 +399,7 @@ export const updateRecord = async (sheetName, id, updates) => {
         throw new Error('ไม่สามารถแก้ไขข้อมูลแบบออฟไลน์ขณะแก้ไขข้อมูลแทนร้านค้าอื่นได้ กรุณาเชื่อมต่ออินเทอร์เน็ต');
     }
 
-    const { data: { session: sess3 } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+    const sess3 = await getFastSession();
     await db.sync_queue.put({
         type: 'updateRecord',
         action: 'POST',
@@ -372,7 +412,8 @@ export const updateRecord = async (sheetName, id, updates) => {
     });
     
     try { await db[table].update(id, updates); } catch {}
-    triggerDataRefresh();
+    if (!silent) triggerDataRefresh(table);
+    else clearCache(table);
     return { status: 'success' };
 };
 
