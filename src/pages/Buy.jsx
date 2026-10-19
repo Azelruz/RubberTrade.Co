@@ -306,6 +306,20 @@ export const Buy = () => {
         const pendingUpdates = getPendingUpdates('buys');
         const recordMap = new Map();
 
+        // Collect 6-char nonce suffixes from incoming records to identify converted offline UUIDs
+        const incomingNonces = new Set();
+        incomingRecords.forEach(r => {
+            if (r && r.id) {
+                const idStr = String(r.id);
+                const lastDash = idStr.lastIndexOf('-');
+                if (lastDash !== -1 && idStr.length - lastDash - 1 === 6) {
+                    incomingNonces.add(idStr.substring(lastDash + 1).toUpperCase());
+                }
+            }
+        });
+
+        const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
         // 1. Add all incoming records matching current store AND NOT deleted locally
         incomingRecords.forEach(r => {
             if (r && r.id && !pendingDeletes.has(String(r.id))) {
@@ -320,10 +334,18 @@ export const Buy = () => {
             }
         });
 
-        // 2. Keep existing records ONLY if they match current active store AND NOT deleted locally
+        // 2. Keep existing records ONLY if they match current active store AND NOT deleted locally,
+        // and NOT an old temporary UUID whose synced replacement is already in incomingRecords
         if (Array.isArray(existingRecords)) {
             existingRecords.forEach(r => {
                 if (r && r.id && !pendingDeletes.has(String(r.id))) {
+                    if (isUUID(r.id)) {
+                        const nonce = String(r.id).substring(0, 6).toUpperCase();
+                        if (incomingNonces.has(nonce)) {
+                            return; // Replaced by incoming synced bill
+                        }
+                    }
+
                     const matchesStore = !currentStoreId || !r.userId || String(r.userId) === String(currentStoreId);
                     if (matchesStore && !recordMap.has(String(r.id))) {
                         let finalRecord = r;

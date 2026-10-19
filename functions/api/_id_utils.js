@@ -22,6 +22,21 @@ export async function generateNextId(db, table, format, stationCode, userId, non
     const prefix = searchPattern.substring(0, seqMatch.index);
     const suffix = searchPattern.substring(seqMatch.index + seqMatch[0].length);
 
+    // 2.5 IDEMPOTENCY CHECK: If a nonce is provided (e.g. from an offline UUID), check if this record was already generated
+    if (nonce) {
+        const shortNonce = (nonce.length > 6 ? nonce.substring(0, 6) : nonce).toUpperCase();
+        try {
+            const existing = await db.prepare(
+                `SELECT id FROM ${table} WHERE userId = ? AND id LIKE ? LIMIT 1`
+            ).bind(userId, `${prefix}%-${shortNonce}`).first();
+            if (existing && existing.id) {
+                return existing.id;
+            }
+        } catch (nonceErr) {
+            console.warn(`[ID_UTILS] Idempotency check failed for ${table}:`, nonceErr.message);
+        }
+    }
+
     // 3. TWO-STEP FAST-PATH ATOMIC COUNTER
     // Step 1: Fast path - Try updating existing counter row directly (1 row read, 1 row written)
     // Step 2: Slow path - Only if counter row missing, run INSERT with MAX(id) subquery to initialize

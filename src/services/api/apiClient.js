@@ -286,6 +286,7 @@ export const offlineWrite = async (table, endpoint, payload, action = 'POST') =>
             const updatedItem = { ...finalPayload };
             if (res.status === 'success' && res.id && res.id !== id) {
                 updatedItem.id = res.id;
+                markPendingDelete(table, id);
                 try { 
                     if (!switchedStoreId) await db[table].delete(id); 
                 } catch {}
@@ -335,6 +336,12 @@ export const offlineWrite = async (table, endpoint, payload, action = 'POST') =>
 
 export const pendingDeletesSet = new Set();
 export const pendingUpdatesMap = new Map();
+
+export const markPendingDelete = (table, id) => {
+    if (table && id) {
+        pendingDeletesSet.add(`${String(table).toLowerCase()}:${String(id)}`);
+    }
+};
 
 export const getPendingDeletes = (sheetName) => {
     const table = (sheetName || '').toLowerCase();

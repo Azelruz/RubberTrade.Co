@@ -1,7 +1,7 @@
 import db from './db';
 import Dexie from 'dexie';
 
-import { clearAllCache, validateRecordData, triggerDataRefresh, getFastSession } from './apiService';
+import { clearAllCache, validateRecordData, triggerDataRefresh, getFastSession, markPendingDelete } from './apiService';
 
 /**
  * Direct API fetch helper with token reuse, timeout protection, and structured error responses.
@@ -120,6 +120,13 @@ export const hydrateLocalDB = async (providedToken = null) => {
     try {
         if (!navigator.onLine) return { status: 'offline', message: 'Cannot hydrate offline' };
 
+        // Wait for any active syncQueueToServer to complete before hydrating
+        if (activeSyncPromise) {
+            try {
+                await activeSyncPromise;
+            } catch {}
+        }
+
         let token = providedToken;
         if (!token) {
             const session = await getFastSession();
@@ -202,20 +209,25 @@ export const hydrateLocalDB = async (providedToken = null) => {
 };
 
 let isSyncing = false;
+let activeSyncPromise = null;
 
 /**
  * Upload offline queued transactions to server with ID cascade and precise error logging.
  */
 export const syncQueueToServer = async () => {
-    if (!navigator.onLine || isSyncing) return;
-    isSyncing = true;
+    if (!navigator.onLine) return;
+    if (activeSyncPromise) {
+        return activeSyncPromise;
+    }
 
-    let syncedCount = 0;
-    let failedCount = 0;
-    const failedReasons = [];
+    activeSyncPromise = (async () => {
+        isSyncing = true;
+        let syncedCount = 0;
+        let failedCount = 0;
+        const failedReasons = [];
 
-    try {
-        const totalQueued = await db.sync_queue.count();
+        try {
+            const totalQueued = await db.sync_queue.count();
         if (totalQueued === 0) {
             return;
         }
@@ -281,6 +293,9 @@ export const syncQueueToServer = async () => {
                         const newId = data.id;
                         const table = item.type;
                         
+                        // Mark old temporary ID as pending delete so UI merge doesn't resurrect it
+                        markPendingDelete(table, oldId);
+
                         try {
                             const record = await db[table].get(oldId);
                             if (record) {
@@ -379,9 +394,13 @@ export const syncQueueToServer = async () => {
             }));
         }
 
-    } finally {
-        isSyncing = false;
-    }
+        } finally {
+            isSyncing = false;
+            activeSyncPromise = null;
+        }
+    })();
+
+    return activeSyncPromise;
 };
 
 let syncDebounceTimer = null;
