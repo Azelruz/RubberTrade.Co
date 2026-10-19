@@ -404,14 +404,16 @@ export const syncQueueToServer = async () => {
 };
 
 let syncDebounceTimer = null;
+let isBackgroundSyncStarted = false;
 
 export const startBackgroundSync = () => {
-    // Listen for online events with debounce to let network connection stabilize
-    window.addEventListener('online', async () => {
-        console.log('[SyncService] Back online. Triggering debounced sync.');
+    if (isBackgroundSyncStarted) return;
+    isBackgroundSyncStarted = true;
+
+    const triggerSyncWithDebounce = () => {
         if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
         syncDebounceTimer = setTimeout(async () => {
-            const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+            const session = await getFastSession();
             const token = session?.access_token;
 
             await syncQueueToServer();
@@ -419,12 +421,29 @@ export const startBackgroundSync = () => {
             // Dispatch event to refresh UI
             window.dispatchEvent(new Event('dashboard-refresh'));
         }, 400); // 400ms stabilization window
+    };
+
+    // Listen for online events with debounce to let network connection stabilize
+    window.addEventListener('online', () => {
+        console.log('[SyncService] Back online. Triggering debounced sync.');
+        triggerSyncWithDebounce();
     });
 
-    // Check periodically in background
+    // Check when user refocuses or switches back to the tab
+    const handleActive = async () => {
+        if (navigator.onLine && !isSyncing) {
+            await syncQueueToServer();
+        }
+    };
+    window.addEventListener('focus', handleActive);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) handleActive();
+    });
+
+    // Check periodically in background every 20 seconds
     setInterval(async () => {
         if (navigator.onLine && !isSyncing) {
             await syncQueueToServer();
         }
-    }, 60000); // Check every minute
+    }, 20000);
 };
