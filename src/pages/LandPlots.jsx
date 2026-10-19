@@ -296,7 +296,7 @@ export const LandPlots = () => {
                         <div className="flex items-center space-x-2">
                             <h1 className="text-xl md:text-2xl font-black text-gray-900">จัดการและดูแลสวนยางพารา</h1>
                             <span className="px-2.5 py-0.5 text-[11px] font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200">
-                                v1.8.3 Hub
+                                v1.8.4 Hub
                             </span>
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">
